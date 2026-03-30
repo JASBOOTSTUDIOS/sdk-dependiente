@@ -4,9 +4,9 @@
 
 # Jasboot (.jasb)
 
-Resaltado de sintaxis (TextMate) alineado con el compilador **jbc**: comentarios `#`, `//`, `/* */`, cadenas `"` con escapes (`\n`, colores `\rojo`, etc.), **interpolación `${ ... }`** con llaves anidadas, conceptos `'...'`, números (decimal, hex `0x`, flotante), operadores (`=>`, `==`, `<<`, …), **213 palabras clave** agrupadas (control, tipos, E/S, biblioteca), `verdadero`/`falso`, y palabras inglesas prohibidas resaltadas como error.
+Resaltado de sintaxis (TextMate) alineado con el compilador **jbc**: comentarios `#`, `//`, `/* */`, cadenas `"` con escapes (`\n`, colores `\rojo`, etc.), **interpolación `${ ... }`** con llaves anidadas, conceptos `'...'`, números (decimal, hex `0x`, flotante), operadores (`=>`, `==`, `<<`, …), palabras clave y **APIs de sistema** (unión de `keywords.c` + `sistema_llamadas.c`: texto, listas, `n_*`, trig, FFI, …), `verdadero`/`falso`, y palabras inglesas prohibidas resaltadas como error.
 
-**Regenerar la gramática** tras cambios en `sdk-dependiente/jas-compiler-c/src/keywords.c`:
+**Regenerar la gramática** tras cambios en `jas-compiler-c/src/keywords.c` o `jas-compiler-c/src/sistema_llamadas.c`:
 
 ```bash
 npm run grammar
@@ -30,7 +30,7 @@ npm install
 npm run package
 ```
 
-Se crea **`jasboot-<version>.vsix`** (p. ej. `0.0.4`) según `package.json`.
+Se crea **`jasboot-<version>.vsix`** según `package.json`.
 
 Instalar el VSIX: **Extensions** → menú `⋯` → **Install from VSIX…**.
 

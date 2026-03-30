@@ -1,8 +1,8 @@
 {
   "name": "jasboot",
   "displayName": "Jasboot (.jasb)",
-  "description": "Sintaxis y comentarios para archivos .jasb (resaltado en el editor).",
-  "version": "0.0.4",
+  "description": "Sintaxis Jasboot (.jasb): palabras clave y APIs alineadas con jbc (keywords + sistema_llamadas).",
+  "version": "0.0.5",
   "publisher": "jasboot-local",
   "icon": "img/jasboot-icon.png",
   "license": "MIT",

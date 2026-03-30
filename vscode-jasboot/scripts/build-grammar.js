@@ -5,8 +5,7 @@ const path = require('path');
 const root = path.join(__dirname, '..');
 const groups = JSON.parse(fs.readFileSync(path.join(__dirname, 'keywords-groups.json'), 'utf8'));
 
-const forbidden =
-  'if|else|for|while|function|return|endif|endwhile|endfor|true|false|null|var|let|const|class|import|export';
+const forbidden = groups.forbidden || 'if|else|for|while|function|return|endif|endwhile|endfor|true|false|null|var|let|const|class|import|export';
 
 function pat(match, name) {
   return { match, name };
@@ -18,6 +17,17 @@ function beginEnd(begin, end, name, patterns, beginCaptures, endCaptures) {
   if (endCaptures) o.endCaptures = endCaptures;
   return o;
 }
+
+function supportPatternList() {
+  const chunks = groups.supportChunks && groups.supportChunks.length ? groups.supportChunks : [''];
+  return chunks.map((chunk, i) => {
+    const key = `keywords_support_${i + 1}`;
+    if (!chunk) return { key, rule: pat('(?!)', 'support.function.builtin.jasboot') };
+    return { key, rule: pat(`\\b(${chunk})\\b`, 'support.function.builtin.jasboot') };
+  });
+}
+
+const supportList = supportPatternList();
 
 const grammar = {
   $schema: 'https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json',
@@ -38,8 +48,7 @@ const grammar = {
         { include: '#keywords_import' },
         { include: '#keywords_constant' },
         { include: '#keywords_io' },
-        { include: '#keywords_support_1' },
-        { include: '#keywords_support_2' },
+        ...supportList.map((s) => ({ include: `#${s.key}` })),
         { include: '#forbidden_english' },
         { include: '#identifiers' },
       ],
@@ -107,8 +116,7 @@ const grammar = {
         { include: '#keywords_import' },
         { include: '#keywords_constant' },
         { include: '#keywords_io' },
-        { include: '#keywords_support_1' },
-        { include: '#keywords_support_2' },
+        ...supportList.map((s) => ({ include: `#${s.key}` })),
         { name: 'meta.brace.round.jasboot', match: '[()]' },
         { name: 'punctuation.separator.comma.jasboot', match: ',' },
         { name: 'variable.other.readwrite.jasboot', match: '\\b[a-zA-Z_][a-zA-Z0-9_]*\\b' },
@@ -116,7 +124,7 @@ const grammar = {
     },
 
     strings_concept: beginEnd("'", "'", 'string.quoted.single.concept.jasboot', [
-      { name: 'constant.character.escape.jasboot', match: "\\\\." },
+      { name: 'constant.character.escape.jasboot', match: '\\\\.' },
     ]),
 
     numbers: {
@@ -148,26 +156,16 @@ const grammar = {
     keywords_constant: pat('\\b(verdadero|falso)\\b', 'constant.language.jasboot'),
     keywords_io: pat(`\\b(${groups.io})\\b`, 'support.function.builtin.io.jasboot'),
 
-    keywords_support_1: pat(
-      `\\b(${groups.supportChunks[0]})\\b`,
-      'support.function.builtin.jasboot'
-    ),
-    keywords_support_2: pat(
-      `\\b(${groups.supportChunks[1] || groups.supportChunks[0]})\\b`,
-      'support.function.builtin.jasboot'
-    ),
-
     forbidden_english: pat(`\\b(${forbidden})\\b`, 'invalid.illegal.name.jasboot'),
 
     identifiers: pat('\\b[a-zA-Z_][a-zA-Z0-9_]*\\b', 'variable.other.readwrite.jasboot'),
   },
 };
 
-// Si solo hay un chunk de support, duplicar el segundo con patrón imposible
-if (groups.supportChunks.length < 2) {
-  grammar.repository.keywords_support_2 = pat('(?!)', 'support.function.builtin.jasboot');
+for (const s of supportList) {
+  grammar.repository[s.key] = s.rule;
 }
 
 const out = path.join(root, 'syntaxes', 'jasboot.tmLanguage.json');
 fs.writeFileSync(out, JSON.stringify(grammar, null, 4) + '\n', 'utf8');
-console.log('Wrote', out);
+console.log('Wrote', out, 'support rules:', supportList.length);
