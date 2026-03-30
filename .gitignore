@@ -22,6 +22,9 @@
 # --- Salida del compilador Jasboot ---
 **/*.jbo
 
+# --- Memoria JMN de ejemplo (main.jmn supera el limite de 100 MB de GitHub; generar o copiar en local) ---
+jasboot-ir/main.jmn
+
 # --- Carpetas de build y cachés ---
 **/build/
 **/obj/
