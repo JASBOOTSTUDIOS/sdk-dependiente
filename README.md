@@ -197,6 +197,12 @@ La rama **`main`** es la línea base integrada en el remoto. El desarrollo día 
 
 ---
 
+## Licencia
+
+Este repositorio se distribuye bajo la **Licencia MIT** (identificador SPDX: `MIT`). El texto legal completo está en [`LICENSE`](LICENSE).
+
+---
+
 ## Resumen en una frase
 
 **Clona el repo → `scripts\build-all.bat` → usa `jbc` para generar `.jbo` desde `.jasb` → usa `jasboot-ir-vm` para ejecutar el `.jbo`.** Los directorios `jas-compiler-c`, `jasboot-ir` y `jasboot-jmn-core` son las piezas que se enlazan en ese orden conceptual; `scripts/` y `bin/` organizan el flujo de trabajo en Windows.
