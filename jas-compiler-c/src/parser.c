@@ -215,11 +215,13 @@ static int validate_user_defined_name_tok(Parser *p, const Token *tok) {
     if (is_keyword(s, L) && !keyword_ok_as_user_identifier(s)) {
         if (p->source_path && p->source_path[0])
             set_error_at(p, tok->line, tok->column,
-                      "Archivo %s, linea %d, columna %d: '%s' es palabra reservada del lenguaje; no puede usarse como nombre de variable, funcion, parametro ni campo.",
+                      "Archivo %s, linea %d, columna %d: '%s' es palabra reservada del lenguaje: aqui se esperaba un "
+                      "nombre elegido por usted (variable, parametro, campo o nombre de una funcion suya), no esa palabra clave.",
                       p->source_path, tok->line, tok->column, s);
         else
             set_error_at(p, tok->line, tok->column,
-                      "linea %d, columna %d: '%s' es palabra reservada del lenguaje; no puede usarse como nombre de variable, funcion, parametro ni campo.",
+                      "linea %d, columna %d: '%s' es palabra reservada del lenguaje: aqui se esperaba un nombre elegido "
+                      "por usted (variable, parametro, campo o nombre de una funcion suya), no esa palabra clave.",
                       tok->line, tok->column, s);
         return 0;
     }

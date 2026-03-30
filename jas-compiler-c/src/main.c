@@ -7,6 +7,8 @@
 #include "symbol_table.h"
 #include "resolve.h"
 #include "codegen.h"
+#include "jbc_ir_opt.h"
+#include "opcodes.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -59,6 +61,8 @@ static void init_jbc_exe_dir(void) {
 }
 
 static int verbose_flag = 0;
+/* 1 = tras codegen, pasar IR por ir_optimize (experimental; usar --ir-opt). */
+static int jbc_ir_opt_enabled = 0;
 int werror_unused = 0;
 
 #define ANSI_YELLOW "\x1b[33m"
@@ -1501,6 +1505,18 @@ int do_compile(const char *in_path, const char *out_path, char **err_msg) {
 
     codegen_free(cg);
 
+    if (jbc_ir_opt_enabled && bin && len >= (size_t)IR_HEADER_SIZE) {
+        size_t opt_len = 0;
+        uint8_t *opt = jbc_optimize_ir_blob(bin, len, &opt_len);
+        if (opt && opt_len > 0) {
+            free(bin);
+            bin = opt;
+            len = opt_len;
+        } else if (opt) {
+            free(opt);
+        }
+    }
+
     FILE *of = fopen(out_path, "wb");
     if (!of) {
         free(bin);
@@ -1733,6 +1749,7 @@ static void print_usage(const char *prog) {
     fprintf(stderr, "  -v, --verbose          Modo depuracion (AST, tabla de simbolos)\n");
     fprintf(stderr, "  -b, --ruta-cerebro R   JASBOOT_RUTA_CEREBRO para la VM\n");
     fprintf(stderr, "  --Werror-unused        Tratar advertencias de variables y funciones no usadas como errores\n");
+    fprintf(stderr, "  --ir-opt               Optimizar IR (plegado / DCE; experimental)\n");
     fprintf(stderr, "  -h, --help             Ayuda\n\n");
     fprintf(stderr, "Subcomandos:\n");
     fprintf(stderr, "  test [--dir DIR]       Suite de pruebas (default dir: tests)\n");
@@ -1823,7 +1840,7 @@ int main(int argc, char **argv) {
     const char *ruta_cerebro = NULL;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
-            fprintf(stderr, "Uso: jbc [archivo.jasb] [-o salida.jbo] [-e] [-v] [-b ruta-cerebro] [--Werror-unused]\n");
+            fprintf(stderr, "Uso: jbc [archivo.jasb] [-o salida.jbo] [-e] [-v] [-b ruta-cerebro] [--Werror-unused] [--ir-opt]\n");
             return 0;
         }
         if (strcmp(argv[i], "-o") == 0 || strcmp(argv[i], "--output") == 0) {
@@ -1846,6 +1863,10 @@ int main(int argc, char **argv) {
         }
         if (strcmp(argv[i], "--Werror-unused") == 0) {
             werror_unused = 1;
+            continue;
+        }
+        if (strcmp(argv[i], "--ir-opt") == 0) {
+            jbc_ir_opt_enabled = 1;
             continue;
         }
         if (argv[i][0] != '-' && !input) input = argv[i];
@@ -1912,6 +1933,8 @@ int main(int argc, char **argv) {
             // Placeholder: global variable werror_unused needs to be defined
             extern int werror_unused;
             werror_unused = 1;
+        } else if (strcmp(argv[i], "--ir-opt") == 0) {
+            jbc_ir_opt_enabled = 1;
         } else if (strcmp(argv[i], "test") == 0) {
             /* 9.5 Subcomando test */
             const char *test_dir = "tests";

@@ -981,23 +981,65 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         return 1;
     }
     if (strcmp(name, "extraer_subtexto") == 0) {
-        if (!ARG0 || !ARG1) return 0;
+        if (cn->n_args < 2) {
+            snprintf(cg->last_error, CODEGEN_ERROR_MAX,
+                     "Faltan argumentos. 'extraer_subtexto' necesita el texto, el indice de inicio (0 = primer caracter) "
+                     "y, si lo desea, la longitud; aqui hay %zu. Ejemplo: extraer_subtexto(\"abcdef\", 2, 3) -> \"cde\". "
+                     "Con dos argumentos, desde el indice hasta el final del texto.",
+                     cn->n_args);
+            cg->has_error = 1;
+            cg->err_line = cn->base.line > 0 ? cn->base.line : 1;
+            cg->err_col = cn->base.col > 0 ? cn->base.col : 1;
+            return 1;
+        }
+        if (cn->n_args > 3) {
+            snprintf(cg->last_error, CODEGEN_ERROR_MAX,
+                     "Sobran argumentos. 'extraer_subtexto' admite como mucho tres (texto, indice inicio, longitud); "
+                     "aqui hay %zu. Ejemplo: extraer_subtexto(\"abcdef\", 1, 4).",
+                     cn->n_args);
+            cg->has_error = 1;
+            cg->err_line = cn->base.line > 0 ? cn->base.line : 1;
+            cg->err_col = cn->base.col > 0 ? cn->base.col : 1;
+            return 1;
+        }
         visit_expression(cg, ARG0, 1);
         visit_expression(cg, ARG1, 2);
-        if (ARG2) visit_expression(cg, ARG2, 3);
-        else emit(cg, OP_MOVER, 3, 0xFF, 0xFF, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
+        if (ARG2)
+            visit_expression(cg, ARG2, 3);
+        else
+            emit(cg, OP_MOVER, 3, 0xFF, 0xFF, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
         emit(cg, OP_STR_SUBTEXTO, dest_reg, 1, 2, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
         return 1;
     }
     if (strcmp(name, "extraer_antes_de") == 0) {
-        if (cn->n_args < 2) return 0;
+        if (cn->n_args != 2) {
+            const char *cons = NULL;
+            if (cn->n_args < 2)
+                cons = "(Hacen falta el texto donde buscar y el patron o delimitador. Luego del patron se descarta.)";
+            else
+                cons = "(Solo dos argumentos: frase y patron. No anada mas tras la segunda coma.)";
+            codegen_error_sistema_incorporada_arity(cg, cn, 2,
+                                                    "texto donde buscar y texto patron o delimitador",
+                                                    "extraer_antes_de(\"uno,dos\", \",\")", cons);
+            return 1;
+        }
         visit_expression(cg, ARG0, 1);
         visit_expression(cg, ARG1, 2);
         emit(cg, OP_STR_EXTRAER_ANTES_REG, dest_reg, 1, 2, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
         return 1;
     }
     if (strcmp(name, "extraer_despues_de") == 0) {
-        if (cn->n_args < 2) return 0;
+        if (cn->n_args != 2) {
+            const char *cons = NULL;
+            if (cn->n_args < 2)
+                cons = "(Hacen falta el texto y el patron; se devuelve lo que sigue a la primera aparicion del patron.)";
+            else
+                cons = "(Solo dos argumentos: frase y patron. No anada mas tras la segunda coma.)";
+            codegen_error_sistema_incorporada_arity(cg, cn, 2,
+                                                    "texto donde buscar y texto patron o delimitador",
+                                                    "extraer_despues_de(\"clave:valor\", \":\")", cons);
+            return 1;
+        }
         visit_expression(cg, ARG0, 1);
         visit_expression(cg, ARG1, 2);
         emit(cg, OP_STR_EXTRAER_DESPUES_REG, dest_reg, 1, 2, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);

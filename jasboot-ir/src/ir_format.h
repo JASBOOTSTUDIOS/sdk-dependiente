@@ -343,6 +343,9 @@ int ir_file_add_u64(IRFile* ir, uint64_t value, size_t* out_offset);
 int ir_file_add_string(IRFile* ir, const char* text, size_t* out_offset);
 int ir_file_write(IRFile* ir, const char* filename);
 int ir_file_read(IRFile* ir, const char* filename);
+/* Misma disposicion que archivo .jbo en disco (cabecera + IA opcional + codigo + datos). */
+int ir_file_read_memory(IRFile* ir, const uint8_t* buf, size_t len);
+int ir_file_serialize(IRFile* ir, uint8_t** out_buf, size_t* out_len);
 int ir_build_ia_metadata(uint8_t** out, size_t* out_size,
                          const char* profile,
                          const char* build_id,

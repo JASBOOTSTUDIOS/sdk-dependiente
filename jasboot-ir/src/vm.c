@@ -463,18 +463,23 @@ static void vm_text_cache_free(VM* vm) {
     vm->text_cache_buckets = NULL;
 }
 
-static const char* vm_text_cache_get(VM* vm, uint32_t id) {
+static VMTextCacheEntry* vm_text_cache_find(VM* vm, uint32_t id) {
     if (!vm || !vm->text_cache_buckets) return NULL;
-    size_t index = id % vm->text_cache_size;
-    VMTextCacheEntry* it = vm->text_cache_buckets[index];
-    while (it) {
+    size_t index = (size_t)id % vm->text_cache_size;
+    for (VMTextCacheEntry* it = vm->text_cache_buckets[index]; it; it = it->next) {
         if (it->id == id) {
-            // fprintf(stderr, "[DBG_CACHE] GET id=%u -> '%s'\n", id, it->text);
-            return it->text;
+            /* Entradas antiguas sin text_len rellenado */
+            if (it->text && it->text_len == 0 && it->text[0] != '\0')
+                it->text_len = strlen(it->text);
+            return it;
         }
-        it = it->next;
     }
     return NULL;
+}
+
+static const char* vm_text_cache_get(VM* vm, uint32_t id) {
+    VMTextCacheEntry* e = vm_text_cache_find(vm, id);
+    return e ? e->text : NULL;
 }
 
 static int vm_text_cache_put(VM* vm, uint32_t id, const char* text) {
@@ -486,10 +491,13 @@ static int vm_text_cache_put(VM* vm, uint32_t id, const char* text) {
     VMTextCacheEntry* it = vm->text_cache_buckets[index];
     while (it) {
         if (it->id == id) {
+            if (text && it->text && strcmp(it->text, text) == 0)
+                return 0;
             char* dup = text ? strdup(text) : strdup("");
             if (!dup) return -1;
             free(it->text);
             it->text = dup;
+            it->text_len = strlen(dup);
             // fprintf(stderr, "[DBG_CACHE] UPD id=%u -> '%s'\n", id, text);
             return 0;
         }
@@ -505,6 +513,7 @@ static int vm_text_cache_put(VM* vm, uint32_t id, const char* text) {
         free(n);
         return -1;
     }
+    n->text_len = strlen(n->text);
     n->next = vm->text_cache_buckets[index];
     vm->text_cache_buckets[index] = n;
     vm->text_cache_count++;
@@ -630,10 +639,41 @@ VM* vm_create(void) {
 
 #include <inttypes.h>
 
+/* fflush solo en textos cortos: megacadenas + fflush por carácter lógico saturan el terminal (p. ej. VS Code). */
+#define VM_IMPRIMIR_FLUSH_MAX 16384
+
+static void vm_flush_stdout_after_text(const char* texto, size_t byte_len) {
+    if (ferror(stdout)) return;
+    if (byte_len == (size_t)-1) {
+        if (!texto) {
+            fflush(stdout);
+            return;
+        }
+        size_t n = 0;
+        while (n < VM_IMPRIMIR_FLUSH_MAX && texto[n] != '\0') n++;
+        if (texto[n] == '\0' && n < VM_IMPRIMIR_FLUSH_MAX)
+            fflush(stdout);
+        return;
+    }
+    if (byte_len < VM_IMPRIMIR_FLUSH_MAX)
+        fflush(stdout);
+    (void)texto;
+}
+
 static void vm_escribir_cadena(const char* texto) {
     if (!texto) return;
     fputs(texto, stdout);
-    fflush(stdout);
+    vm_flush_stdout_after_text(texto, (size_t)-1);
+}
+
+static void vm_escribir_texto_bytes(const char* texto, size_t nbytes) {
+    if (nbytes == 0) {
+        vm_flush_stdout_after_text("", 0);
+        return;
+    }
+    if (!texto) return;
+    fwrite(texto, 1, nbytes, stdout);
+    vm_flush_stdout_after_text(texto, nbytes);
 }
 
 /* Valor centinela solo para OP_IMPRIMIR_NUMERO (imprime "nan"). str_a_entero invalido ya no lo asigna: lanza error capturable. */
@@ -2037,10 +2077,11 @@ int vm_step(VM* vm) {
             }
 
             if (id != 0 || (inst.flags & IR_INST_FLAG_A_REGISTER)) {
-                char txt_buf[4096];
-                if (vm_text_cache_get_copy(vm, id, txt_buf, sizeof(txt_buf))) {
-                    vm_escribir_cadena(txt_buf);
+                VMTextCacheEntry* ent = vm_text_cache_find(vm, id);
+                if (ent && ent->text) {
+                    vm_escribir_texto_bytes(ent->text, ent->text_len);
                 } else {
+                    char txt_buf[4096];
 #ifdef JASBOOT_LANG_INTEGRATION
                     if (vm->mem_neuronal && jmn_obtener_texto(vm->mem_neuronal, id, txt_buf, sizeof(txt_buf)) >= 0 && txt_buf[0]) {
                         vm_escribir_cadena(txt_buf);
@@ -3249,7 +3290,10 @@ int vm_step(VM* vm) {
                 if (!s1 && id_izq == 0) s1 = "";
                 if (!s2 && id_der == 0) s2 = "";
                 if (s1 && s2) {
-                    size_t l1 = strlen(s1), l2 = strlen(s2);
+                    VMTextCacheEntry* e1 = vm_text_cache_find(vm, id_izq);
+                    VMTextCacheEntry* e2 = vm_text_cache_find(vm, id_der);
+                    size_t l1 = (e1 && e1->text == s1) ? e1->text_len : strlen(s1);
+                    size_t l2 = (e2 && e2->text == s2) ? e2->text_len : strlen(s2);
                     char* combined = (char*)malloc(l1 + l2 + 1);
                     if (combined) {
                         strcpy(combined, s1);
@@ -3267,8 +3311,14 @@ int vm_step(VM* vm) {
 
         case OP_STR_LONGITUD: { // 0xBA
             uint32_t id = (uint32_t)vm_get_register(vm, inst.operand_b);
-            const char* s = vm_text_cache_get(vm, id);
-            size_t len = s ? strlen(s) : 0;
+            size_t len = 0;
+            VMTextCacheEntry* e = vm_text_cache_find(vm, id);
+            if (e && e->text) {
+                len = e->text_len;
+            } else {
+                const char* s = vm_text_cache_get(vm, id);
+                len = s ? strlen(s) : 0;
+            }
             vm_set_register(vm, inst.operand_a, (uint64_t)len);
             vm->pc += IR_INSTRUCTION_SIZE;
             break;
@@ -3428,21 +3478,27 @@ int vm_step(VM* vm) {
             uint32_t id_frase = (uint32_t)vm_get_register(vm, inst.operand_b);
             uint32_t start = (uint32_t)vm_get_register(vm, inst.operand_c);
             uint32_t len = (uint32_t)vm_get_register(vm, inst.operand_c + 1);
-            char frase[4096], salida[4096];
-            memset(frase, 0, 4096);
-            memset(salida, 0, 4096);
-            int got_frase = 0;
+            const char* frase = NULL;
+            size_t f_len = 0;
+            char frase_stack[4096];
+            VMTextCacheEntry* ent = vm_text_cache_find(vm, id_frase);
+            if (ent && ent->text) {
+                frase = ent->text;
+                f_len = ent->text_len;
+            }
 #ifdef JASBOOT_LANG_INTEGRATION
-            if (vm->mem_neuronal && jmn_obtener_texto(vm->mem_neuronal, id_frase, frase, 4096) >= 0)
-                got_frase = 1;
+            if (!frase && vm->mem_neuronal &&
+                jmn_obtener_texto(vm->mem_neuronal, id_frase, frase_stack, sizeof(frase_stack)) >= 0) {
+                frase = frase_stack;
+                f_len = strlen(frase_stack);
+            }
 #endif
-            if (!got_frase && vm_text_cache_get_copy(vm, id_frase, frase, 4096))
-                got_frase = 1;
-            if (got_frase) {
-                size_t f_len = strlen(frase);
+            if (frase && f_len > 0) {
                 if (start < f_len) {
-                    if (start + len > f_len) len = (uint32_t)(f_len - start);
+                    if ((size_t)start + (size_t)len > f_len)
+                        len = (uint32_t)(f_len - start);
                     if (len >= 4096) len = 4095;
+                    char salida[4096];
                     memcpy(salida, frase + start, len);
                     salida[len] = '\0';
                     uint32_t id_res = vm_hash_texto(salida);
@@ -3463,36 +3519,29 @@ int vm_step(VM* vm) {
 
         case OP_STR_EXTRAER_ANTES_REG: {
 #ifdef JASBOOT_LANG_INTEGRATION
-            if (vm->mem_neuronal) {
+            {
                 uint32_t id_frase = (uint32_t)b_val;
                 uint32_t id_patron = (uint32_t)c_val;
-                
+
                 char frase[4096], patron[512], salida[4096];
                 memset(frase, 0, 4096);
                 memset(patron, 0, 512);
                 memset(salida, 0, 4096);
 
-                const char* cached_f = vm_text_cache_get(vm, id_frase);
-                const char* cached_p = vm_text_cache_get(vm, id_patron);
-
-                int ok_f = (cached_f != NULL);
-                int ok_p = (cached_p != NULL);
-
-                if (ok_f) strncpy(frase, cached_f, 4095);
-                else ok_f = (jmn_obtener_texto(vm->mem_neuronal, id_frase, frase, 4096) >= 0);
-
-                if (ok_p) strncpy(patron, cached_p, 511);
-                else ok_p = (jmn_obtener_texto(vm->mem_neuronal, id_patron, patron, 512) >= 0);
+                int ok_f = vm_text_cache_get_copy(vm, id_frase, frase, 4096);
+                if (!ok_f && vm->mem_neuronal) ok_f = (jmn_obtener_texto(vm->mem_neuronal, id_frase, frase, 4096) >= 0);
+                int ok_p = vm_text_cache_get_copy(vm, id_patron, patron, 512);
+                if (!ok_p && vm->mem_neuronal) ok_p = (jmn_obtener_texto(vm->mem_neuronal, id_patron, patron, 512) >= 0);
 
                 if (ok_f && ok_p) {
-                    char* pos = strstr(frase, patron);
+                    char *pos = strstr(frase, patron);
                     if (pos) {
                         size_t len = (size_t)(pos - frase);
                         if (len < 4096) {
                             memcpy(salida, frase, len);
                             salida[len] = '\0';
                             uint32_t id_res = vm_hash_texto(salida);
-                            jmn_guardar_texto(vm->mem_neuronal, id_res, salida);
+                            if (vm->mem_neuronal) jmn_guardar_texto(vm->mem_neuronal, id_res, salida);
                             vm_text_cache_put(vm, id_res, salida);
                             vm->registers[inst.operand_a] = (uint64_t)id_res;
                         } else {

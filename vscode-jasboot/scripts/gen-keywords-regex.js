@@ -1,16 +1,49 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const roots = [
-  path.join(__dirname, '../../../sdk-dependiente/jas-compiler-c/src/keywords.c'),
-  path.join(__dirname, '../../../sdk/jas-compiler-c/src/keywords.c'),
-];
-const p = roots.find((f) => fs.existsSync(f));
-if (!p) throw new Error('No se encontro keywords.c en sdk-dependiente ni sdk');
-const s = fs.readFileSync(p, 'utf8');
-const m = s.match(/const char \*const KEYWORDS\[\] = \{([\s\S]*?)\};/);
-if (!m) throw new Error('no KEYWORDS');
-const words = [...m[1].matchAll(/"([^"]+)"/g)].map((x) => x[1]);
+
+function findFile(candidates) {
+  for (const f of candidates) {
+    if (fs.existsSync(f)) return f;
+  }
+  return null;
+}
+
+const sdkRoot = path.join(__dirname, '..', '..');
+const kwPath = findFile([
+  path.join(sdkRoot, 'jas-compiler-c', 'src', 'keywords.c'),
+  path.join(__dirname, '..', '..', '..', 'sdk-dependiente', 'jas-compiler-c', 'src', 'keywords.c'),
+  path.join(__dirname, '..', '..', '..', 'sdk', 'jas-compiler-c', 'src', 'keywords.c'),
+]);
+const sisPath = findFile([
+  path.join(sdkRoot, 'jas-compiler-c', 'src', 'sistema_llamadas.c'),
+  path.join(__dirname, '..', '..', '..', 'sdk-dependiente', 'jas-compiler-c', 'src', 'sistema_llamadas.c'),
+]);
+
+if (!kwPath) throw new Error('No se encontro keywords.c (jas-compiler-c/src/keywords.c)');
+if (!sisPath) throw new Error('No se encontro sistema_llamadas.c');
+
+function parseStringArray(cSource, arrayName) {
+  const re = new RegExp(`const char \\*const ${arrayName}\\[] = \\{([\\s\\S]*?)\\};`);
+  const m = cSource.match(re);
+  if (!m) throw new Error(`no ${arrayName} en ${arrayName === 'KEYWORDS' ? 'keywords.c' : 'sistema_llamadas.c'}`);
+  return [...m[1].matchAll(/"([^"]+)"/g)].map((x) => x[1]);
+}
+
+const kwSrc = fs.readFileSync(kwPath, 'utf8');
+const words = parseStringArray(kwSrc, 'KEYWORDS');
+const forbiddenWords = parseStringArray(kwSrc, 'FORBIDDEN_ENGLISH');
+
+const sisSrc = fs.readFileSync(sisPath, 'utf8');
+const sistema = parseStringArray(sisSrc, 'SISTEMA_LLAMADAS');
+
+const wordSet = new Set(words);
+for (const w of sistema) {
+  if (!wordSet.has(w)) {
+    words.push(w);
+    wordSet.add(w);
+  }
+}
 
 const control = new Set([
   'principal', 'fin_principal', 'funcion', 'fin_funcion',
@@ -19,6 +52,7 @@ const control = new Set([
   'hacer', 'fin_hacer', 'seleccionar', 'caso', 'defecto', 'fin_seleccionar',
   'intentar', 'atrapar', 'final', 'fin_intentar', 'lanzar',
   'registro', 'fin_registro', 'concepto', 'fin_concepto', 'macro', 'llamar', 'fin_archivo',
+  'para_cada', 'fin_para_cada', 'sobre',
 ]);
 const storage = new Set([
   'entero', 'texto', 'flotante', 'caracter', 'constante', 'u32', 'u64', 'u8', 'byte',
@@ -80,6 +114,13 @@ const out = {
   constant: alt(g5),
   io: alt(g6),
   supportChunks: chunks,
+  forbidden: alt(forbiddenWords.sort((x, y) => y.length - x.length)),
 };
-fs.writeFileSync(path.join(__dirname, 'keywords-groups.json'), JSON.stringify(out, null, 0));
-console.log('wrote keywords-groups.json', { supportChunks: chunks.length, totalKeywords: words.length });
+
+fs.writeFileSync(path.join(__dirname, 'keywords-groups.json'), JSON.stringify(out, null, 0), 'utf8');
+console.log('wrote keywords-groups.json', {
+  keywordsC: kwPath,
+  sistemaC: sisPath,
+  totalKeywords: words.length,
+  supportChunkCount: chunks.length,
+});

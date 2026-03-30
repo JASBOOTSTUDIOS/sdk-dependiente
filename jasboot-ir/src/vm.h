@@ -14,7 +14,8 @@
 
 typedef struct VMTextCacheEntry {
     uint32_t id;
-    char* text; // heap
+    char* text; /* heap, NUL-terminated */
+    size_t text_len; /* strlen(text); evita O(n) repetidos en VM */
     struct VMTextCacheEntry* next;
 } VMTextCacheEntry;
 

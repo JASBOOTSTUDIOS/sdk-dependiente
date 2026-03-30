@@ -327,6 +327,112 @@ int ir_file_read(IRFile* ir, const char* filename) {
     return 0;
 }
 
+int ir_file_read_memory(IRFile* ir, const uint8_t* buf, size_t len) {
+    if (!ir || !buf || len < IR_HEADER_SIZE) return -1;
+    if (buf[0] != IR_MAGIC_0 || buf[1] != IR_MAGIC_1 || buf[2] != IR_MAGIC_2 || buf[3] != IR_MAGIC_3)
+        return -1;
+    ir->header.magic[0] = buf[0];
+    ir->header.magic[1] = buf[1];
+    ir->header.magic[2] = buf[2];
+    ir->header.magic[3] = buf[3];
+    ir->header.version = buf[4];
+    ir->header.endian = buf[5];
+    ir->header.target = buf[6];
+    ir->header.flags = buf[7];
+    memcpy(&ir->header.code_size, buf + 8, 4);
+    memcpy(&ir->header.data_size, buf + 12, 4);
+    size_t off = IR_HEADER_SIZE;
+    if (ir->header.flags & IR_FLAG_IA_METADATA) {
+        if (off + 4 > len) return -1;
+        uint32_t ia_size = 0;
+        memcpy(&ia_size, buf + off, 4);
+        off += 4;
+        if (ia_size > (uint32_t)(64u * 1024 * 1024) || off + ia_size > len) return -1;
+        uint8_t* copy = (uint8_t*)malloc(ia_size);
+        if (!copy) return -1;
+        memcpy(copy, buf + off, ia_size);
+        off += ia_size;
+        free(ir->ia_metadata);
+        ir->ia_metadata = copy;
+        ir->ia_metadata_size = ia_size;
+    } else {
+        if (ir->ia_metadata) {
+            free(ir->ia_metadata);
+            ir->ia_metadata = NULL;
+        }
+        ir->ia_metadata_size = 0;
+    }
+    uint32_t csz = ir->header.code_size;
+    uint32_t dsz = ir->header.data_size;
+    if (off + (size_t)csz + (size_t)dsz > len) return -1;
+    if (csz > 0) {
+        if (csz > ir->code_capacity) {
+            uint8_t* nc = (uint8_t*)realloc(ir->code, csz);
+            if (!nc) return -1;
+            ir->code = nc;
+            ir->code_capacity = csz;
+        }
+        memcpy(ir->code, buf + off, csz);
+        off += csz;
+        ir->code_count = csz / IR_INSTRUCTION_SIZE;
+    } else {
+        ir->code_count = 0;
+    }
+    if (dsz > 0) {
+        if (dsz > ir->data_capacity) {
+            uint8_t* nd = (uint8_t*)realloc(ir->data, dsz);
+            if (!nd) return -1;
+            ir->data = nd;
+            ir->data_capacity = dsz;
+        }
+        memcpy(ir->data, buf + off, dsz);
+    }
+    return 0;
+}
+
+int ir_file_serialize(IRFile* ir, uint8_t** out_buf, size_t* out_len) {
+    if (!ir || !out_buf || !out_len) return -1;
+    size_t ia_extra = 0;
+    if ((ir->header.flags & IR_FLAG_IA_METADATA) && ir->ia_metadata && ir->ia_metadata_size > 0)
+        ia_extra = 4 + ir->ia_metadata_size;
+    size_t total = IR_HEADER_SIZE + ia_extra + (size_t)ir->header.code_size + (size_t)ir->header.data_size;
+    uint8_t* out = (uint8_t*)malloc(total);
+    if (!out) return -1;
+    size_t off = 0;
+    memcpy(out + off, ir->header.magic, 4);
+    off += 4;
+    out[off++] = ir->header.version;
+    out[off++] = ir->header.endian;
+    out[off++] = ir->header.target;
+    out[off++] = ir->header.flags;
+    {
+        uint32_t csz = ir->header.code_size;
+        uint32_t dsz = ir->header.data_size;
+        memcpy(out + off, &csz, 4);
+        off += 4;
+        memcpy(out + off, &dsz, 4);
+        off += 4;
+    }
+    if (ia_extra) {
+        uint32_t ia_le = (uint32_t)ir->ia_metadata_size;
+        memcpy(out + off, &ia_le, 4);
+        off += 4;
+        memcpy(out + off, ir->ia_metadata, ir->ia_metadata_size);
+        off += ir->ia_metadata_size;
+    }
+    if (ir->header.code_size > 0 && ir->code) {
+        memcpy(out + off, ir->code, ir->header.code_size);
+        off += ir->header.code_size;
+    }
+    if (ir->header.data_size > 0 && ir->data) {
+        memcpy(out + off, ir->data, ir->header.data_size);
+        off += ir->header.data_size;
+    }
+    *out_buf = out;
+    *out_len = off;
+    return 0;
+}
+
 static int ir_append_tlv(uint8_t** buffer, size_t* size, uint8_t tag,
                          const uint8_t* payload, uint16_t payload_len) {
     if (!buffer || !size) return -1;
