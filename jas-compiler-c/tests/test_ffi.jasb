@@ -1,0 +1,40 @@
+/* Test FFI: ffi_cargar, ffi_simbolo, ffi_llamar.
+ * Carga kernel32.dll (Win) o libc.so.6 (Linux), obtiene GetCurrentProcessId/getpid,
+ * llama sin argumentos e imprime el PID.
+ */
+principal
+    entero h = 0
+    entero fn = 0
+    entero r = 0
+    texto msg = ""
+
+    /* Intentar Windows: kernel32.dll -> GetCurrentProcessId */
+    h = ffi_cargar("kernel32.dll")
+    si h != 0 entonces hacer
+        fn = ffi_simbolo(h, "GetCurrentProcessId")
+        si fn != 0 entonces hacer
+            r = ffi_llamar(fn, 0, 0, 0, 0)
+            msg = "FFI OK (Win) PID: "
+            imprimir(msg)
+            imprimir(str_desde_numero(r))
+            imprimir("\n")
+            retornar
+        fin_si
+    fin_si
+
+    /* Linux: libc.so.6 -> getpid */
+    h = ffi_cargar("libc.so.6")
+    si h != 0 entonces hacer
+        fn = ffi_simbolo(h, "getpid")
+        si fn != 0 entonces hacer
+            r = ffi_llamar(fn, 0, 0, 0, 0)
+            msg = "FFI OK (Linux) PID: "
+            imprimir(msg)
+            imprimir(str_desde_numero(r))
+            imprimir("\n")
+            retornar
+        fin_si
+    fin_si
+
+    imprimir("FFI FALLO: no se pudo cargar biblioteca ni obtener simbolo\n")
+fin_principal

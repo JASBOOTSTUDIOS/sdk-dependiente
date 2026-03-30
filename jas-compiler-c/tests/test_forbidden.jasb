@@ -1,0 +1,4 @@
+principal
+    if x then
+        imprimir "error"
+fin_principal

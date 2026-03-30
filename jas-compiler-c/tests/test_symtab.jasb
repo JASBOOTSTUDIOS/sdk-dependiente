@@ -1,0 +1,12 @@
+registro Persona
+    texto nombre
+    entero edad
+fin_registro
+
+texto mensaje = "global"
+entero cuenta = 0
+
+principal
+    entero x = 10
+    imprimir mensaje
+fin_principal

@@ -1,0 +1,19 @@
+/* Test mat4: identidad, mul_vec4, mul, transpuesta */
+principal
+    mat4 M
+    mat4 T
+    mat4 T2
+    vec4 v = vec4(1.0, 0.0, 0.0, 0.0)
+    vec4 out_vec = vec4(0.0, 0.0, 0.0, 0.0)
+
+    mat4_identidad(M)
+    mat4_mul_vec4(out_vec, M, v)
+    imprimir("mat4 I*v: ")
+    imprimir_flotante(out_vec.x)
+    imprimir_flotante(out_vec.y)
+    imprimir("\n")
+
+    mat4_mul(T, M, M)
+    mat4_transpuesta(T2, M)
+    imprimir("MAT4 OK\n")
+fin_principal

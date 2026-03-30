@@ -1,0 +1,6 @@
+/* Test: asignar a constante debe dar error */
+constante entero PI = 3
+
+principal
+    PI = 5
+fin_principal

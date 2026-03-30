@@ -1,0 +1,11 @@
+/* Test tipo constante */
+constante entero PI = 3
+constante texto SALUDO = "Hola"
+constante flotante E = 2.718
+
+principal
+    imprimir("PI: ")
+    imprimir(str_desde_numero(PI))
+    imprimir(SALUDO)
+    imprimir("E: " + str_desde_numero(E))
+fin_principal

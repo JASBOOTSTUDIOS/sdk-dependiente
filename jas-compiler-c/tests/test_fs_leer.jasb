@@ -1,0 +1,11 @@
+/* Test: fs_leer_texto con ruta literal */
+principal
+    texto ruta = "test.jasb"
+    pensar fs_leer_texto(ruta)
+    cuando resultado es igual a 0
+        imprimir("Error: no se pudo abrir archivo\n")
+        retornar
+    fin_cuando
+    imprimir("Contenido: ")
+    imprimir(resultado)
+fin_principal

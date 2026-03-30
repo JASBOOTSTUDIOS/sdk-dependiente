@@ -1,0 +1,16 @@
+/* Test u32, u64, literales hex y comparaciones unsigned */
+principal
+    u32 u32_a = 0x80000000
+    u32 u32_b = 0xFFFF
+    imprimir "Test u32/u64"
+    cuando u32_a > 0 entonces
+        imprimir "0x80000000 > 0 (unsigned OK)"
+    sino
+        imprimir "0x80000000 <= 0 (signed - fallo)"
+    fin_cuando
+    cuando u32_b == 65535 entonces
+        imprimir "0xFFFF == 65535 OK"
+    sino
+        imprimir "Comparacion fallo"
+    fin_cuando
+fin_principal

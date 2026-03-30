@@ -1,0 +1,13 @@
+/* Test byte/u8 - Prioridad 2: tipo byte, literales hex, conversiones, fs_leer_byte/fs_escribir_byte */
+principal
+    u8 b = 0xFF
+    u8 c = 0x41
+    byte d = 0x00
+    imprimir("Test byte/u8 - OK")
+    /* byte_a_caracter y caracter_a_byte (identidad: byte <-> codigo ASCII) */
+    caracter ch = byte_a_caracter(c)
+    u8 e = caracter_a_byte(ch)
+    /* fs_escribir_byte a stdout (byte 65 = 'A') */
+    fs_escribir_byte(c)
+    imprimir("")
+fin_principal

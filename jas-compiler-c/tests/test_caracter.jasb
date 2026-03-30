@@ -1,0 +1,16 @@
+/* Test tipo caracter */
+principal
+    caracter c = 'A'
+    imprimir("Caracter: ")
+    imprimir(c)
+    
+    caracter c2 = '!'
+    imprimir(c2)
+    
+    texto s = caracter_a_texto(c) + " y " + caracter_a_texto(c2)
+    imprimir(s)
+    
+    entero cod = codigo_caracter("B")
+    imprimir("Codigo de B: ")
+    imprimir(cod)
+fin_principal

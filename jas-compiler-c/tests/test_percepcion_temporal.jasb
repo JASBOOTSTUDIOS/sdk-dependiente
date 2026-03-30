@@ -1,0 +1,19 @@
+/* Fase C: ventana circular — lo más reciente en percepcion_anterior(0), el anterior en (1). */
+principal
+    ventana_percepcion(16)
+    percepcion_limpiar()
+    entero num_a = 11111
+    entero num_b = 22222
+    percepcion(num_a)
+    percepcion(num_b)
+    entero r0 = percepcion_anterior(0)
+    entero r1 = percepcion_anterior(1)
+    entero n = percepcion_tamano()
+    imprimir("tam=")
+    imprimir(n)
+    imprimir(" r0=")
+    imprimir(r0)
+    imprimir(" r1=")
+    imprimir(r1)
+    imprimir("\n")
+fin_principal

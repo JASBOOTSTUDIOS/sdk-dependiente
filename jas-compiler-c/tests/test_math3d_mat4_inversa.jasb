@@ -1,0 +1,10 @@
+/* Test B.8: mat4_inversa (I*I^-1 = I) */
+principal
+    mat4 I
+    mat4 inv
+    mat4 prod
+    mat4_identidad(I)
+    mat4_inversa(inv, I)
+    mat4_mul(prod, I, inv)
+    imprimir("MAT4_INVERSA OK\n")
+fin_principal

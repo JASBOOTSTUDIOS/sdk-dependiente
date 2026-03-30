@@ -1,0 +1,17 @@
+/* Test del Heap: reservar y liberar memoria dinámica */
+principal
+    imprimir("Iniciando test del heap...\n")
+    
+    entero tamano = 80
+    entero ptr = reservar(tamano)
+    
+    si ptr != 0 entonces hacer
+        imprimir("Memoria reservada correctamente.\n")
+        liberar(ptr)
+        imprimir("Memoria liberada correctamente.\n")
+    sino
+        imprimir("Error: No se pudo reservar memoria.\n")
+    fin_si
+    
+    imprimir("TEST HEAP OK\n")
+fin_principal

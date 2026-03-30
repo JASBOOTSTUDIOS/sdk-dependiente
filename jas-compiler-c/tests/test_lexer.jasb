@@ -1,0 +1,7 @@
+principal
+    imprimir "Hola mundo"
+    recordar "x" con valor 42
+    cuando verdadero hacer
+        retornar 0
+    fin_cuando
+fin_principal

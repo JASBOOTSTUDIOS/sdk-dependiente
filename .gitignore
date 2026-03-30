@@ -1,0 +1,43 @@
+# --- Artefactos de compilación (todos los paquetes) ---
+**/*.o
+**/*.obj
+**/*.a
+**/*.lib
+**/*.dll
+**/*.pdb
+**/*.ilk
+**/*.exp
+**/*.so
+**/*.dylib
+*.exe
+
+# IR / salida del compilador
+**/*.jbo
+
+# Carpetas de build locales
+**/build/
+**/obj/
+**/dist/
+**/.cache/
+
+# IDE / SO
+**/.vs/
+**/.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Node (herramientas auxiliares)
+**/node_modules/
+
+# --- jasboot-ir (VM): logs y capturas de build ---
+jasboot-ir/*.log
+jasboot-ir/vm_debug.log
+jasboot-ir/build_output.txt
+jasboot-ir/build_log.txt
+jasboot-ir/build_out.txt
+jasboot-ir/build_errors.txt
+jasboot-ir/build_errors_ascii.txt
