@@ -1,4 +1,4 @@
-# Build artifacts
+# Complemento si se clona solo jasboot-ir.
 build/
 bin/
 *.o
@@ -10,12 +10,7 @@ bin/
 *.pdb
 *.ilk
 *.exp
-
-# Test outputs
 *.jbo
-test.jbo
-
-# Logs y capturas de build accidentales (no versionar)
 *.log
 vm_debug.log
 build_output.txt
@@ -23,17 +18,11 @@ build_log.txt
 build_out.txt
 build_errors.txt
 build_errors_ascii.txt
-
-# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
-
-# OS
 .DS_Store
 Thumbs.db
-
-# Node / otros (por si se añaden herramientas)
 node_modules/

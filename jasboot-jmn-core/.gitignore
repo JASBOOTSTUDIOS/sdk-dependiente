@@ -1,21 +1,16 @@
-# Build / artefactos
+# Complemento para clon parcial.
 *.o
 *.obj
 *.a
 *.lib
 *.exe
 *.dll
-*.so
-*.dylib
 build/
 dist/
 .vs/
 .cache/
-
-# OS / IDE
 .DS_Store
 Thumbs.db
 .idea/
-.vscode/
 *.swp
 *~

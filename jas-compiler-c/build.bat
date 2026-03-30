@@ -17,26 +17,27 @@ gcc -o "bin\jbc.exe" src/diagnostic.o src/keywords.o src/sistema_llamadas.o src/
 if %errorlevel% neq 0 (echo Build FAILED & exit /b 1)
 echo Compilador: %cd%\bin\jbc.exe
 
-REM CLI en raiz: launcher pequeno -> reenvia a sdk-dependiente\jas-compiler-c\bin\jbc.exe
-if not exist "..\..\bin" mkdir "..\..\bin"
-gcc -std=c11 -Wall -O2 -o "..\..\bin\jbc.exe" jbc_launcher.c
-if %errorlevel% equ 0 (
-  echo Launcher CLI: ..\..\bin\jbc.exe  ^-^>  sdk-dependiente\jas-compiler-c\bin\jbc.exe
-  if exist "..\..\bin\jbc_next.exe" del "..\..\bin\jbc_next.exe" >nul 2>&1
-  goto :root_cli_done
+REM Launcher opcional (monorepo jasboot). JASBOOT_MONOREPO_BIN con barra invertida final, p. ej. C:\jasboot\bin\
+if defined JASBOOT_MONOREPO_BIN (
+  if not exist "%JASBOOT_MONOREPO_BIN%" mkdir "%JASBOOT_MONOREPO_BIN%"
+  gcc -std=c11 -Wall -O2 -o "%JASBOOT_MONOREPO_BIN%jbc.exe" jbc_launcher.c
+  if errorlevel 1 (
+    echo ADVERTENCIA: launcher fallo; probando jbc_next.exe...
+    gcc -std=c11 -Wall -O2 -o "%JASBOOT_MONOREPO_BIN%jbc_next.exe" jbc_launcher.c
+  ) else (
+    echo Launcher monorepo: %JASBOOT_MONOREPO_BIN%jbc.exe
+  )
 )
-echo ADVERTENCIA: no se pudo escribir ..\..\bin\jbc.exe ^(en uso?^). Probando jbc_next.exe...
-gcc -std=c11 -Wall -O2 -o "..\..\bin\jbc_next.exe" jbc_launcher.c
-if %errorlevel% equ 0 (
-  echo Listo: ..\..\bin\jbc_next.exe  ^-^>  sdk-dependiente\jas-compiler-c\bin\jbc.exe
-  echo Cierre terminales/IDE que usen jbc.exe y renombre jbc_next.exe a jbc.exe
-  goto :root_cli_done
-)
-echo ADVERTENCIA: launcher fallo. Copiando compilador completo a ..\..\bin\jbc.exe...
-copy /Y "bin\jbc.exe" "..\..\bin\jbc.exe" >nul 2>&1
-if %errorlevel% neq 0 echo ADVERTENCIA: tampoco se pudo copiar; use:  %cd%\bin\jbc.exe
-:root_cli_done
 
+REM Copia al bin del repo sdk-dependiente (..\bin desde jas-compiler-c)
 if not exist "..\bin" mkdir "..\bin"
 copy /Y "bin\jbc.exe" "..\bin\jbc.exe" >nul 2>&1
+if errorlevel 1 echo AVISO: no se pudo copiar jbc.exe a ..\bin
+
+REM scripts\build-compiler.bat: JASBOOT_SDK_ROOT con barra final; copia jbc al bin del SDK.
+if defined JASBOOT_SDK_ROOT (
+  if not exist "%JASBOOT_SDK_ROOT%bin" mkdir "%JASBOOT_SDK_ROOT%bin"
+  copy /Y "bin\jbc.exe" "%JASBOOT_SDK_ROOT%bin\jbc.exe" >nul 2>&1
+  if errorlevel 1 (echo AVISO: copia a JASBOOT_SDK_ROOT\bin fallo) else (echo SDK bin: %JASBOOT_SDK_ROOT%bin\jbc.exe)
+)
 endlocal

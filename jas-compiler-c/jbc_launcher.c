@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stddef.h>
 
 static void strip_exe_dir(char *path) {
     char *p = strrchr(path, '\\');
@@ -24,23 +25,32 @@ int main(int argc, char **argv) {
         return 1;
     }
     strip_exe_dir(mod);
-    /* mod = ...\jasboot\bin */
-    {
-        int nw = snprintf(rel, sizeof rel, "%s\\..\\sdk-dependiente\\jas-compiler-c\\bin\\jbc.exe", mod);
+    /* mod = directorio del launcher (p. ej. sdk-dependiente\bin o jasboot\bin). */
+    const char *candidates[2] = {
+        "\\..\\jas-compiler-c\\bin\\jbc.exe",              /* repo sdk-dependiente solo */
+        "\\..\\sdk-dependiente\\jas-compiler-c\\bin\\jbc.exe" /* monorepo jasboot\bin */
+    };
+    int found = 0;
+    for (size_t i = 0; i < sizeof candidates / sizeof candidates[0]; i++) {
+        int nw = snprintf(rel, sizeof rel, "%s%s", mod, candidates[i]);
         if (nw < 0 || (size_t)nw >= sizeof rel) {
             fprintf(stderr, "jbc: ruta demasiado larga\n");
             return 1;
         }
+        if (!GetFullPathNameA(rel, (DWORD)sizeof resolved, resolved, NULL)) {
+            fprintf(stderr, "jbc: GetFullPathName fallo\n");
+            return 1;
+        }
+        if (GetFileAttributesA(resolved) != INVALID_FILE_ATTRIBUTES) {
+            found = 1;
+            break;
+        }
     }
-    if (!GetFullPathNameA(rel, (DWORD)sizeof resolved, resolved, NULL)) {
-        fprintf(stderr, "jbc: GetFullPathName fallo\n");
-        return 1;
-    }
-    if (GetFileAttributesA(resolved) == INVALID_FILE_ATTRIBUTES) {
+    if (!found) {
         fprintf(stderr,
-                "jbc: no existe el compilador en:\n  %s\n"
-                "Ejecute: sdk-dependiente\\jas-compiler-c\\build.bat\n",
-                resolved);
+                "jbc: no se encontro jas-compiler-c\\bin\\jbc.exe desde:\n  %s\n"
+                "Ejecute scripts\\build-compiler.bat o jas-compiler-c\\build.bat\n",
+                mod);
         return 1;
     }
 

@@ -1,0 +1,13 @@
+{
+  "iconDefinitions": {
+    "_jasboot_logo": {
+      "iconPath": "../img/jasboot-icon.png"
+    }
+  },
+  "fileExtensions": {
+    "jasb": "_jasboot_logo"
+  },
+  "languageIds": {
+    "jasboot": "_jasboot_logo"
+  }
+}

@@ -1,4 +1,4 @@
-# Objetos y binarios locales
+# Complemento si se clona solo este directorio (la raíz sdk-dependiente/.gitignore cubre el monorepo).
 *.o
 *.obj
 *.a
@@ -8,17 +8,12 @@
 *.pdb
 *.ilk
 *.exp
-
-# Salida de compilación Jasboot
 *.jbo
-
-# Carpetas de build / IDE
+bin/
 build/
 obj/
 .vs/
 .idea/
-
-# OS / editor
 .DS_Store
 Thumbs.db
 *.swp
