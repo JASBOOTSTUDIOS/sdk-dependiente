@@ -1,6 +1,8 @@
-# Jasboot (.jasb)
+<p align="center">
+  <img src="img/jasboot-icon.png" alt="Jasboot — logo del lenguaje" width="140" height="140">
+</p>
 
-![Jasboot](img/jasboot-icon.png)
+# Jasboot (.jasb)
 
 Resaltado de sintaxis (TextMate) alineado con el compilador **jbc**: comentarios `#`, `//`, `/* */`, cadenas `"` con escapes (`\n`, colores `\rojo`, etc.), **interpolación `${ ... }`** con llaves anidadas, conceptos `'...'`, números (decimal, hex `0x`, flotante), operadores (`=>`, `==`, `<<`, …), **213 palabras clave** agrupadas (control, tipos, E/S, biblioteca), `verdadero`/`falso`, y palabras inglesas prohibidas resaltadas como error.
 

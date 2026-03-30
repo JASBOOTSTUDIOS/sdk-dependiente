@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="../assets/jasboot-icon.png" alt="Jasboot — logo del lenguaje" width="120" height="120">
+</p>
+
 # jasboot-compiler (jbc)
 
 Compilador **C** del lenguaje Jasboot: traduce `.jasb` a **IR binario** (`.jbo`) ejecutable por la VM [`jasboot-ir`](../jasboot-ir).

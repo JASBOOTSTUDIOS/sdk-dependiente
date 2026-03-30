@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="../assets/jasboot-icon.png" alt="Jasboot — logo del lenguaje" width="120" height="120">
+</p>
+
 # 🧠 jasboot IR Binario
 
 **IR (Intermediate Representation) binario propio para jasboot**

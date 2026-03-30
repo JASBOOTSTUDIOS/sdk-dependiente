@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/jasboot-icon.png" alt="Jasboot — logo del lenguaje" width="140" height="140">
+</p>
+
 # sdk-dependiente
 
 Toolchain oficial del lenguaje **Jasboot** en **C**: compilador, representación intermedia (IR) binaria, máquina virtual y núcleo de memoria neuronal (JMN) que enlaza con la VM.
