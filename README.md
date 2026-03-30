@@ -161,6 +161,7 @@ La política está centralizada en **`.gitignore`** en la raíz de `sdk-dependie
 | Node / extensiones empaquetadas | `node_modules/`, `*.vsix` |
 | Python auxiliar | `__pycache__/`, `*.pyc`, `venv/` |
 | Copias de seguridad | `*.bak`, `*.tmp`, `*.orig` |
+| Ficheros JMN enormes (límite GitHub 100 MB) | `jasboot-ir/main.jmn` — no está en el remoto; añádelo en local si lo necesitas para pruebas JMN |
 
 **Sí** deben versionarse, entre otros: fuentes `.c`/`.h`, `Makefile`/`build.bat`, scripts en **`scripts/`**, envoltorios **`bin/*.cmd`** y **`bin/*.bat`**, pruebas `.jasb`, y documentación `.md`.
 
