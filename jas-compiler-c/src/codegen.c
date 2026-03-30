@@ -39,7 +39,7 @@ typedef struct TryLabel {
     const char *catch_var;
 } TryLabel;
 
-#define CODEGEN_ERROR_MAX 256
+#define CODEGEN_ERROR_MAX 512
 
 struct CodeGen {
     uint8_t *code;
@@ -310,6 +310,12 @@ static const char *get_expression_type(CodeGen *cg, ASTNode *node) {
         if (cn->name && (strcmp(cn->name, "lista_mapear") == 0 || strcmp(cn->name, "mem_lista_mapear") == 0 ||
                          strcmp(cn->name, "lista_filtrar") == 0 || strcmp(cn->name, "mem_lista_filtrar") == 0))
             return "lista";
+        /* mem_lista_obtener / lista_obtener: mismo tipo que lista<T> si la variable lista declaro T (p. ej. texto). */
+        if (cn->name && (strcmp(cn->name, "mem_lista_obtener") == 0 || strcmp(cn->name, "lista_obtener") == 0) &&
+            cn->n_args >= 1 && is_node(cn->args[0], NODE_IDENTIFIER)) {
+            const char *el = sym_lookup_lista_elem(&cg->sym, ((IdentifierNode *)cn->args[0])->name);
+            if (el && el[0]) return el;
+        }
         /* Vectores: longitud y producto escalar devuelven flotante (evita imprimir/asignar como entero). */
         if (cn->name && (strcmp(cn->name, "vec2_longitud") == 0 || strcmp(cn->name, "vec3_longitud") == 0 ||
                          strcmp(cn->name, "vec4_longitud") == 0 || strcmp(cn->name, "vec2_dot") == 0 ||
@@ -843,6 +849,36 @@ static void codegen_error_sistema_lista_arity(CodeGen *cg, const CallNode *cn, c
     cg->err_col = cn->base.col;
 }
 
+/* Aridad de API incorporada (texto, etc.): mensaje corto + ejemplo; consejo opcional (p. ej. sinonimos). */
+static void codegen_error_sistema_incorporada_arity(CodeGen *cg, const CallNode *cn, size_t n_requeridos,
+                                                    const char *desc_args, const char *ejemplo,
+                                                    const char *consejo) {
+    const char *nm = cn->name ? cn->name : "?";
+    char balance[80] = "";
+    if (cn->n_args < n_requeridos) {
+        snprintf(balance, sizeof balance, "Faltan %zu argumento(s). ",
+                 (size_t)(n_requeridos - cn->n_args));
+    } else if (cn->n_args > n_requeridos) {
+        snprintf(balance, sizeof balance, "Sobran %zu argumento(s). ",
+                 (size_t)(cn->n_args - n_requeridos));
+    }
+    if (consejo && consejo[0])
+        snprintf(cg->last_error, CODEGEN_ERROR_MAX,
+                 "%s'%s' es una funcion incorporada: hace falta exactamente %zu (%s); "
+                 "aqui hay %zu. Ejemplo: %s %s",
+                 balance, nm, n_requeridos, desc_args ? desc_args : "", cn->n_args,
+                 ejemplo ? ejemplo : "()", consejo);
+    else
+        snprintf(cg->last_error, CODEGEN_ERROR_MAX,
+                 "%s'%s' es una funcion incorporada: hace falta exactamente %zu (%s); "
+                 "aqui hay %zu. Ejemplo: %s",
+                 balance, nm, n_requeridos, desc_args ? desc_args : "", cn->n_args,
+                 ejemplo ? ejemplo : "()");
+    cg->has_error = 1;
+    cg->err_line = cn->base.line > 0 ? cn->base.line : 1;
+    cg->err_col = cn->base.col > 0 ? cn->base.col : 1;
+}
+
 /* Misma convención que mem_lista_agregar: temporales y registros 1, 2. */
 static void codegen_emit_mem_lista_agregar_from_regs(CodeGen *cg, uint8_t list_reg, uint8_t val_reg) {
     SymResult ag_tmp = sym_reserve_temp(&cg->sym, 8);
@@ -869,7 +905,19 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
 
     /* 6.1 Texto */
     if (strcmp(name, "concatenar") == 0) {
-        if (cn->n_args < 2) return 0;
+        if (cn->n_args != 2) {
+            const char *cons = NULL;
+            if (cn->n_args == 0)
+                cons = "(Ponga los dos textos entre parentesis, separados por coma.)";
+            else if (cn->n_args == 1)
+                cons = "(Falta el segundo texto a la derecha de la coma.)";
+            else
+                cons = "(Solo admite dos argumentos de texto.)";
+            codegen_error_sistema_incorporada_arity(cg, cn, 2,
+                "texto izquierda y texto derecha",
+                "concatenar(\"Hola\", \"Mundo\")", cons);
+            return 1;
+        }
         visit_expression(cg, ARG0, 1);
         visit_expression(cg, ARG1, 2);
         emit(cg, OP_STR_CONCATENAR_REG, 1, 1, 2, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
@@ -877,15 +925,42 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         return 1;
     }
     if (strcmp(name, "longitud") == 0 || strcmp(name, "longitud_texto") == 0) {
-        if (!ARG0) return 0;
+        if (cn->n_args != 1) {
+            int es_lt = (strcmp(name, "longitud_texto") == 0);
+            const char *ej = es_lt ? "longitud_texto(\"abc\")" : "longitud(\"abc\")";
+            const char *cons = (cn->n_args == 0)
+                ? (es_lt ? "(`longitud` es sinonimo.)" : "(`longitud_texto` es sinonimo.)")
+                : "(Solo un argumento: el texto. No anada mas tras la coma.)";
+            codegen_error_sistema_incorporada_arity(cg, cn, 1,
+                "un solo texto (se cuenta en caracteres)", ej, cons);
+            return 1;
+        }
         visit_expression(cg, ARG0, dest_reg);
         emit(cg, OP_STR_LONGITUD, dest_reg, dest_reg, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
         return 1;
     }
     if (strcmp(name, "dividir") == 0 || strcmp(name, "dividir_texto") == 0) {
-        if (!ARG0) return 0;
+        if (cn->n_args != 2) {
+            int es_dt = (strcmp(name, "dividir_texto") == 0);
+            const char *ej = es_dt
+                ? "dividir_texto(\"uno,dos\", \",\")"
+                : "dividir(\"x|y\", \"|\")";
+            const char *cons = NULL;
+            if (cn->n_args == 0) {
+                cons = es_dt
+                    ? "(`dividir` es sinonimo.) El segundo argumento es el delimitador."
+                    : "(`dividir_texto` es sinonimo.) El segundo argumento es el delimitador.";
+            } else if (cn->n_args == 1) {
+                cons = "(Falta el segundo argumento: el separador o delimitador, tras la coma.)";
+            } else {
+                cons = "(Solo dos argumentos: texto completo y separador; no anada un tercero.)";
+            }
+            codegen_error_sistema_incorporada_arity(cg, cn, 2,
+                "cadena completa y cadena separadora", ej, cons);
+            return 1;
+        }
         visit_expression(cg, ARG0, dest_reg);
-        visit_expression(cg, ARG1 ? ARG1 : ARG0, dest_reg + 1);
+        visit_expression(cg, ARG1, dest_reg + 1);
         emit(cg, OP_STR_DIVIDIR_TEXTO, dest_reg, dest_reg, dest_reg + 1, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
         return 1;
     }
@@ -929,14 +1004,34 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         return 1;
     }
     if (strcmp(name, "copiar_texto") == 0 || strcmp(name, "str_copiar") == 0) {
-        if (!ARG0) return 0;
+        if (cn->n_args != 1) {
+            int es_sc = (strcmp(name, "str_copiar") == 0);
+            const char *ej = es_sc ? "str_copiar(\"hola\")" : "copiar_texto(\"hola\")";
+            const char *cons = (cn->n_args == 0)
+                ? (es_sc
+                       ? "(`copiar_texto` hace lo mismo con un argumento.)"
+                       : "(`str_copiar` hace lo mismo con un argumento.)")
+                : "(Solo un argumento: el texto a copiar. No anada mas tras la coma.)";
+            codegen_error_sistema_incorporada_arity(cg, cn, 1,
+                "un solo texto de origen", ej, cons);
+            return 1;
+        }
         visit_expression(cg, ARG0, 1);
         emit(cg, OP_MEM_COPIAR_TEXTO, 2, 1, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
         emit(cg, OP_MOVER, dest_reg, 2, 0, IR_INST_FLAG_B_REGISTER);
         return 1;
     }
     if (strcmp(name, "str_minusculas") == 0 || strcmp(name, "minusculas") == 0) {
-        if (!ARG0) return 0;
+        if (cn->n_args != 1) {
+            int es_sm = (strcmp(name, "str_minusculas") == 0);
+            const char *ej = es_sm ? "str_minusculas(\"AbC\")" : "minusculas(\"HOLA\")";
+            const char *cons = (cn->n_args == 0)
+                ? (es_sm ? "(`minusculas` es sinonimo.)" : "(`str_minusculas` es sinonimo.)")
+                : "(Solo un argumento: el texto a pasar a minusculas. No anada mas tras la coma.)";
+            codegen_error_sistema_incorporada_arity(cg, cn, 1,
+                "un solo texto (salida en minusculas)", ej, cons);
+            return 1;
+        }
         visit_expression(cg, ARG0, dest_reg);
         emit(cg, OP_STR_MINUSCULAS, dest_reg, dest_reg, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
         return 1;
@@ -3257,10 +3352,18 @@ static int visit_expression(CodeGen *cg, ASTNode *node, int dest_reg) {
         } else {
             if (codegen_error_vec_constructor_arity(cg, cn))
                 return dest_reg;
-            snprintf(cg->last_error, CODEGEN_ERROR_MAX,
-                     "Llamada no resuelta: '%s' no es una funcion definida en este programa ni una llamada incorporada "
-                     "reconocible con la lista de argumentos usada. Revise el nombre y el numero de argumentos entre parentesis.",
-                     cn->name ? cn->name : "?");
+            if (cn->name && is_sistema_llamada(cn->name, strlen(cn->name))) {
+                snprintf(cg->last_error, CODEGEN_ERROR_MAX,
+                         "'%s' es una funcion incorporada del lenguaje, pero el numero o la forma de los argumentos "
+                         "no coincide con ninguna firma que el compilador admita en esta llamada (se pasaron %zu). "
+                         "Revise la documentacion o el orden de los parametros.",
+                         cn->name, cn->n_args);
+            } else {
+                snprintf(cg->last_error, CODEGEN_ERROR_MAX,
+                         "Llamada no resuelta: '%s' no es una funcion definida en este programa. "
+                         "Si buscaba una API del lenguaje, compruebe el nombre exacto y cuantos argumentos lleva entre parentesis.",
+                         cn->name ? cn->name : "?");
+            }
             cg->has_error = 1;
             cg->err_line = node->line;
             cg->err_col = node->col;
@@ -4277,10 +4380,18 @@ static void visit_statement(CodeGen *cg, ASTNode *node) {
         } else {
             if (codegen_error_vec_constructor_arity(cg, cn))
                 return;
-            snprintf(cg->last_error, CODEGEN_ERROR_MAX,
-                     "Llamada no resuelta: '%s' no es una funcion definida en este programa ni una llamada incorporada "
-                     "reconocible con la lista de argumentos usada. Revise el nombre y el numero de argumentos entre parentesis.",
-                     cn->name ? cn->name : "?");
+            if (cn->name && is_sistema_llamada(cn->name, strlen(cn->name))) {
+                snprintf(cg->last_error, CODEGEN_ERROR_MAX,
+                         "'%s' es una funcion incorporada del lenguaje, pero el numero o la forma de los argumentos "
+                         "no coincide con ninguna firma que el compilador admita en esta llamada (se pasaron %zu). "
+                         "Revise la documentacion o el orden de los parametros.",
+                         cn->name, cn->n_args);
+            } else {
+                snprintf(cg->last_error, CODEGEN_ERROR_MAX,
+                         "Llamada no resuelta: '%s' no es una funcion definida en este programa. "
+                         "Si buscaba una API del lenguaje, compruebe el nombre exacto y cuantos argumentos lleva entre parentesis.",
+                         cn->name ? cn->name : "?");
+            }
             cg->has_error = 1;
             cg->err_line = node->line;
             cg->err_col = node->col;
