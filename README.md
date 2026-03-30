@@ -4,6 +4,8 @@ Toolchain oficial del lenguaje **Jasboot** en **C**: compilador, representación
 
 Este repositorio contiene el **SDK completo en un solo árbol** (sin submódulos Git). Cualquier programador puede clonarlo, compilar y obtener `jbc` y `jasboot-ir-vm` para trabajar con archivos fuente `.jasb`.
 
+**Licencia:** el proyecto es **código abierto** bajo la [Licencia MIT](LICENSE) (permisiva: uso, modificación y distribución con mínimas condiciones).
+
 ---
 
 ## Cómo se enlaza todo hasta ejecutar un `.jasb`
@@ -180,6 +182,12 @@ La política está centralizada en **`.gitignore`** en la raíz de `sdk-dependie
 **Sí** deben versionarse, entre otros: fuentes `.c`/`.h`, `Makefile`/`build.bat`, scripts en **`scripts/`**, envoltorios **`bin/*.cmd`** y **`bin/*.bat`**, pruebas `.jasb`, y documentación `.md`.
 
 Si ya compilaste antes de clonar reglas nuevas, puedes limpiar restos locales con `scripts\clean-build.bat` y borrar a mano archivos sueltos (por ejemplo un `.exe` en la raíz de `jasboot-ir/`).
+
+---
+
+## Licencia
+
+Este SDK se distribuye bajo la **Licencia MIT**. El texto completo está en el archivo [`LICENSE`](LICENSE) en la raíz del repositorio. La extensión `vscode-jasboot/` reutiliza la misma licencia para mantener un criterio único en el árbol.
 
 ---
 
