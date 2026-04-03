@@ -147,10 +147,11 @@ static int try_consumir_color(Lexer *lex, char **buf, size_t *len, size_t *cap) 
     return 0;
 }
 
-/* 1.7 Strings con escape \n \t \" \\ \rojo \verd \amar \azul etc. */
-static int read_string(Lexer *lex, Token *out) {
+/* 1.7 Strings con escape \n \t \" \\ \rojo \verd \amar \azul etc.
+ * Tambien soporta acento grave para textos multilinea y HTML literal. */
+static int read_string_delimited(Lexer *lex, Token *out, char delim) {
     int start_col = lex->column;
-    advance(lex); /* consumir " */
+    advance(lex); /* consumir delimitador */
     size_t cap = BUF_INIT;
     char *buf = malloc(cap);
     if (!buf) { set_error_at(lex, -1, -1, "Sin memoria"); return -1; }
@@ -158,7 +159,7 @@ static int read_string(Lexer *lex, Token *out) {
 
     while (lex->pos < lex->length) {
         char ch = peek(lex);
-        if (ch == '"') break;
+        if (ch == delim) break;
 
         if (ch == '$' && lex->pos + 1 < lex->length && lex->source[lex->pos + 1] == '{') {
             /* Interpolación ${...} - copiar literal por ahora */
@@ -180,6 +181,7 @@ static int read_string(Lexer *lex, Token *out) {
             else if (next == 't') ch = '\t';
             else if (next == 'r') ch = '\r';
             else if (next == '"') ch = '"';
+            else if (next == '`') ch = '`';
             else if (next == '\\') ch = '\\';
             else if (next == 'e' || next == 'E') ch = '\033';
             else { if (len >= cap) { cap *= 2; buf = realloc(buf, cap); } buf[len++] = '\\'; ch = next; }
@@ -189,11 +191,11 @@ static int read_string(Lexer *lex, Token *out) {
     }
 
     if (lex->pos >= lex->length) {
-        set_error_at(lex, lex->line, start_col, "Error lexico: cadena de texto no cerrada con '\"' antes del fin de archivo");
+        set_error_at(lex, lex->line, start_col, "Error lexico: cadena de texto no cerrada con '%c' antes del fin de archivo", delim);
         free(buf);
         return -1;
     }
-    advance(lex); /* consumir " */
+    advance(lex); /* consumir delimitador */
 
     buf = realloc(buf, len + 1);
     buf[len] = '\0';
@@ -203,6 +205,14 @@ static int read_string(Lexer *lex, Token *out) {
     out->line = lex->line;
     out->column = start_col;
     return 0;
+}
+
+static int read_string(Lexer *lex, Token *out) {
+    return read_string_delimited(lex, out, '"');
+}
+
+static int read_backtick_string(Lexer *lex, Token *out) {
+    return read_string_delimited(lex, out, '`');
 }
 
 /* Conceptos (comillas simples) */
@@ -376,6 +386,7 @@ int lexer_next(Lexer *lex, Token *out) {
         }
 
         if (ch == '"') return read_string(lex, out);
+        if (ch == '`') return read_backtick_string(lex, out);
         if (ch == '\'') return read_concept(lex, out);
 
         if (isalpha((unsigned char)ch) || ch == '_')

@@ -112,6 +112,7 @@
 #define OP_BYTES_OBTENER     0x7B
 #define OP_BYTES_PONER       0x7C
 #define OP_BYTES_ANEXAR      0x7D
+#define OP_BYTES_PUNTERO     0x27
 #define OP_BYTES_SUBBYTES    0x7F
 #define OP_BYTES_DESDE_TEXTO 0x80
 #define OP_BYTES_A_TEXTO     0x81
@@ -166,6 +167,8 @@
 #define OP_IO_INPUT_REG        0xE5
 #define OP_IO_PERCIBIR_TECLADO 0x6C
 #define OP_IO_ENTRADA_FLOTANTE 0x8E
+#define OP_IO_PAUSA            0x26
+#define OP_PAUSA_MILISEGUNDOS  0x28
 #define OP_SYS_TIMESTAMP       0x57
 #define OP_FS_LEER_LINEA       0x58
 #define OP_FS_ESCRIBIR         0x53
@@ -229,5 +232,7 @@
 #define OP_MEM_COMPARAR_PATRONES    0xC8
 #define OP_MEM_BUSCAR_ASOCIADOS     0xC9
 #define OP_MEM_BUSCAR_ASOCIADOS_LISTA 0xCA
+#define OP_MEM_PROCESAR_TEXTO         0xDE
+#define OP_MEM_PENSAR                 0xDF
 
 #endif

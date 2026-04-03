@@ -230,7 +230,7 @@ typedef enum {
     OP_IO_ENTRADA_FLOTANTE = 0x8E,   // A <- float32: teclas 0-9, un '.', '-' solo al inicio, Retroceso, Enter termina
     OP_MEM_LISTA_LIBERAR = 0x8D,     // Liberar lista por id en reg A (JMN: slot al pool; sin colisión 0xB9=rastro)
     OP_JSON_PARSE = 0x88,            // A <- parse JSON desde texto en B
-    OP_JSON_STRINGIFY = 0x89,        // A <- texto JSON desde handle en B
+    OP_JSON_STRINGIFY = 0x89,        // A <- texto JSON desde handle en B; C inmediato = sangría 0-16 (compacto si 0) o registro C si sin C_IMMEDIATE
     OP_JSON_OBJETO_OBTENER = 0x8A,   // A <- json_get(objeto B, clave texto C)
     OP_JSON_LISTA_OBTENER = 0x8B,    // A <- json_index(lista B, índice C)
     OP_JSON_LISTA_TAMANO = 0x8C,     // A <- tamaño de array JSON en B
@@ -246,6 +246,8 @@ typedef enum {
     OP_BYTES_OBTENER = 0x7B,         // A <- bytes[B][C]
     OP_BYTES_PONER = 0x7C,           // bytes[A][B] = C
     OP_BYTES_ANEXAR = 0x7D,          // A <- append(bytes B, bytes/texto C)
+    OP_BYTES_PUNTERO = 0x27,         // A <- puntero crudo de bytes B
+    OP_PAUSA_MILISEGUNDOS = 0x28,    // Duerme el hilo del VM: B = ms (reg); A <- 1 (bloqueante; no multitarea)
     OP_BYTES_SUBBYTES = 0x7F,        // A <- subbytes(B, C, reg(B+1)=len)
     OP_BYTES_DESDE_TEXTO = 0x80,     // A <- bytes utf8(B)
     OP_BYTES_A_TEXTO = 0x81,         // A <- texto desde bytes B
@@ -292,6 +294,7 @@ typedef enum {
     OP_TLS_ENVIAR = 0x1E,            // A <- enviar tls B, payload C
     OP_TLS_RECIBIR = 0x1F,           // A <- bytes tls recibidos de B hasta max C
     OP_TLS_CERRAR = 0x25,            // Cerrar handle tls en A
+    OP_IO_PAUSA = 0x26,              // Pausa interactiva: muestra aviso y espera una tecla
     OP_STR_REGISTRAR_LITERAL = 0xE4, // Registrar string literal desde data
     OP_MEM_APRENDER_PESO_REG = 0xE7, // Aprender peso dinámico
     OP_MEM_APRENDER_PESO = 0xE7,     // Alias compatible

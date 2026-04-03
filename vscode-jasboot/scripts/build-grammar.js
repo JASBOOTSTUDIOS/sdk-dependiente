@@ -39,10 +39,12 @@ const grammar = {
       patterns: [
         { include: '#comments' },
         { include: '#strings_double' },
+        { include: '#strings_backtick' },
         { include: '#strings_concept' },
         { include: '#numbers' },
         { include: '#operators' },
         { include: '#keywords_control' },
+        { include: '#keywords_declarative' },
         { include: '#keywords_storage' },
         { include: '#keywords_word_op' },
         { include: '#keywords_import' },
@@ -63,6 +65,12 @@ const grammar = {
     },
 
     strings_double: beginEnd('"', '"', 'string.quoted.double.jasboot', [
+      { include: '#string_escapes' },
+      { include: '#string_color_escape' },
+      { include: '#interpolation' },
+    ]),
+
+    strings_backtick: beginEnd('`', '`', 'string.quoted.backtick.jasboot', [
       { include: '#string_escapes' },
       { include: '#string_color_escape' },
       { include: '#interpolation' },
@@ -107,10 +115,16 @@ const grammar = {
           { include: '#string_escapes' },
           { include: '#string_color_escape' },
         ]),
+        beginEnd('`', '`', 'string.quoted.backtick.jasboot', [
+          { include: '#string_escapes' },
+          { include: '#string_color_escape' },
+          { include: '#interpolation' },
+        ]),
         { include: '#comments' },
         { include: '#numbers' },
         { include: '#operators' },
         { include: '#keywords_control' },
+        { include: '#keywords_declarative' },
         { include: '#keywords_storage' },
         { include: '#keywords_word_op' },
         { include: '#keywords_import' },
@@ -150,6 +164,7 @@ const grammar = {
     },
 
     keywords_control: pat(`\\b(${groups.control})\\b`, 'keyword.control.jasboot'),
+    keywords_declarative: pat(`\\b(${groups.declarative || 'app|vista|componente|tema|rutas|columna|fila|tarjeta|texto|titulo|subtitulo|boton_ruta|boton_alerta|boton_secundario|jasb'})\\b`, 'keyword.declarative.jasboot'),
     keywords_storage: pat(`\\b(${groups.storage})\\b`, 'storage.type.jasboot'),
     keywords_word_op: pat(`\\b(${groups.wordOp})\\b`, 'keyword.operator.word.jasboot'),
     keywords_import: pat(`\\b(${groups.imports})\\b`, 'keyword.control.import.jasboot'),

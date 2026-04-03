@@ -47,6 +47,7 @@ typedef enum {
     NODE_END_DO_WHILE,
     NODE_LIST_LITERAL,
     NODE_MAP_LITERAL,
+    NODE_JSON_LITERAL, /* Misma forma que MapLiteralNode: claves texto, valores solo literales/anidados */
     NODE_INDEX_ACCESS,
     NODE_INDEX_ASSIGNMENT,
     NODE_TERNARY,
@@ -83,11 +84,13 @@ typedef struct {
 typedef struct {
     ASTNode base;
     char *name;
-    char *return_type; /* texto, entero, flotante, etc. */
+    char *return_type; /* texto, entero, flotante, tarea, etc. */
+    char *return_task_elem; /* si retorna tarea<T>: T (texto, entero, ...); NULL si no aplica */
     ASTNode **params;  /* VarDeclNode */
     size_t n_params;
     ASTNode *body;     /* BlockNode */
     int is_exported;   /* 1 si lleva `enviar` (visible desde otros archivos con usar filtrado) */
+    int is_async;      /* 1 si se declaro con `asincrono` (planificacion real: trabajo futuro en VM) */
 } FunctionNode;
 
 /* 2.2 Declaraciones */
@@ -104,6 +107,7 @@ typedef struct {
 typedef struct {
     ASTNode base;
     char *name;
+    char *extends_name; /* NULL si no hay `extiende Base`; solo clases/registros con herencia */
     char **field_types;
     char **field_names;
     size_t n_fields;
@@ -262,7 +266,7 @@ typedef struct {
 /* 2.8 Módulos / importacion (usar) */
 #define USAR_IMPORT_LEGACY 0 /* no emitido por el parser; reservado internamente */
 #define USAR_IMPORT_TODO   1 /* usar todo/todas de "ruta.jasb" — solo simbolos con `enviar` */
-#define USAR_IMPORT_NAMES  2 /* usar { a, b } de "ruta.jasb" — solo nombres con `enviar` */
+#define USAR_IMPORT_NAMES  2 /* usar { a, b } de "ruta.jasb" — valida nombres exportados; fusion de modulo = todo `enviar` */
 
 typedef struct {
     ASTNode base;

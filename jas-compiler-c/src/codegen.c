@@ -68,6 +68,7 @@ struct CodeGen {
     int literal_counter;  /* para list/map literals anónimos */
     char **func_names;
     char **func_return_types;
+    char **func_return_task_elems; /* paralelo a func_return_types: T de tarea<T> o NULL */
     int *func_labels;
     size_t n_funcs;
     /* Funciones externas (módulos usar) solo para tipo de retorno */
@@ -1347,6 +1348,162 @@ static size_t add_string(CodeGen *cg, const char *s) {
     return off;
 }
 
+typedef struct {
+    char *data;
+    size_t len;
+    size_t cap;
+} CodegenJBuf;
+
+static int cjb_grow(CodegenJBuf *b, size_t add) {
+    if (b->len + add + 1 > b->cap) {
+        size_t nc = b->cap ? b->cap * 2 : 128;
+        while (nc < b->len + add + 1) nc *= 2;
+        char *n = (char *)realloc(b->data, nc);
+        if (!n) return 0;
+        b->data = n;
+        b->cap = nc;
+    }
+    return 1;
+}
+
+static int cjb_pushc(CodegenJBuf *b, char c) {
+    if (!cjb_grow(b, 1)) return 0;
+    b->data[b->len++] = c;
+    b->data[b->len] = '\0';
+    return 1;
+}
+
+static int cjb_pushs(CodegenJBuf *b, const char *s) {
+    if (!s) return 1;
+    size_t L = strlen(s);
+    if (!cjb_grow(b, L)) return 0;
+    memcpy(b->data + b->len, s, L);
+    b->len += L;
+    b->data[b->len] = '\0';
+    return 1;
+}
+
+static int cjb_push_json_str_content(CodeGen *cg, CodegenJBuf *b, const char *s, int line, int col) {
+    for (const unsigned char *p = (const unsigned char *)(s ? s : ""); *p; p++) {
+        switch (*p) {
+            case '"': if (!cjb_pushs(b, "\\\"")) return 0; break;
+            case '\\': if (!cjb_pushs(b, "\\\\")) return 0; break;
+            case '\n': if (!cjb_pushs(b, "\\n")) return 0; break;
+            case '\r': if (!cjb_pushs(b, "\\r")) return 0; break;
+            case '\t': if (!cjb_pushs(b, "\\t")) return 0; break;
+            default:
+                if (*p < 0x20) {
+                    snprintf(cg->last_error, CODEGEN_ERROR_MAX,
+                             "Literal json: caracter de control no escapable (0x%02X) en texto.", (unsigned)*p);
+                    cg->has_error = 1;
+                    cg->err_line = line > 0 ? line : 1;
+                    cg->err_col = col > 0 ? col : 1;
+                    return 0;
+                }
+                if (!cjb_pushc(b, (char)*p)) return 0;
+        }
+    }
+    return 1;
+}
+
+static int json_literal_append_value(CodeGen *cg, CodegenJBuf *b, ASTNode *node);
+
+static int json_literal_append_object(CodeGen *cg, CodegenJBuf *b, MapLiteralNode *mn) {
+    if (!cjb_pushc(b, '{')) return 0;
+    for (size_t i = 0; i < mn->n; i++) {
+        if (i && !cjb_pushc(b, ',')) return 0;
+        ASTNode *k = mn->keys[i];
+        if (!is_node(k, NODE_LITERAL) || !((LiteralNode *)k)->type_name ||
+            strcmp(((LiteralNode *)k)->type_name, "texto") != 0) {
+            snprintf(cg->last_error, CODEGEN_ERROR_MAX, "Literal json: clave interna invalida (se esperaba texto).");
+            cg->has_error = 1;
+            cg->err_line = mn->base.line > 0 ? mn->base.line : 1;
+            cg->err_col = mn->base.col > 0 ? mn->base.col : 1;
+            return 0;
+        }
+        if (!cjb_pushc(b, '"')) return 0;
+        if (!cjb_push_json_str_content(cg, b, ((LiteralNode *)k)->value.str, k->line, k->col)) return 0;
+        if (!cjb_pushc(b, '"')) return 0;
+        if (!cjb_pushc(b, ':')) return 0;
+        if (!json_literal_append_value(cg, b, mn->values[i])) return 0;
+    }
+    return cjb_pushc(b, '}');
+}
+
+static int json_literal_append_value(CodeGen *cg, CodegenJBuf *b, ASTNode *node) {
+    if (!node) return 0;
+    if (is_node(node, NODE_JSON_LITERAL))
+        return json_literal_append_object(cg, b, (MapLiteralNode *)node);
+    if (is_node(node, NODE_LIST_LITERAL)) {
+        ListLiteralNode *ln = (ListLiteralNode *)node;
+        if (!cjb_pushc(b, '[')) return 0;
+        for (size_t i = 0; i < ln->n; i++) {
+            if (i && !cjb_pushc(b, ',')) return 0;
+            if (!json_literal_append_value(cg, b, ln->elements[i])) return 0;
+        }
+        return cjb_pushc(b, ']');
+    }
+    if (is_node(node, NODE_LITERAL)) {
+        LiteralNode *L = (LiteralNode *)node;
+        if (L->type_name && strcmp(L->type_name, "texto") == 0) {
+            if (!cjb_pushc(b, '"')) return 0;
+            if (!cjb_push_json_str_content(cg, b, L->value.str, node->line, node->col)) return 0;
+            return cjb_pushc(b, '"');
+        }
+        if (L->is_float) {
+            char tmp[64];
+            snprintf(tmp, sizeof tmp, "%.17g", L->value.f);
+            return cjb_pushs(b, tmp);
+        }
+        if (L->type_name && strcmp(L->type_name, "entero") == 0) {
+            char tmp[32];
+            snprintf(tmp, sizeof tmp, "%lld", (long long)L->value.i);
+            return cjb_pushs(b, tmp);
+        }
+        if (L->type_name && strcmp(L->type_name, "concepto") == 0 && L->value.str) {
+            if (!cjb_pushc(b, '"')) return 0;
+            if (!cjb_push_json_str_content(cg, b, L->value.str, node->line, node->col)) return 0;
+            return cjb_pushc(b, '"');
+        }
+        if (L->type_name && strcmp(L->type_name, "caracter") == 0) {
+            char bb[8];
+            bb[0] = (char)(L->value.i & 0xFF);
+            bb[1] = '\0';
+            if (!cjb_pushc(b, '"')) return 0;
+            if (!cjb_push_json_str_content(cg, b, bb, node->line, node->col)) return 0;
+            return cjb_pushc(b, '"');
+        }
+        snprintf(cg->last_error, CODEGEN_ERROR_MAX, "Literal json: tipo de literal no soportado aqui.");
+        cg->has_error = 1;
+        cg->err_line = node->line > 0 ? node->line : 1;
+        cg->err_col = node->col > 0 ? node->col : 1;
+        return 0;
+    }
+    snprintf(cg->last_error, CODEGEN_ERROR_MAX,
+             "Literal `json { ... }` solo admite valores constantes (literales, listas `[ ]`, objetos json anidados).");
+    cg->has_error = 1;
+    cg->err_line = node->line > 0 ? node->line : 1;
+    cg->err_col = node->col > 0 ? node->col : 1;
+    return 0;
+}
+
+static int emit_json_literal_map(CodeGen *cg, MapLiteralNode *mn, int dest_reg) {
+    CodegenJBuf jb = {0};
+    if (!json_literal_append_object(cg, &jb, mn)) {
+        free(jb.data);
+        return 0;
+    }
+    const char *payload = jb.data ? jb.data : "{}";
+    if (cg->has_error) {
+        free(jb.data);
+        return 0;
+    }
+    emit_load_text_literal_reg(cg, payload, 1);
+    free(jb.data);
+    emit(cg, OP_JSON_PARSE, (uint8_t)dest_reg, 1, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+    return 1;
+}
+
 static int new_label(CodeGen *cg) {
     return ++cg->label_counter;
 }
@@ -1473,8 +1630,34 @@ static const char *get_expression_type(CodeGen *cg, ASTNode *node) {
         if (tt) return tt;
         return get_expression_type(cg, ((TernaryNode*)node)->false_expr);
     }
+    if (is_node(node, NODE_UNARY_OP)) {
+        UnaryOpNode *un = (UnaryOpNode *)node;
+        if (un->operator && strcmp(un->operator, "esperar") == 0) {
+            ASTNode *in = un->expression;
+            if (is_node(in, NODE_IDENTIFIER)) {
+                const char *te = sym_lookup_tarea_elem(&cg->sym, ((IdentifierNode *)in)->name);
+                if (te) return te;
+            }
+            if (is_node(in, NODE_CALL)) {
+                CallNode *cn = (CallNode *)in;
+                if (cn->name && !cn->callee && cg->func_names && cg->func_return_types && cg->func_return_task_elems) {
+                    for (size_t i = 0; i < cg->n_funcs; i++) {
+                        if (cg->func_names[i] && strcmp(cg->func_names[i], cn->name) == 0) {
+                            const char *frt = cg->func_return_types[i];
+                            if (frt && strcmp(frt, "tarea") == 0 && cg->func_return_task_elems[i] &&
+                                cg->func_return_task_elems[i][0])
+                                return cg->func_return_task_elems[i];
+                            break;
+                        }
+                    }
+                }
+            }
+            return get_expression_type(cg, in);
+        }
+    }
     if (is_node(node, NODE_LIST_LITERAL)) return "lista";
     if (is_node(node, NODE_MAP_LITERAL)) return "mapa";
+    if (is_node(node, NODE_JSON_LITERAL)) return "objeto";
     if (is_node(node, NODE_LAMBDA_DECL)) return "funcion";
     if (is_node(node, NODE_CALL)) {
         CallNode *cn = (CallNode*)node;
@@ -1498,11 +1681,15 @@ static const char *get_expression_type(CodeGen *cg, ASTNode *node) {
         if (cn->name && (strcmp(cn->name, "vec4") == 0 && cn->n_args == 4)) return "vec4";
         if (cn->name && (strcmp(cn->name, "str_a_entero") == 0 || strcmp(cn->name, "convertir_entero") == 0)) return "entero";
         if (cn->name && (strcmp(cn->name, "str_a_flotante") == 0 || strcmp(cn->name, "convertir_flotante") == 0)) return "flotante";
+        if (cn->name && strcmp(cn->name, "json_parse") == 0) return "objeto";
+        if (cn->name && (strcmp(cn->name, "json_objeto_obtener") == 0 || strcmp(cn->name, "json_lista_obtener") == 0))
+            return "objeto";
         if (cn->name && strcmp(cn->name, "json_stringify") == 0) return "texto";
         if (cn->name && strcmp(cn->name, "json_a_texto") == 0) return "texto";
         if (cn->name && strcmp(cn->name, "json_a_flotante") == 0) return "flotante";
         if (cn->name && strcmp(cn->name, "json_lista_tamano") == 0) return "entero";
         if (cn->name && strcmp(cn->name, "bytes_a_texto") == 0) return "texto";
+        if (cn->name && strcmp(cn->name, "bytes_puntero") == 0) return "entero";
         if (cn->name && strcmp(cn->name, "dns_resolver") == 0) return "texto";
         if (cn->name && strcmp(cn->name, "extraer_antes_de") == 0) return "texto";
         if (cn->name && strcmp(cn->name, "extraer_despues_de") == 0) return "texto";
@@ -2131,6 +2318,48 @@ static int codegen_error_if_bad_arity_buscar_contiene_termina(CodeGen *cg, const
     return 1;
 }
 
+/* pensar / procesar_texto: exactamente un argumento. Mensaje explicito (evita el fallback generico
+ * de "ninguna firma" si un handler antiguo hacia return 0 por !ARG0). Tambien en fallback NODE_CALL. */
+static int codegen_error_if_bad_arity_pensar_procesar_texto(CodeGen *cg, const CallNode *cn) {
+    const char *n = cn && cn->name ? cn->name : NULL;
+    if (!n) return 0;
+    int es_pensar = (strcmp(n, "pensar") == 0);
+    int es_proc = (strcmp(n, "procesar_texto") == 0);
+    if (!es_pensar && !es_proc) return 0;
+    if (cn->n_args == 1) return 0;
+
+    cg->has_error = 1;
+    cg->err_line = cn->base.line > 0 ? cn->base.line : 1;
+    cg->err_col = cn->base.col > 0 ? cn->base.col : 1;
+
+    if (es_pensar) {
+        if (cn->n_args == 0) {
+            snprintf(cg->last_error, CODEGEN_ERROR_MAX,
+                     "'pensar' requiere exactamente un argumento: la entrada de razonamiento (texto o concepto). "
+                     "Se llamo pensar() sin argumentos. El id de salida se guarda en la variable sistema "
+                     "`resultado`. Ejemplo: pensar(\"semilla\").");
+        } else {
+            snprintf(cg->last_error, CODEGEN_ERROR_MAX,
+                     "'pensar' admite solo un argumento; aqui se pasaron %zu. "
+                     "Ejemplo: pensar(\"solo_un_texto\"). Quite los argumentos sobrantes tras la coma.",
+                     cn->n_args);
+        }
+    } else {
+        if (cn->n_args == 0) {
+            snprintf(cg->last_error, CODEGEN_ERROR_MAX,
+                     "'procesar_texto' requiere exactamente un argumento: la cadena a procesar en la memoria "
+                     "neuronal (con crear_memoria abierta). Se llamo procesar_texto() sin argumentos. "
+                     "Ejemplo: procesar_texto(\"entrada\").");
+        } else {
+            snprintf(cg->last_error, CODEGEN_ERROR_MAX,
+                     "'procesar_texto' admite solo un argumento; aqui se pasaron %zu. "
+                     "Ejemplo: procesar_texto(\"una_sola_cadena\").",
+                     cn->n_args);
+        }
+    }
+    return 1;
+}
+
 /* Misma convención que mem_lista_agregar: temporales y registros 1, 2. */
 static void codegen_emit_mem_lista_agregar_from_regs(CodeGen *cg, uint8_t list_reg, uint8_t val_reg) {
     SymResult ag_tmp = sym_reserve_temp(&cg->sym, 8);
@@ -2154,6 +2383,9 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
 #define ARG1 (cn->n_args > 1 ? cn->args[1] : NULL)
 #define ARG2 (cn->n_args > 2 ? cn->args[2] : NULL)
 #define ARG3 (cn->n_args > 3 ? cn->args[3] : NULL)
+
+    /* Antes de cualquier rama que haga `if (!ARG0) return 0`, para no caer en el mensaje generico del caller. */
+    if (codegen_error_if_bad_arity_pensar_procesar_texto(cg, cn)) return 1;
 
     /* 6.1 Texto */
     if (strcmp(name, "concatenar") == 0) {
@@ -2814,6 +3046,15 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
     }
     if (strcmp(name, "consolidar_memoria") == 0 || strcmp(name, "dormir") == 0 ||
         strcmp(name, "consolidar") == 0) {
+        if (cn->n_args != 0) {
+            snprintf(cg->last_error, CODEGEN_ERROR_MAX,
+                     "`%s` no admite argumentos (se recibieron %zu).",
+                     name, cn->n_args);
+            cg->has_error = 1;
+            cg->err_line = cn->base.line > 0 ? cn->base.line : 1;
+            cg->err_col = cn->base.col > 0 ? cn->base.col : 1;
+            return 1;
+        }
         emit(cg, OP_MEM_CONSOLIDAR_SUENO, (uint8_t)dest_reg, 5, 10,
              IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
         return 1;
@@ -2975,8 +3216,10 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         return 1;
     }
     if (strcmp(name, "pensar") == 0) {
-        if (!ARG0) return 0;
         visit_expression(cg, ARG0, 1);
+        /* Profundidad BFS por defecto 2 (byte C inmediato); A=B=reg 1: id entrante y salida. */
+        emit(cg, OP_MEM_PENSAR, 1, 1, 2,
+             IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE);
         SymResult r = sym_get_or_create(&cg->sym, "resultado", NULL);
         uint8_t fl = IR_INST_FLAG_A_IMMEDIATE | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE;
         if (r.is_relative) fl |= IR_INST_FLAG_RELATIVE;
@@ -2999,9 +3242,9 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         return 1;
     }
     if (strcmp(name, "procesar_texto") == 0) {
-        if (!ARG0) return 0;
         visit_expression(cg, ARG0, dest_reg);
-        emit(cg, 0xDE, dest_reg, dest_reg, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+        emit(cg, OP_MEM_PROCESAR_TEXTO, (uint8_t)dest_reg, (uint8_t)dest_reg, 0,
+             IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
         return 1;
     }
     if (strcmp(name, "obtener_relacionados") == 0) {
@@ -3124,8 +3367,41 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
 #endif
         return 1;
     }
+    if (strcmp(name, "pausa") == 0) {
+        if (cn->n_args > 1) {
+            snprintf(cg->last_error, CODEGEN_ERROR_MAX,
+                     "`pausa` acepta cero argumentos o un mensaje opcional: `pausa` o `pausa(\"Mensaje\")`.");
+            cg->has_error = 1;
+            cg->err_line = cn->base.line;
+            cg->err_col = cn->base.col;
+            return 1;
+        }
+        if (cn->n_args == 1) {
+            int msg_reg = visit_expression(cg, cn->args[0], 1);
+            if (cg->has_error) return 1;
+            emit(cg, OP_IO_PAUSA, (uint8_t)msg_reg, 0, 0, IR_INST_FLAG_A_REGISTER);
+        } else {
+            emit(cg, OP_IO_PAUSA, 0, 0, 0, 0);
+        }
+        return 1;
+    }
     if (strcmp(name, "ahora") == 0 || strcmp(name, "obtener_ahora") == 0 || strcmp(name, "obtener_timestamp") == 0) {
         emit(cg, OP_SYS_TIMESTAMP, dest_reg, 0, 0, IR_INST_FLAG_A_REGISTER);
+        return 1;
+    }
+    if (strcmp(name, "pausa_milisegundos") == 0 || strcmp(name, "esperar_milisegundos") == 0) {
+        if (cn->n_args != 1) {
+            snprintf(cg->last_error, CODEGEN_ERROR_MAX,
+                     "`%s` requiere un argumento entero (milisegundos). Ejemplo: pausa_milisegundos(500).",
+                     name);
+            cg->has_error = 1;
+            cg->err_line = cn->base.line > 0 ? cn->base.line : 1;
+            cg->err_col = cn->base.col > 0 ? cn->base.col : 1;
+            return 1;
+        }
+        visit_expression(cg, ARG0, dest_reg + 1);
+        emit(cg, OP_PAUSA_MILISEGUNDOS, (uint8_t)dest_reg, (uint8_t)(dest_reg + 1), 0,
+             IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
         return 1;
     }
     if (strcmp(name, "diferencia_en_segundos") == 0) {
@@ -3214,8 +3490,24 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
     }
     if (strcmp(name, "json_stringify") == 0) {
         if (!ARG0) return 0;
+        if (cn->n_args > 2) {
+            snprintf(cg->last_error, CODEGEN_ERROR_MAX,
+                     "`json_stringify` admite el valor JSON y opcionalmente la sangria (0-16 espacios por nivel); se recibieron %zu argumentos.",
+                     cn->n_args);
+            cg->has_error = 1;
+            cg->err_line = cn->base.line > 0 ? cn->base.line : 1;
+            cg->err_col = cn->base.col > 0 ? cn->base.col : 1;
+            return 1;
+        }
         visit_expression(cg, ARG0, 1);
-        emit(cg, OP_JSON_STRINGIFY, dest_reg, 1, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+        if (cn->n_args >= 2 && ARG1) {
+            visit_expression(cg, ARG1, 2);
+            emit(cg, OP_JSON_STRINGIFY, dest_reg, 1, 2,
+                 IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+        } else {
+            emit(cg, OP_JSON_STRINGIFY, dest_reg, 1, 0,
+                 IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE);
+        }
         return 1;
     }
     if (strcmp(name, "json_objeto_obtener") == 0) {
@@ -3320,6 +3612,12 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         if (!ARG0) return 0;
         visit_expression(cg, ARG0, 1);
         emit(cg, OP_BYTES_A_TEXTO, dest_reg, 1, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+        return 1;
+    }
+    if (strcmp(name, "bytes_puntero") == 0) {
+        if (!ARG0) return 0;
+        visit_expression(cg, ARG0, 1);
+        emit(cg, OP_BYTES_PUNTERO, dest_reg, 1, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
         return 1;
     }
     if (strcmp(name, "dns_resolver") == 0) {
@@ -3983,6 +4281,7 @@ void codegen_free(CodeGen *cg) {
     free(cg->try_stack);
     free(cg->func_names);
     free(cg->func_return_types);
+    free(cg->func_return_task_elems);
     free(cg->func_labels);
     for (size_t i = 0; i < cg->string_pool_count; i++) {
         free(cg->string_pool_keys[i]);
@@ -4574,6 +4873,10 @@ static int visit_expression(CodeGen *cg, ASTNode *node, int dest_reg) {
     if (is_node(node, NODE_UNARY_OP)) {
         UnaryOpNode *un = (UnaryOpNode*)node;
         int r = visit_expression(cg, un->expression, dest_reg);
+        if (strcmp(un->operator, "esperar") == 0) {
+            /* MVP: sin planificador en VM, `esperar x` equivale a evaluar x (tarea real = trabajo futuro). */
+            return r;
+        }
         if (strcmp(un->operator, "no") == 0) {
             emit(cg, OP_CMP_EQ, dest_reg, r, 0, IR_INST_FLAG_C_IMMEDIATE);
         } else if (strcmp(un->operator, "-") == 0) {
@@ -4911,6 +5214,8 @@ static int visit_expression(CodeGen *cg, ASTNode *node, int dest_reg) {
                 return dest_reg;
             if (cn->name && codegen_error_if_bad_arity_buscar_contiene_termina(cg, cn))
                 return dest_reg;
+            if (cn->name && codegen_error_if_bad_arity_pensar_procesar_texto(cg, cn))
+                return dest_reg;
             if (cn->name && is_sistema_llamada(cn->name, strlen(cn->name))) {
                 snprintf(cg->last_error, CODEGEN_ERROR_MAX,
                          "'%s' es una funcion incorporada del lenguaje, pero el numero o la forma de los argumentos "
@@ -4975,6 +5280,15 @@ static int visit_expression(CodeGen *cg, ASTNode *node, int dest_reg) {
         emit(cg, OP_MEM_TERMINA_CON_REG, dest_reg, dest_reg, r2, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
         return dest_reg;
     }
+    if (is_node(node, NODE_JSON_LITERAL)) {
+        if (!emit_json_literal_map(cg, (MapLiteralNode*)node, dest_reg)) {
+            if (!cg->has_error) {
+                snprintf(cg->last_error, CODEGEN_ERROR_MAX, "No se pudo emitir literal json.");
+                cg->has_error = 1;
+            }
+        }
+        return dest_reg;
+    }
     if (is_node(node, NODE_MAP_LITERAL)) {
         MapLiteralNode *mln = (MapLiteralNode*)node;
         emit(cg, OP_MEM_MAPA_CREAR, dest_reg, 0, 0, IR_INST_FLAG_A_REGISTER);
@@ -5000,6 +5314,47 @@ static int visit_expression(CodeGen *cg, ASTNode *node, int dest_reg) {
     return dest_reg;
 }
 
+static uint8_t cg_vec_fl_read(int is_rel) {
+    uint8_t fl = IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE;
+    if (is_rel) fl |= IR_INST_FLAG_RELATIVE;
+    return fl;
+}
+
+static uint8_t cg_vec_fl_write(int is_rel) {
+    uint8_t fl = IR_INST_FLAG_A_IMMEDIATE | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE;
+    if (is_rel) fl |= IR_INST_FLAG_RELATIVE;
+    return fl;
+}
+
+/* Base de almacenamiento para vec2/3/4 (variable o campo); no cubre direccion solo en registro. */
+static int codegen_vec_lvalue_base(CodeGen *cg, ASTNode *node, uint32_t *out_base, int *out_rel) {
+    *out_base = 0;
+    *out_rel = 0;
+    if (!node) return 0;
+    if (is_node(node, NODE_IDENTIFIER)) {
+        const char *n = ((IdentifierNode *)node)->name;
+        const char *t = sym_lookup_type(&cg->sym, n);
+        if (!t || (strcmp(t, "vec2") != 0 && strcmp(t, "vec3") != 0 && strcmp(t, "vec4") != 0))
+            return 0;
+        SymResult sr = sym_lookup(&cg->sym, n);
+        if (!sr.found) return 0;
+        *out_base = sr.addr;
+        *out_rel = sr.is_relative ? 1 : 0;
+        return 1;
+    }
+    if (is_node(node, NODE_MEMBER_ACCESS)) {
+        const char *ft = get_member_chain_type(cg, node);
+        if (!ft || (strcmp(ft, "vec2") != 0 && strcmp(ft, "vec3") != 0 && strcmp(ft, "vec4") != 0))
+            return 0;
+        MemberAddrResult mar = get_member_address(cg, node, 2);
+        if (cg->has_error || mar.in_reg) return 0;
+        *out_base = mar.addr;
+        *out_rel = mar.is_relative ? 1 : 0;
+        return 1;
+    }
+    return 0;
+}
+
 /* Conversion implicita al guardar: entero <- flotante (F2I), flotante <- entero (I2F). */
 static void emit_conv_for_store(CodeGen *cg, const char *dest_type, const char *expr_type, int reg) {
     if (!dest_type || !expr_type) return;
@@ -5014,6 +5369,7 @@ static int reject_non_numeric_to_scalar(CodeGen *cg, const char *dest_type, cons
     if (!dest_type || !expr_type) return 0;
     if (strcmp(dest_type, "entero") != 0 && strcmp(dest_type, "flotante") != 0) return 0;
     if (strcmp(expr_type, "entero") == 0 || strcmp(expr_type, "flotante") == 0) return 0;
+    if (strcmp(dest_type, "entero") == 0 && strcmp(expr_type, "objeto") == 0) return 0;
     snprintf(cg->last_error, CODEGEN_ERROR_MAX,
              "No hay conversion implicita de tipo '%s' a '%s'. Use convertir_entero/convertir_flotante (o str_a_entero/str_a_flotante) o ajuste el tipo.",
              expr_type, dest_type);
@@ -5157,7 +5513,7 @@ static void visit_statement(CodeGen *cg, ASTNode *node) {
                                 emit(cg, OP_LEER, 2, (srR.addr + off) & 0xFF, ((srR.addr + off) >> 8) & 0xFF, flR);
                                 if (op_add) emit(cg, OP_SUMAR_FLT, 1, 1, 2, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
                                 else if (op_sub) emit(cg, OP_RESTAR_FLT, 1, 1, 2, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
-                                else emit(cg, OP_MULTIPLICAR_FLT, 1, 1, 2, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+                                else if (op_mul) emit(cg, OP_MULTIPLICAR_FLT, 1, 1, 2, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
                             } else if (scalar_l) {
                                 (void)visit_expression(cg, bn->left, 1);
                                 if (strcmp(lt, "entero") == 0) emit(cg, OP_CONV_I2F, 1, 1, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
@@ -5202,6 +5558,108 @@ static void visit_statement(CodeGen *cg, ASTNode *node) {
             }
             MemberAddrResult mar = get_member_address(cg, an->target, 2);
             if (cg->has_error) return;
+            int ncomp_vec = 0;
+            if (ft && strcmp(ft, "vec2") == 0) ncomp_vec = 2;
+            else if (ft && strcmp(ft, "vec3") == 0) ncomp_vec = 3;
+            else if (ft && strcmp(ft, "vec4") == 0) ncomp_vec = 4;
+            if (ncomp_vec > 0) {
+                if (mar.in_reg) {
+                    snprintf(cg->last_error, CODEGEN_ERROR_MAX,
+                             "Asignacion a miembro tipo '%s' con direccion en registro no esta soportada.", ft);
+                    cg->has_error = 1;
+                    cg->err_line = man_as->base.line > 0 ? man_as->base.line : 1;
+                    cg->err_col = man_as->base.col > 0 ? man_as->base.col : 1;
+                    return;
+                }
+                uint8_t flW = cg_vec_fl_write(mar.is_relative);
+                if (is_node(an->expression, NODE_IDENTIFIER)) {
+                    const char *rhs = ((IdentifierNode *)an->expression)->name;
+                    SymResult srS = sym_lookup(&cg->sym, rhs);
+                    const char *tS = sym_lookup_type(&cg->sym, rhs);
+                    if (srS.found && tS && strcmp(tS, ft) == 0) {
+                        uint8_t flR = cg_vec_fl_read(srS.is_relative ? 1 : 0);
+                        for (int i = 0; i < ncomp_vec; i++) {
+                            uint32_t off = (uint32_t)(i * 8);
+                            emit(cg, OP_LEER, 1, (srS.addr + off) & 0xFF, ((srS.addr + off) >> 8) & 0xFF, flR);
+                            emit(cg, OP_ESCRIBIR, (mar.addr + off) & 0xFF, 1, ((mar.addr + off) >> 8) & 0xFF, flW);
+                        }
+                        return;
+                    }
+                }
+                if (is_node(an->expression, NODE_CALL)) {
+                    CallNode *cn = (CallNode *)an->expression;
+                    if (cn->name && strcmp(cn->name, ft) == 0 && (int)cn->n_args == ncomp_vec) {
+                        for (int i = 0; i < ncomp_vec; i++) {
+                            int reg = visit_expression(cg, cn->args[i], 1);
+                            const char *aet = get_expression_type(cg, cn->args[i]);
+                            if (aet && strcmp(aet, "entero") == 0)
+                                emit(cg, OP_CONV_I2F, reg, reg, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+                            uint32_t a = mar.addr + (uint32_t)(i * 8);
+                            emit(cg, OP_ESCRIBIR, a & 0xFF, (uint8_t)reg, (a >> 8) & 0xFF, flW);
+                        }
+                        return;
+                    }
+                }
+                if (is_node(an->expression, NODE_BINARY_OP)) {
+                    BinaryOpNode *bn = (BinaryOpNode *)an->expression;
+                    const char *lt = get_expression_type(cg, bn->left);
+                    const char *rt = get_expression_type(cg, bn->right);
+                    int op_add = (strcmp(bn->operator, "+") == 0);
+                    int op_sub = (strcmp(bn->operator, "-") == 0);
+                    int op_mul = (strcmp(bn->operator, "*") == 0);
+                    int scalar_l = lt && (strcmp(lt, "flotante") == 0 || strcmp(lt, "entero") == 0);
+                    int scalar_r = rt && (strcmp(rt, "flotante") == 0 || strcmp(rt, "entero") == 0);
+                    int vec_op = lt && rt && strcmp(lt, ft) == 0 && strcmp(rt, ft) == 0;
+                    uint32_t bL = 0, bR = 0;
+                    int relL = 0, relR = 0;
+                    int okL = codegen_vec_lvalue_base(cg, bn->left, &bL, &relL);
+                    int okR = codegen_vec_lvalue_base(cg, bn->right, &bR, &relR);
+                    if (op_add || op_sub || op_mul) {
+                        for (int i = 0; i < ncomp_vec; i++) {
+                            uint32_t off = (uint32_t)(i * 8);
+                            if (vec_op && okL && okR) {
+                                emit(cg, OP_LEER, 1, (bL + off) & 0xFF, ((bL + off) >> 8) & 0xFF, cg_vec_fl_read(relL));
+                                emit(cg, OP_LEER, 2, (bR + off) & 0xFF, ((bR + off) >> 8) & 0xFF, cg_vec_fl_read(relR));
+                                if (op_add)
+                                    emit(cg, OP_SUMAR_FLT, 1, 1, 2, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+                                else if (op_sub)
+                                    emit(cg, OP_RESTAR_FLT, 1, 1, 2, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+                                else
+                                    emit(cg, OP_MULTIPLICAR_FLT, 1, 1, 2, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+                            } else if (scalar_l && okR) {
+                                (void)visit_expression(cg, bn->left, 1);
+                                if (strcmp(lt, "entero") == 0)
+                                    emit(cg, OP_CONV_I2F, 1, 1, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+                                emit(cg, OP_LEER, 2, (bR + off) & 0xFF, ((bR + off) >> 8) & 0xFF, cg_vec_fl_read(relR));
+                                emit(cg, OP_MULTIPLICAR_FLT, 1, 1, 2, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+                            } else if (scalar_r && okL) {
+                                (void)visit_expression(cg, bn->right, 2);
+                                if (strcmp(rt, "entero") == 0)
+                                    emit(cg, OP_CONV_I2F, 2, 2, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+                                emit(cg, OP_LEER, 1, (bL + off) & 0xFF, ((bL + off) >> 8) & 0xFF, cg_vec_fl_read(relL));
+                                emit(cg, OP_MULTIPLICAR_FLT, 1, 1, 2, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+                            } else {
+                                snprintf(cg->last_error, CODEGEN_ERROR_MAX,
+                                         "Asignacion a miembro '%s' requiere dos vectores del mismo tipo o vector y escalar.",
+                                         ft);
+                                cg->has_error = 1;
+                                cg->err_line = bn->line > 0 ? bn->line : 1;
+                                cg->err_col = bn->col > 0 ? bn->col : 1;
+                                return;
+                            }
+                            emit(cg, OP_ESCRIBIR, (mar.addr + off) & 0xFF, 1, ((mar.addr + off) >> 8) & 0xFF, flW);
+                        }
+                        return;
+                    }
+                }
+                snprintf(cg->last_error, CODEGEN_ERROR_MAX,
+                         "Asignacion a miembro tipo '%s': use otro vector, constructor %s(...) o expresion + - * entre vectores.",
+                         ft, ft);
+                cg->has_error = 1;
+                cg->err_line = man_as->base.line > 0 ? man_as->base.line : 1;
+                cg->err_col = man_as->base.col > 0 ? man_as->base.col : 1;
+                return;
+            }
             const char *et = get_expression_type(cg, an->expression);
             if (reject_non_numeric_to_scalar(cg, ft, et, an->target->line, an->target->col))
                 return;
@@ -5281,43 +5739,27 @@ static void visit_statement(CodeGen *cg, ASTNode *node) {
                 uint8_t fl = IR_INST_FLAG_A_IMMEDIATE | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE;
                 if (r.is_relative) fl |= IR_INST_FLAG_RELATIVE;
                 if (vec_op || (scalar_l && rt && strcmp(rt, vt) == 0) || (scalar_r && lt && strcmp(lt, vt) == 0)) {
-                    SymResult srL = {0}, srR = {0};
-                    int has_addr_l = 0, has_addr_r = 0;
-                    if (is_node(bn->left, NODE_IDENTIFIER)) {
-                        srL = sym_lookup(&cg->sym, ((IdentifierNode*)bn->left)->name);
-                        if (!srL.found) srL = sym_get_or_create(&cg->sym, ((IdentifierNode*)bn->left)->name, NULL);
-                        has_addr_l = 1;
-                    }
-                    if (is_node(bn->right, NODE_IDENTIFIER)) {
-                        srR = sym_lookup(&cg->sym, ((IdentifierNode*)bn->right)->name);
-                        if (!srR.found) srR = sym_get_or_create(&cg->sym, ((IdentifierNode*)bn->right)->name, NULL);
-                        has_addr_r = 1;
-                    }
+                    uint32_t bL = 0, bR = 0;
+                    int relL = 0, relR = 0;
+                    int okL = codegen_vec_lvalue_base(cg, bn->left, &bL, &relL);
+                    int okR = codegen_vec_lvalue_base(cg, bn->right, &bR, &relR);
                     for (int i = 0; i < ncomp; i++) {
                         uint32_t off = (uint32_t)(i * 8);
-                        if (vec_op && has_addr_l && has_addr_r) {
-                            uint8_t flL = IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE;
-                            if (srL.is_relative) flL |= IR_INST_FLAG_RELATIVE;
-                            uint8_t flR = IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE;
-                            if (srR.is_relative) flR |= IR_INST_FLAG_RELATIVE;
-                            emit(cg, OP_LEER, 1, (srL.addr + off) & 0xFF, ((srL.addr + off) >> 8) & 0xFF, flL);
-                            emit(cg, OP_LEER, 2, (srR.addr + off) & 0xFF, ((srR.addr + off) >> 8) & 0xFF, flR);
+                        if (vec_op && okL && okR) {
+                            emit(cg, OP_LEER, 1, (bL + off) & 0xFF, ((bL + off) >> 8) & 0xFF, cg_vec_fl_read(relL));
+                            emit(cg, OP_LEER, 2, (bR + off) & 0xFF, ((bR + off) >> 8) & 0xFF, cg_vec_fl_read(relR));
                             if (op_add) emit(cg, OP_SUMAR_FLT, 1, 1, 2, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
                             else if (op_sub) emit(cg, OP_RESTAR_FLT, 1, 1, 2, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
                             else if (op_mul) emit(cg, OP_MULTIPLICAR_FLT, 1, 1, 2, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
-                        } else if (scalar_l && has_addr_r) {
+                        } else if (scalar_l && okR) {
                             (void)visit_expression(cg, bn->left, 1);
                             if (strcmp(lt, "entero") == 0) emit(cg, OP_CONV_I2F, 1, 1, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
-                            uint8_t flR = IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE;
-                            if (srR.is_relative) flR |= IR_INST_FLAG_RELATIVE;
-                            emit(cg, OP_LEER, 2, (srR.addr + off) & 0xFF, ((srR.addr + off) >> 8) & 0xFF, flR);
+                            emit(cg, OP_LEER, 2, (bR + off) & 0xFF, ((bR + off) >> 8) & 0xFF, cg_vec_fl_read(relR));
                             emit(cg, OP_MULTIPLICAR_FLT, 1, 1, 2, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
-                        } else if (scalar_r && has_addr_l) {
+                        } else if (scalar_r && okL) {
                             (void)visit_expression(cg, bn->right, 2);
                             if (strcmp(rt, "entero") == 0) emit(cg, OP_CONV_I2F, 2, 2, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
-                            uint8_t flL = IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE;
-                            if (srL.is_relative) flL |= IR_INST_FLAG_RELATIVE;
-                            emit(cg, OP_LEER, 1, (srL.addr + off) & 0xFF, ((srL.addr + off) >> 8) & 0xFF, flL);
+                            emit(cg, OP_LEER, 1, (bL + off) & 0xFF, ((bL + off) >> 8) & 0xFF, cg_vec_fl_read(relL));
                             emit(cg, OP_MULTIPLICAR_FLT, 1, 1, 2, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
                         } else break;
                         uint32_t a = r.addr + off;
@@ -5718,11 +6160,14 @@ static void visit_statement(CodeGen *cg, ASTNode *node) {
         AsociarNode *an = (AsociarNode*)node;
         visit_expression(cg, an->concept1, 1);
         visit_expression(cg, an->concept2, 2);
-        if (an->weight)
+        if (an->weight) {
             visit_expression(cg, an->weight, 3);
-        else
-            emit(cg, OP_MOVER, 3, 90, 0, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
-        emit(cg, OP_MEM_ASOCIAR_CONCEPTOS, 1, 2, 3, 0);
+            emit(cg, OP_MEM_ASOCIAR_CONCEPTOS, 1, 2, 3,
+                 IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+        } else {
+            emit(cg, OP_MEM_ASOCIAR_CONCEPTOS, 1, 2, 90,
+                 IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE);
+        }
         return;
     }
     if (is_node(node, NODE_APRENDER)) {
@@ -5944,6 +6389,8 @@ static void visit_statement(CodeGen *cg, ASTNode *node) {
                 return;
             if (cn->name && codegen_error_if_bad_arity_buscar_contiene_termina(cg, cn))
                 return;
+            if (cn->name && codegen_error_if_bad_arity_pensar_procesar_texto(cg, cn))
+                return;
             if (cn->name && is_sistema_llamada(cn->name, strlen(cn->name))) {
                 snprintf(cg->last_error, CODEGEN_ERROR_MAX,
                          "'%s' es una funcion incorporada del lenguaje, pero el numero o la forma de los argumentos "
@@ -6126,13 +6573,33 @@ uint8_t *codegen_generate(CodeGen *cg, ASTNode *ast, size_t *out_len) {
         sym_register_struct(&cg->sym, "mat4", m4t, m4f, 16);
     }
 
-    /* Registrar structs desde globals */
+    /* Registrar structs / clases desde globals */
     for (size_t i = 0; i < p->n_globals; i++) {
         ASTNode *g = p->globals[i];
         if (g && g->type == NODE_STRUCT_DEF) {
             StructDefNode *sd = (StructDefNode*)g;
-            sym_register_struct(&cg->sym, sd->name, (const char**)sd->field_types,
-                               (const char**)sd->field_names, sd->n_fields);
+            if (sd->extends_name && sd->extends_name[0]) {
+                int er = sym_register_struct_extends(&cg->sym, sd->name, sd->extends_name,
+                    (const char**)sd->field_types, (const char**)sd->field_names, sd->n_fields);
+                if (er == -1) {
+                    cg->has_error = 1;
+                    cg->err_line = sd->base.line;
+                    cg->err_col = sd->base.col;
+                    snprintf(cg->last_error, CODEGEN_ERROR_MAX,
+                        "clase/registro '%s': tipo base '%s' no registrado (definalo antes en el archivo)",
+                        sd->name ? sd->name : "?", sd->extends_name);
+                } else if (er == -2) {
+                    cg->has_error = 1;
+                    cg->err_line = sd->base.line;
+                    cg->err_col = sd->base.col;
+                    snprintf(cg->last_error, CODEGEN_ERROR_MAX,
+                        "clase '%s': campo duplicado respecto a la base '%s'",
+                        sd->name ? sd->name : "?", sd->extends_name);
+                }
+            } else {
+                sym_register_struct(&cg->sym, sd->name, (const char**)sd->field_types,
+                                   (const char**)sd->field_names, sd->n_fields);
+            }
         }
     }
     /* Global VarDecls + init (macros/lambdas: misma ruta que visit_statement) */
@@ -6178,12 +6645,14 @@ uint8_t *codegen_generate(CodeGen *cg, ASTNode *ast, size_t *out_len) {
     if (p->n_funcs) {
         cg->func_names = malloc(p->n_funcs * sizeof(char*));
         cg->func_return_types = malloc(p->n_funcs * sizeof(char*));
+        cg->func_return_task_elems = calloc(p->n_funcs, sizeof(char*));
         cg->func_labels = malloc(p->n_funcs * sizeof(int));
-        if (cg->func_names && cg->func_labels) {
+        if (cg->func_names && cg->func_labels && cg->func_return_task_elems) {
             for (size_t i = 0; i < p->n_funcs; i++) {
                 FunctionNode *fn = (FunctionNode*)p->functions[i];
                 cg->func_names[i] = fn->name;
                 cg->func_return_types[i] = fn->return_type ? fn->return_type : "entero";
+                cg->func_return_task_elems[i] = fn->return_task_elem;
                 cg->func_labels[i] = new_label(cg);
             }
         }

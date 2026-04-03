@@ -5,7 +5,7 @@
 const char *const SISTEMA_LLAMADAS[] = {
     "abrir_archivo", "cerrar_archivo", "escribir_archivo", "leer_linea_archivo",
     "fin_archivo", "existe_archivo", "obtener_todos_conceptos", "obtener_relacionados",
-    "lista_tamano", "lista_obtener", "obtener_timestamp", "aprender_peso", "procesar_texto",
+    "lista_tamano", "lista_obtener", "obtener_timestamp", "aprender", "aprender_peso", "procesar_texto",
     "str_minusculas", "str_copiar", "copiar_texto", "lista_agregar", "crear_lista", "obtener_nombre_concepto",
     "listar_archivos", "fs_listar", "finalizar", "olvidar", "obtener_campo", "bit_shl", "bit_shr",
     "sistema_ejecutar", "mapa_crear", "mapa_poner", "mapa_obtener",
@@ -37,7 +37,7 @@ const char *const SISTEMA_LLAMADAS[] = {
     "extraer_despues_de",
     "imprimir_id", "longitud_texto", "propiedad_concepto", "reservar", "liberar", "ir_escribir",
     "concatenar", "longitud", "dividir", "buscar_en_texto", "contiene_texto", "termina_con",
-    "leer_entrada", "percibir_teclado", "ingreso_inmediato", "entrada_flotante", "limpiar_consola", "ahora", "obtener_ahora", "diferencia_en_segundos",
+    "leer_entrada", "percibir_teclado", "ingreso_inmediato", "entrada_flotante", "limpiar_consola", "pausa", "ahora", "obtener_ahora", "diferencia_en_segundos",
     "n_abrir_grafo", "n_cerrar_grafo", "n_grafo_valido",
     "n_obtener_id", "n_obtener_texto", "n_existe_concepto",
     "n_recordar", "n_recordar_peso", "n_recordar_triple_texto",
@@ -59,10 +59,11 @@ const char *const SISTEMA_LLAMADAS[] = {
     "ffi_cargar", "ffi_simbolo", "ffi_llamar",
     "json_parse", "json_stringify", "json_objeto_obtener", "json_lista_obtener", "json_lista_tamano",
     "json_a_texto", "json_a_entero", "json_a_flotante", "json_a_bool", "json_tipo",
-    "bytes_crear", "bytes_tamano", "bytes_obtener", "bytes_poner", "bytes_anexar", "bytes_subbytes",
+    "bytes_crear", "bytes_tamano", "bytes_obtener", "bytes_poner", "bytes_anexar", "bytes_puntero", "bytes_subbytes",
     "bytes_desde_texto", "bytes_a_texto", "dns_resolver",
     "tcp_conectar", "tcp_escuchar", "tcp_aceptar", "tcp_enviar", "tcp_recibir", "tcp_cerrar",
-    "tls_cliente", "tls_servidor", "tls_enviar", "tls_recibir", "tls_cerrar"
+    "tls_cliente", "tls_servidor", "tls_enviar", "tls_recibir", "tls_cerrar",
+    "pausa_milisegundos", "esperar_milisegundos"
 };
 const size_t SISTEMA_LLAMADAS_COUNT = sizeof(SISTEMA_LLAMADAS) / sizeof(SISTEMA_LLAMADAS[0]);
 

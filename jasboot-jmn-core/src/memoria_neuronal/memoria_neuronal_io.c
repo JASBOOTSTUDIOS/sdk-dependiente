@@ -9,9 +9,59 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <errno.h>
+#if defined(_WIN32) || defined(_WIN64)
+#include <direct.h>
+#else
+#include <sys/stat.h>
+#include <sys/types.h>
+#endif
 
 #define JMN_MAGIC 0x4A4D4E31  /* "JMN1" en big-endian */
 #define JMN_VERSION 1
+
+static int jmn_io_mkdir_one(const char* path) {
+    if (!path || !path[0]) return 0;
+#if defined(_WIN32) || defined(_WIN64)
+    if (_mkdir(path) == 0 || errno == EEXIST) return 0;
+#else
+    if (mkdir(path, 0777) == 0 || errno == EEXIST) return 0;
+#endif
+    return -1;
+}
+
+static int jmn_io_asegurar_directorios_padre(const char* ruta) {
+    char dir[512];
+    size_t len;
+    size_t i;
+
+    if (!ruta || !ruta[0]) return 0;
+    len = strlen(ruta);
+    if (len >= sizeof(dir)) len = sizeof(dir) - 1;
+    memcpy(dir, ruta, len);
+    dir[len] = '\0';
+
+    for (i = len; i > 0; i--) {
+        if (dir[i - 1] == '/' || dir[i - 1] == '\\') {
+            dir[i - 1] = '\0';
+            break;
+        }
+    }
+    if (i == 0 || !dir[0]) return 0;
+
+    for (i = 0; dir[i]; i++) {
+        if (dir[i] == '/' || dir[i] == '\\') {
+            char saved = dir[i];
+            if (i == 0) continue;
+            if (i == 2 && dir[1] == ':') continue;
+            dir[i] = '\0';
+            if (dir[0] && jmn_io_mkdir_one(dir) != 0) return -1;
+            dir[i] = saved;
+        }
+    }
+
+    return jmn_io_mkdir_one(dir);
+}
 
 /* CRC32 simple para integridad (polinomio estándar) */
 static uint32_t jmn_crc32_update(uint32_t crc, const void* data, size_t len) {
@@ -33,6 +83,7 @@ static uint32_t jmn_crc32_update(uint32_t crc, const void* data, size_t len) {
 
 int jmn_io_guardar(JMNMemoria* mem, const char* ruta) {
     if (!mem || !ruta) return -1;
+    if (jmn_io_asegurar_directorios_padre(ruta) != 0) return -1;
     FILE* f = fopen(ruta, "wb");
     if (!f) return -1;
 

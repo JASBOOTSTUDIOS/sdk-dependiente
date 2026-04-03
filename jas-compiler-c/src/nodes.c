@@ -28,6 +28,7 @@ void ast_free(ASTNode *node) {
             FunctionNode *n = (FunctionNode*)node;
             free_str(n->name);
             free_str(n->return_type);
+            free_str(n->return_task_elem);
             for (size_t i = 0; i < n->n_params; i++) ast_free(n->params[i]);
             free(n->params);
             ast_free(n->body);
@@ -44,6 +45,7 @@ void ast_free(ASTNode *node) {
         case NODE_STRUCT_DEF: {
             StructDefNode *n = (StructDefNode*)node;
             free_str(n->name);
+            free_str(n->extends_name);
             for (size_t i = 0; i < n->n_fields; i++) {
                 free_str(n->field_types[i]);
                 free_str(n->field_names[i]);
@@ -199,7 +201,8 @@ void ast_free(ASTNode *node) {
             free(n->elements);
             break;
         }
-        case NODE_MAP_LITERAL: {
+        case NODE_MAP_LITERAL:
+        case NODE_JSON_LITERAL: {
             MapLiteralNode *n = (MapLiteralNode*)node;
             for (size_t i = 0; i < n->n; i++) {
                 ast_free(n->keys[i]);

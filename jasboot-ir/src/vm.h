@@ -129,10 +129,13 @@ typedef struct {
     int running;                            // Si la VM está ejecutando
     int exit_code;                          // Código de salida
     void* mem_neuronal;                     // Memoria neuronal (opcional, puede ser cerebro.jmn)
+    uint32_t mem_neuronal_owner_depth;      // Profundidad de llamada donde se abrio la memoria persistente
+    int mem_neuronal_open_line;             // Linea donde se abrio la memoria persistente
     void* mem_colecciones;                  // Memoria RAM para colecciones de programa (lista, mapa)
     VMTextCacheEntry** text_cache_buckets;  // Tabla Hash: Array de punteros a entradas
     size_t text_cache_size;                 // Número de buckets
     size_t text_cache_count;                // Número de elementos ingresados
+    uint32_t next_runtime_text_id;         // IDs unicos para textos construidos en runtime
     VMListSizeCacheEntry** list_size_buckets; // Cache de tamaños de lista para evitar consultas JMN repetidas
     size_t list_size_cache_size;
     VMSubstringCacheEntry** substring_cache_buckets; // Memoización de extraer_subtexto(id,start,len)

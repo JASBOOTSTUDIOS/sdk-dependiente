@@ -6,7 +6,7 @@
 #include "nodes.h"
 #include "symbol_table.h"
 
-/* Recorre el AST y declara variables, structs, etc. en st */
-void resolve_program(ASTNode *ast, SymbolTable *st);
+/* Recorre el AST y declara variables, structs, etc. en st. Devuelve cantidad de errores (0 = ok). */
+int resolve_program(ASTNode *ast, SymbolTable *st);
 
 #endif

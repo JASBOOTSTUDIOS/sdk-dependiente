@@ -207,7 +207,7 @@ IRValidationInfo ir_validate_memory(IRFile* ir) {
             inst.opcode != OP_CLOSURE_CREAR && inst.opcode != OP_CLOSURE_CARGAR &&
             inst.opcode != OP_BYTES_CREAR && inst.opcode != OP_BYTES_TAMANO &&
             inst.opcode != OP_BYTES_OBTENER && inst.opcode != OP_BYTES_PONER &&
-            inst.opcode != OP_BYTES_ANEXAR && inst.opcode != OP_BYTES_SUBBYTES &&
+            inst.opcode != OP_BYTES_ANEXAR && inst.opcode != OP_BYTES_PUNTERO && inst.opcode != OP_BYTES_SUBBYTES &&
             inst.opcode != OP_BYTES_DESDE_TEXTO && inst.opcode != OP_BYTES_A_TEXTO &&
             inst.opcode != OP_DNS_RESOLVER &&
             inst.opcode != OP_TCP_CONECTAR && inst.opcode != OP_TCP_ESCUCHAR &&
@@ -216,6 +216,8 @@ IRValidationInfo ir_validate_memory(IRFile* ir) {
             inst.opcode != OP_TLS_CLIENTE && inst.opcode != OP_TLS_SERVIDOR &&
             inst.opcode != OP_TLS_ENVIAR && inst.opcode != OP_TLS_RECIBIR &&
             inst.opcode != OP_TLS_CERRAR &&
+            inst.opcode != OP_IO_PAUSA &&
+            inst.opcode != OP_PAUSA_MILISEGUNDOS &&
             inst.opcode != OP_IMPRIMIR_TEXTO &&
             inst.opcode != OP_IO_INGRESAR_TEXTO &&
             inst.opcode != OP_IO_INPUT_REG &&

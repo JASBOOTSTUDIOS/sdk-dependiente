@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdarg.h>
 #include <errno.h>
 #include <math.h>
 #include <time.h>
@@ -19,6 +20,7 @@
 #include <conio.h>
 #else
 #include <unistd.h>
+#include <fcntl.h>
 #include <dlfcn.h>
 #include <sys/select.h>
 #include <termios.h>
@@ -42,11 +44,65 @@ typedef int vm_socket_native_t;
 #define vm_socket_close close
 #endif
 
+#if defined(_WIN32) || defined(_WIN64)
+static int vm_ffi_path_is_absolute(const char* p) {
+    if (!p || !p[0]) return 0;
+    if (p[0] == '\\' || p[0] == '/') return 1;
+    if (p[0] && p[1] == ':') return 1;
+    return 0;
+}
+#else
+static int vm_ffi_path_is_absolute(const char* p) { return p && p[0] == '/'; }
+#endif
+
 #define VM_TLS_MODO_CLIENTE 1
 #define VM_TLS_MODO_SERVIDOR 2
 #define VM_SSL_FILETYPE_PEM 1
 
+static int vm_tls_write_entry(VMTlsEntry* tls, const uint8_t* data, uint32_t len);
 static void vm_tls_close_entry(VM* vm, uint32_t handle);
+
+static int vm_net_debug_enabled(void) {
+    const char* v = getenv("JASBOOT_DEBUG_NET");
+    return v && v[0] && strcmp(v, "0") != 0;
+}
+
+static void vm_net_debugf(const char* fmt, ...) {
+    va_list ap;
+    if (!vm_net_debug_enabled()) return;
+    va_start(ap, fmt);
+    fprintf(stderr, "[jasboot-net] ");
+    vfprintf(stderr, fmt, ap);
+    fprintf(stderr, "\n");
+    fflush(stderr);
+    va_end(ap);
+}
+
+static int vm_socket_send_all(vm_socket_native_t s, const uint8_t* data, uint32_t len) {
+    uint32_t total = 0;
+    if (!data || len == 0) return 0;
+    while (total < len) {
+        int n = (int)send(s, (const char*)data + total, (int)(len - total), 0);
+        if (n <= 0) {
+            return total > 0 ? (int)total : n;
+        }
+        total += (uint32_t)n;
+    }
+    return (int)total;
+}
+
+static int vm_tls_write_all(VMTlsEntry* tls, const uint8_t* data, uint32_t len) {
+    uint32_t total = 0;
+    if (!data || len == 0) return 0;
+    while (total < len) {
+        int n = vm_tls_write_entry(tls, data + total, len - total);
+        if (n <= 0) {
+            return total > 0 ? (int)total : n;
+        }
+        total += (uint32_t)n;
+    }
+    return (int)total;
+}
 
 static int vm_entrada_fl_cuenta_digitos(const char *s, size_t n) {
     int d = 0;
@@ -269,6 +325,42 @@ static float vm_io_entrada_flotante_leer(void) {
         return 0.0f;
     }
     return strtof(buf, NULL);
+}
+
+static void vm_io_pausa(const char* mensaje) {
+    fflush(stdout);
+    fputs((mensaje && mensaje[0]) ? mensaje : "Ingrese una tecla para continuar...", stdout);
+    fflush(stdout);
+#if defined(_WIN32) || defined(_WIN64)
+    for (;;) {
+        int c = _getch();
+        if (c == 0 || c == 224) {
+            (void)_getch();
+            continue;
+        }
+        break;
+    }
+    fputc('\n', stdout);
+    fflush(stdout);
+#else
+    {
+        struct termios tsav, traw;
+        int raw_ok = isatty(STDIN_FILENO) && tcgetattr(STDIN_FILENO, &tsav) == 0;
+        if (raw_ok) {
+            traw = tsav;
+            traw.c_lflag &= (tcflag_t)~(ICANON | ECHO);
+            traw.c_cc[VMIN] = 1;
+            traw.c_cc[VTIME] = 0;
+            (void)tcsetattr(STDIN_FILENO, TCSANOW, &traw);
+        }
+        (void)getchar();
+        if (raw_ok) {
+            (void)tcsetattr(STDIN_FILENO, TCSANOW, &tsav);
+        }
+        fputc('\n', stdout);
+        fflush(stdout);
+    }
+#endif
 }
 
 #define VM_PERCEPCION_CAP_DEFAULT 64u
@@ -662,14 +754,6 @@ static size_t vm_text_extract_range(VM* vm, uint32_t id, size_t start, size_t le
             continue;
         }
 
-        if (fr.start == 0 && e->preview && e->preview_len > 0) {
-            size_t take = fr.len;
-            if (take > e->preview_len) take = e->preview_len;
-            memcpy(out + written, e->preview, take);
-            written += take;
-            continue;
-        }
-
         if (e->kind == VM_TEXT_CONCAT) {
             VMTextCacheEntry* left = vm_text_cache_find(vm, e->left_id);
             size_t left_len = vm_text_entry_len(left);
@@ -789,6 +873,33 @@ static const char* vm_text_cache_get(VM* vm, uint32_t id) {
         e->text = flat;
     }
     return e->text;
+}
+
+static char* vm_text_materialize_owned(VM* vm, uint32_t id, size_t* out_len) {
+    if (out_len) *out_len = 0;
+    if (id == 0) {
+        char* empty = (char*)malloc(1);
+        if (empty) empty[0] = '\0';
+        return empty;
+    }
+    VMTextCacheEntry* e = vm_text_cache_find(vm, id);
+    if (!e) {
+        const char* cached = vm_text_cache_get(vm, id);
+        if (!cached) return NULL;
+        size_t len = strlen(cached);
+        char* copy = (char*)malloc(len + 1);
+        if (!copy) return NULL;
+        memcpy(copy, cached, len + 1);
+        if (out_len) *out_len = len;
+        return copy;
+    }
+    size_t len = vm_text_entry_len(e);
+    char* flat = (char*)malloc(len + 1);
+    if (!flat) return NULL;
+    size_t wrote = vm_text_extract_range(vm, id, 0, len, flat);
+    flat[wrote] = '\0';
+    if (out_len) *out_len = wrote;
+    return flat;
 }
 
 static int vm_text_cache_put_owned(VM* vm, uint32_t id, char* text, size_t text_len) {
@@ -964,7 +1075,7 @@ static int vm_text_cache_get_copy(VM* vm, uint32_t id, char* buf, size_t max_len
         if (max_len == 0) return 0;
         if (e->kind == VM_TEXT_RAW && e->text) {
             strncpy(buf, e->text, max_len - 1);
-            buf[max_len - 1] = '\0';
+        buf[max_len - 1] = '\0';
             return 1;
         }
         n = vm_text_extract_range(vm, id, 0, max_len - 1, buf);
@@ -980,6 +1091,15 @@ static int vm_text_cache_get_copy(VM* vm, uint32_t id, char* buf, size_t max_len
 }
 
 static uint32_t vm_hash_texto(const char* texto); /* forward */
+
+static uint32_t vm_alloc_runtime_text_id(VM* vm) {
+    if (!vm) return 0;
+    if (vm->next_runtime_text_id < 0x80000000u)
+        vm->next_runtime_text_id = 0x80000000u;
+    while (vm->next_runtime_text_id == 0 || vm_text_cache_find(vm, vm->next_runtime_text_id))
+        vm->next_runtime_text_id++;
+    return vm->next_runtime_text_id++;
+}
 
 /* Resolver path desde id: argv, cache, JMN. Para sys_argv paths que no están en cache. */
 static const char* vm_resolve_path(VM* vm, uint32_t id) {
@@ -1116,6 +1236,7 @@ VM* vm_create(void) {
     vm->text_cache_size = 4096; // Suficiente para un compilador
     vm->text_cache_buckets = (VMTextCacheEntry**)calloc(vm->text_cache_size, sizeof(VMTextCacheEntry*));
     vm->text_cache_count = 0;
+    vm->next_runtime_text_id = 0x80000000u;
     vm->list_size_cache_size = 2048;
     vm->list_size_buckets = (VMListSizeCacheEntry**)calloc(vm->list_size_cache_size, sizeof(VMListSizeCacheEntry*));
     vm->substring_cache_size = 4096;
@@ -1131,6 +1252,8 @@ VM* vm_create(void) {
     vm->try_depth = 0;
     vm->ir = ir_file_create();
     vm->mem_neuronal = NULL;
+    vm->mem_neuronal_owner_depth = 0;
+    vm->mem_neuronal_open_line = 0;
     vm->context = NULL;
     vm->self_path = NULL;
 
@@ -1332,6 +1455,42 @@ static void vm_mem_write_float(VM* vm, size_t addr, float f) {
 
 static void vm_free_cached_tls_server_ctx(VM* vm);
 
+static uint32_t vm_call_depth(VM* vm) {
+    if (!vm) return 0;
+    return (uint32_t)vm->stack_ptr;
+}
+
+static void vm_format_source_path(VM* vm, char* out, size_t out_size) {
+    size_t len;
+    if (!out || out_size == 0) return;
+    out[0] = '\0';
+    if (!vm || !vm->ir_path || !vm->ir_path[0]) return;
+    snprintf(out, out_size, "%s", vm->ir_path);
+    len = strlen(out);
+    if (len >= 4 && strcmp(out + len - 4, ".jbo") == 0) {
+        memcpy(out + len - 4, ".jasb", 6);
+    }
+}
+
+static void vm_fallar_si_memoria_sigue_abierta(VM* vm) {
+    if (!vm) return;
+#ifdef JASBOOT_LANG_INTEGRATION
+    if (vm->exit_code == 0 && vm->mem_neuronal) {
+        if (vm->mem_neuronal_open_line > 0) {
+            fprintf(stderr,
+                    "Error de ejecucion (VM): memoria neuronal abierta en la linea %d sin `cerrar_memoria()`. Cierra la memoria antes de terminar el programa.\n",
+                    vm->mem_neuronal_open_line);
+        } else {
+            fprintf(stderr,
+                    "Error de ejecucion (VM): memoria neuronal abierta sin `cerrar_memoria()`. Cierra la memoria antes de terminar el programa.\n");
+        }
+        vm->exit_code = 1;
+    }
+#else
+    (void)vm;
+#endif
+}
+
 void vm_destroy(VM* vm) {
     if (!vm) return;
 #ifdef JASBOOT_LANG_INTEGRATION
@@ -1339,6 +1498,8 @@ void vm_destroy(VM* vm) {
         jmn_finalizar_escritura(vm->mem_neuronal);
         jmn_cerrar(vm->mem_neuronal);
         vm->mem_neuronal = NULL;
+        vm->mem_neuronal_owner_depth = 0;
+        vm->mem_neuronal_open_line = 0;
     }
     if (vm->mem_colecciones) {
         jmn_cerrar(vm->mem_colecciones);
@@ -1547,6 +1708,76 @@ static uint32_t vm_bytes_new_uninitialized(VM* vm, uint32_t len) {
     return vm->bytes_count;
 }
 
+/* connect() bloqueante puede colgarse indefinidamente si el SYN no recibe RST (firewall). */
+#define VM_TCP_CONNECT_TIMEOUT_SEC 30
+
+static int vm_socket_set_blocking(vm_socket_native_t s, int blocking) {
+#if defined(_WIN32) || defined(_WIN64)
+    u_long mode = blocking ? 0UL : 1UL;
+    return ioctlsocket(s, FIONBIO, &mode) == 0 ? 0 : -1;
+#else
+    int fl = fcntl((int)s, F_GETFL, 0);
+    if (fl < 0) return -1;
+    if (blocking)
+        fl &= ~O_NONBLOCK;
+    else
+        fl |= O_NONBLOCK;
+    return fcntl((int)s, F_SETFL, fl) == 0 ? 0 : -1;
+#endif
+}
+
+/* Conecta con plazo maximo; deja el socket en modo bloqueante si tiene exito. */
+static int vm_tcp_connect_with_timeout(vm_socket_native_t s, const struct sockaddr* addr, int addrlen, int timeout_sec) {
+    if (vm_socket_set_blocking(s, 0) != 0) return -1;
+    int cr = connect(s, addr, addrlen);
+    if (cr == 0) {
+        return vm_socket_set_blocking(s, 1);
+    }
+#if defined(_WIN32) || defined(_WIN64)
+    {
+        int w = (int)WSAGetLastError();
+        if (w != WSAEWOULDBLOCK && w != WSAEINPROGRESS) {
+            (void)vm_socket_set_blocking(s, 1);
+            return -1;
+        }
+    }
+#else
+    if (errno != EINPROGRESS && errno != EALREADY) {
+        (void)vm_socket_set_blocking(s, 1);
+        return -1;
+    }
+#endif
+    fd_set wf;
+    fd_set xf;
+    FD_ZERO(&wf);
+    FD_ZERO(&xf);
+    FD_SET(s, &wf);
+    FD_SET(s, &xf);
+    struct timeval tv;
+    tv.tv_sec = timeout_sec;
+    tv.tv_usec = 0;
+#if defined(_WIN32) || defined(_WIN64)
+    int sel = select(0, NULL, &wf, &xf, &tv);
+#else
+    int sel = select((int)s + 1, NULL, &wf, &xf, &tv);
+#endif
+    if (sel <= 0) {
+        (void)vm_socket_set_blocking(s, 1);
+        return -1;
+    }
+    int soe = 0;
+#if defined(_WIN32) || defined(_WIN64)
+    int solen = (int)sizeof(soe);
+#else
+    socklen_t solen = (socklen_t)sizeof(soe);
+#endif
+    if (getsockopt(s, SOL_SOCKET, SO_ERROR, (char*)&soe, &solen) != 0 || soe != 0) {
+        (void)vm_socket_set_blocking(s, 1);
+        return -1;
+    }
+    return vm_socket_set_blocking(s, 1);
+}
+
 static int vm_socket_reserve(VM* vm, uint32_t needed) {
     if (!vm) return 0;
     if (needed <= vm->socket_cap) return 1;
@@ -1562,14 +1793,24 @@ static int vm_socket_reserve(VM* vm, uint32_t needed) {
     return 1;
 }
 
-static void vm_socket_apply_timeouts(vm_socket_native_t s) {
+/* Cliente saliente (p. ej. HTTPS a Supabase): plazos cortos para no bloquear el servidor monohilo tanto tiempo.
+ * Cliente entrante (aceptado en el API HTTP): plazo largo para cuerpos POST lentos. */
+typedef enum {
+    VM_SOCK_TO_NONE = 0,
+    VM_SOCK_TO_INBOUND = 1,
+    VM_SOCK_TO_OUTBOUND = 2
+} vm_sock_to_mode;
+
+static void vm_socket_apply_timeouts_mode(vm_socket_native_t s, vm_sock_to_mode mode) {
+    if (mode == VM_SOCK_TO_NONE) return;
 #if defined(_WIN32) || defined(_WIN64)
-    DWORD timeout_ms = 2000;
-    setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout_ms, sizeof(timeout_ms));
-    setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, (const char*)&timeout_ms, sizeof(timeout_ms));
+    /* Entrante: 60s (suficiente para POST; evita esperas de 2min si el cliente deja la conexion a medias). */
+    DWORD ms = (mode == VM_SOCK_TO_OUTBOUND) ? 20000u : 60000u;
+    setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, (const char*)&ms, sizeof(ms));
+    setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, (const char*)&ms, sizeof(ms));
 #else
     struct timeval tv;
-    tv.tv_sec = 2;
+    tv.tv_sec = (mode == VM_SOCK_TO_OUTBOUND) ? 20 : 60;
     tv.tv_usec = 0;
     setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
     setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
@@ -1581,11 +1822,11 @@ static void vm_socket_enable_nodelay(vm_socket_native_t s) {
     setsockopt(s, IPPROTO_TCP, TCP_NODELAY, (const char*)&opt, sizeof(opt));
 }
 
-static uint32_t vm_socket_wrap(VM* vm, vm_socket_native_t native_handle, int is_listener, int apply_timeouts) {
+static uint32_t vm_socket_wrap(VM* vm, vm_socket_native_t native_handle, int is_listener, vm_sock_to_mode timeout_mode) {
     if (!vm_socket_reserve(vm, vm->socket_count + 1)) return 0;
     if (!is_listener) {
         vm_socket_enable_nodelay(native_handle);
-        if (apply_timeouts) vm_socket_apply_timeouts(native_handle);
+        vm_socket_apply_timeouts_mode(native_handle, timeout_mode);
     }
     vm->sockets[vm->socket_count].native_handle = (intptr_t)native_handle;
     vm->sockets[vm->socket_count].is_listener = (uint8_t)(is_listener ? 1 : 0);
@@ -1809,13 +2050,61 @@ static void vm_tls_log_last_error(const char* where, void* ssl, int ssl_rc) {
     fprintf(stderr, "[TLS] %s fallo rc=%d ssl_err=%d openssl=%s\n", where ? where : "tls", ssl_rc, ssl_err, buf[0] ? buf : "(sin detalle)");
 }
 
+/* OpenSSL: SSL_ERROR_WANT_READ=2, SSL_ERROR_WANT_WRITE=3 (estables entre versiones). */
+#define VM_SSL_ERR_WANT_READ 2
+#define VM_SSL_ERR_WANT_WRITE 3
+#define VM_TLS_HANDSHAKE_DEADLINE_SEC 30
+
+/* SSL_connect bloqueante puede ignorar SO_RCVTIMEO en algunos casos; handshake con socket no bloqueante + select. */
+static int vm_tls_handshake_connect_with_deadline(void* ssl, vm_socket_native_t fd, int deadline_sec) {
+    if (!g_vm_ssl.SSL_connect || !g_vm_ssl.SSL_get_error) return -1;
+    if (vm_socket_set_blocking(fd, 0) != 0) return -1;
+    time_t start = time(NULL);
+    for (;;) {
+        int rc = g_vm_ssl.SSL_connect(ssl);
+        if (rc == 1) {
+            if (vm_socket_set_blocking(fd, 1) != 0) return -1;
+            return 0;
+        }
+        int err = g_vm_ssl.SSL_get_error(ssl, rc);
+        if ((time_t)time(NULL) - start >= (time_t)deadline_sec) {
+            fprintf(stderr, "[TLS] SSL_connect: plazo de handshake (%ds) agotado\n", deadline_sec);
+            (void)vm_socket_set_blocking(fd, 1);
+            return -1;
+        }
+        fd_set rf;
+        fd_set wf;
+        struct timeval tv;
+        tv.tv_sec = 1;
+        tv.tv_usec = 0;
+        FD_ZERO(&rf);
+        FD_ZERO(&wf);
+        if (err == VM_SSL_ERR_WANT_READ)
+            FD_SET(fd, &rf);
+        else if (err == VM_SSL_ERR_WANT_WRITE)
+            FD_SET(fd, &wf);
+        else {
+            (void)vm_socket_set_blocking(fd, 1);
+            return -1;
+        }
+#if defined(_WIN32) || defined(_WIN64)
+        int sel = select(0, &rf, &wf, NULL, &tv);
+#else
+        int sel = select((int)fd + 1, &rf, &wf, NULL, &tv);
+#endif
+        if (sel < 0) {
+            (void)vm_socket_set_blocking(fd, 1);
+            return -1;
+        }
+    }
+}
+
 static uint32_t vm_tls_create_client(VM* vm, uint32_t socket_id, const char* host) {
     VMSocketEntry* sock = vm_socket_get(vm, socket_id);
     const void* method;
     void* ctx;
     void* ssl;
     uint32_t tls_id;
-    int rc;
     if (!sock || !vm_openssl_load()) return 0;
     method = g_vm_ssl.TLS_client_method();
     if (!method) {
@@ -1836,16 +2125,15 @@ static uint32_t vm_tls_create_client(VM* vm, uint32_t socket_id, const char* hos
         return 0;
     }
     vm_tls_enable_sni(ssl, host);
-    rc = g_vm_ssl.SSL_connect(ssl);
-    if (rc != 1) {
-        vm_tls_log_last_error("SSL_connect", ssl, rc);
+    if (vm_tls_handshake_connect_with_deadline(ssl, (vm_socket_native_t)sock->native_handle, VM_TLS_HANDSHAKE_DEADLINE_SEC) != 0) {
+        vm_tls_log_last_error("SSL_connect(handshake)", ssl, -1);
         g_vm_ssl.SSL_free(ssl);
         g_vm_ssl.SSL_CTX_free(ctx);
         return 0;
     }
+    vm_socket_apply_timeouts_mode((vm_socket_native_t)sock->native_handle, VM_SOCK_TO_OUTBOUND);
     tls_id = vm_tls_wrap(vm, socket_id, VM_TLS_MODO_CLIENTE);
     if (!tls_id) {
-        g_vm_ssl.SSL_shutdown(ssl);
         g_vm_ssl.SSL_free(ssl);
         g_vm_ssl.SSL_CTX_free(ctx);
         return 0;
@@ -1945,9 +2233,8 @@ static int vm_tls_read_entry(VMTlsEntry* tls, uint8_t* data, uint32_t len) {
 static void vm_tls_close_entry(VM* vm, uint32_t handle) {
     VMTlsEntry* tls = vm_tls_get(vm, handle);
     if (!tls) return;
-    if (tls->ssl && g_vm_ssl.SSL_shutdown && tls->mode != VM_TLS_MODO_SERVIDOR) {
-        g_vm_ssl.SSL_shutdown(tls->ssl);
-    }
+    /* Cliente HTTP: no llamar SSL_shutdown bloqueante. Muchos servidores cierran el TCP tras el cuerpo
+     * sin close_notify TLS; SSL_shutdown aqui puede colgarse esperando respuesta del peer. */
     if (tls->ssl && g_vm_ssl.SSL_free) g_vm_ssl.SSL_free(tls->ssl);
     if (tls->owns_ctx && tls->ctx && g_vm_ssl.SSL_CTX_free) g_vm_ssl.SSL_CTX_free(tls->ctx);
     tls->ssl = NULL;
@@ -2305,7 +2592,15 @@ static int vm_json_buf_append(VMJsonBuf* b, const char* s) {
     return 1;
 }
 
-static int vm_json_stringify_value(VM* vm, uint32_t handle, VMJsonBuf* out) {
+static int vm_json_append_spaces(VMJsonBuf* b, int n) {
+    for (int i = 0; i < n; i++)
+        if (!vm_json_buf_append(b, " ")) return 0;
+    return 1;
+}
+
+/* indent_step 0 = compacto JSON; 1..16 = multilínea con esa cantidad de espacios por nivel. */
+static int vm_json_stringify_inner(VM* vm, uint32_t handle, VMJsonBuf* out, int indent_step, int depth) {
+    const int pretty = indent_step > 0;
     char tmp[64];
     VMJsonValue* v = vm_json_get(vm, handle);
     if (!v) return vm_json_buf_append(out, "null");
@@ -2342,6 +2637,36 @@ static int vm_json_stringify_value(VM* vm, uint32_t handle, VMJsonBuf* out) {
         }
         case VM_JSON_OBJECT:
             if (!vm_json_buf_append(out, "{")) return 0;
+            if (v->count == 0) return vm_json_buf_append(out, "}");
+            if (pretty) {
+                if (!vm_json_buf_append(out, "\n")) return 0;
+                for (uint32_t i = 0; i < v->count; i++) {
+                    char keybuf[1024];
+                    if (!vm_json_append_spaces(out, (depth + 1) * indent_step)) return 0;
+                    if (!vm_text_cache_get_copy(vm, v->keys[i], keybuf, sizeof(keybuf))) return 0;
+                    if (!vm_json_buf_append(out, "\"")) return 0;
+                    for (size_t k = 0; keybuf[k]; k++) {
+                        char esc[3] = {0};
+                        switch (keybuf[k]) {
+                            case '"': if (!vm_json_buf_append(out, "\\\"")) return 0; break;
+                            case '\\': if (!vm_json_buf_append(out, "\\\\")) return 0; break;
+                            case '\n': if (!vm_json_buf_append(out, "\\n")) return 0; break;
+                            case '\r': if (!vm_json_buf_append(out, "\\r")) return 0; break;
+                            case '\t': if (!vm_json_buf_append(out, "\\t")) return 0; break;
+                            default:
+                                esc[0] = keybuf[k];
+                                if (!vm_json_buf_append(out, esc)) return 0;
+                                break;
+                        }
+                    }
+                    if (!vm_json_buf_append(out, "\": ")) return 0;
+                    if (!vm_json_stringify_inner(vm, v->items[i], out, indent_step, depth + 1)) return 0;
+                    if (i + 1 < v->count && !vm_json_buf_append(out, ",")) return 0;
+                    if (!vm_json_buf_append(out, "\n")) return 0;
+                }
+                if (!vm_json_append_spaces(out, depth * indent_step)) return 0;
+                return vm_json_buf_append(out, "}");
+            }
             for (uint32_t i = 0; i < v->count; i++) {
                 char keybuf[1024];
                 if (i && !vm_json_buf_append(out, ",")) return 0;
@@ -2362,19 +2687,35 @@ static int vm_json_stringify_value(VM* vm, uint32_t handle, VMJsonBuf* out) {
                     }
                 }
                 if (!vm_json_buf_append(out, "\":")) return 0;
-                if (!vm_json_stringify_value(vm, v->items[i], out)) return 0;
+                if (!vm_json_stringify_inner(vm, v->items[i], out, indent_step, depth + 1)) return 0;
             }
             return vm_json_buf_append(out, "}");
         case VM_JSON_ARRAY:
             if (!vm_json_buf_append(out, "[")) return 0;
+            if (v->count == 0) return vm_json_buf_append(out, "]");
+            if (pretty) {
+                if (!vm_json_buf_append(out, "\n")) return 0;
+                for (uint32_t i = 0; i < v->count; i++) {
+                    if (!vm_json_append_spaces(out, (depth + 1) * indent_step)) return 0;
+                    if (!vm_json_stringify_inner(vm, v->items[i], out, indent_step, depth + 1)) return 0;
+                    if (i + 1 < v->count && !vm_json_buf_append(out, ",")) return 0;
+                    if (!vm_json_buf_append(out, "\n")) return 0;
+                }
+                if (!vm_json_append_spaces(out, depth * indent_step)) return 0;
+                return vm_json_buf_append(out, "]");
+            }
             for (uint32_t i = 0; i < v->count; i++) {
                 if (i && !vm_json_buf_append(out, ",")) return 0;
-                if (!vm_json_stringify_value(vm, v->items[i], out)) return 0;
+                if (!vm_json_stringify_inner(vm, v->items[i], out, indent_step, depth + 1)) return 0;
             }
             return vm_json_buf_append(out, "]");
         default:
             return 0;
     }
+}
+
+static int vm_json_stringify_value(VM* vm, uint32_t handle, VMJsonBuf* out) {
+    return vm_json_stringify_inner(vm, handle, out, 0, 0);
 }
 
 static void vm_reset_profile(VM* vm) {
@@ -2565,6 +2906,59 @@ static int vm_try_catch_or_abort(VM* vm, const char* msg) {
     vm->running = 1;
     vm->exit_code = 0;
     return 1;
+}
+
+static int vm_memoria_abierta_en_este_bloque(VM* vm) {
+#ifdef JASBOOT_LANG_INTEGRATION
+    if (!vm || !vm->mem_neuronal) return 0;
+    return vm->mem_neuronal_owner_depth == vm_call_depth(vm);
+#else
+    (void)vm;
+    return 0;
+#endif
+}
+
+static int vm_error_memoria_sin_cerrar(VM* vm) {
+#ifdef JASBOOT_LANG_INTEGRATION
+    char msg[256];
+    char src_path[1024];
+    if (!vm || !vm_memoria_abierta_en_este_bloque(vm)) return 0;
+    vm_format_source_path(vm, src_path, sizeof(src_path));
+    if (vm->mem_neuronal_open_line > 0) {
+        if (src_path[0]) {
+            snprintf(msg, sizeof(msg),
+                     "archivo %s, linea %d: la memoria abierta aun no se ha cerrado con `cerrar_memoria()` antes de salir de este bloque de funcion.",
+                     src_path, vm->mem_neuronal_open_line);
+        } else {
+            snprintf(msg, sizeof(msg),
+                     "linea %d: la memoria abierta aun no se ha cerrado con `cerrar_memoria()` antes de salir de este bloque de funcion.",
+                     vm->mem_neuronal_open_line);
+        }
+    } else {
+        if (src_path[0]) {
+            snprintf(msg, sizeof(msg),
+                     "archivo %s: la memoria abierta aun no se ha cerrado con `cerrar_memoria()` antes de salir de este bloque de funcion.",
+                     src_path);
+        } else {
+            snprintf(msg, sizeof(msg),
+                     "la memoria abierta aun no se ha cerrado con `cerrar_memoria()` antes de salir de este bloque de funcion.");
+        }
+    }
+    if (vm_try_catch_or_abort(vm, msg)) return 1;
+    if (vm->current_line > 0) {
+        fprintf(stderr,
+                "Error de ejecucion (VM) en la linea %d: %s\n",
+                vm->current_line, msg);
+    } else {
+        fprintf(stderr, "Error de ejecucion (VM): %s\n", msg);
+    }
+    vm->running = 0;
+    vm->exit_code = 1;
+    return 1;
+#else
+    (void)vm;
+    return 0;
+#endif
 }
 
 int vm_step(VM* vm) {
@@ -3134,14 +3528,17 @@ int vm_step(VM* vm) {
                     vm->pc = code_start + cl->target_pc;
                 } else {
                     vm->current_closure_env = 0;
-                    if (inst.flags & IR_INST_FLAG_RELATIVE) vm->pc = vm->pc + (size_t)a_val;
-                    else vm->pc = code_start + (size_t)a_val;
+                if (inst.flags & IR_INST_FLAG_RELATIVE) vm->pc = vm->pc + (size_t)a_val;
+                else vm->pc = code_start + (size_t)a_val;
                 }
             }
             break;
         }
             
         case OP_RETORNAR: {
+            if (vm->mem_neuronal && vm_error_memoria_sin_cerrar(vm)) {
+                return 0;
+            }
             if (vm->stack_ptr == 0 || vm->fp_stack_ptr == 0) {
                 vm->running = 0;
                 vm->exit_code = (int)a_val;
@@ -3242,6 +3639,16 @@ int vm_step(VM* vm) {
                 const char* path = (const char*)vm->ir->data + offset;
 #if defined(_WIN32) || defined(_WIN64)
                 HMODULE h = LoadLibraryA(path);
+                {
+                    const char* repo = getenv("JASBOOT_REPO_ROOT");
+                    if (!h && repo && repo[0] && path && path[0] && !vm_ffi_path_is_absolute(path)) {
+                        char alt[1024];
+                        snprintf(alt, sizeof alt, "%s\\%s", repo, path);
+                        for (char* q = alt; *q; q++)
+                            if (*q == '/') *q = '\\';
+                        h = LoadLibraryA(alt);
+                    }
+                }
                 if (h) {
                     handle_val = (uint64_t)(uintptr_t)h;
                     if (vm->ffi_handles_count >= vm->ffi_handles_cap) {
@@ -3258,6 +3665,14 @@ int vm_step(VM* vm) {
                 }
 #else
                 void* h = dlopen(path, RTLD_LAZY);
+                {
+                    const char* repo = getenv("JASBOOT_REPO_ROOT");
+                    if (!h && repo && repo[0] && path && path[0] && !vm_ffi_path_is_absolute(path)) {
+                        char alt[1024];
+                        snprintf(alt, sizeof alt, "%s/%s", repo, path);
+                        h = dlopen(alt, RTLD_LAZY);
+                    }
+                }
                 if (h) {
                     handle_val = (uint64_t)(uintptr_t)h;
                     if (vm->ffi_handles_count >= vm->ffi_handles_cap) {
@@ -3669,6 +4084,35 @@ int vm_step(VM* vm) {
             break;
         }
 
+        case OP_IO_PAUSA: {
+            const char* mensaje = NULL;
+            if (inst.flags & IR_INST_FLAG_A_REGISTER) {
+                uint32_t msg_id = (uint32_t)vm_get_register(vm, inst.operand_a);
+                mensaje = vm_text_cache_get(vm, msg_id);
+            }
+            vm_io_pausa(mensaje);
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
+        case OP_PAUSA_MILISEGUNDOS: {
+            uint64_t ms_raw = vm_get_register(vm, inst.operand_b);
+            uint32_t ms = (uint32_t)(ms_raw > 86400000ull ? 86400000ull : ms_raw);
+#if defined(_WIN32) || defined(_WIN64)
+            Sleep((DWORD)ms);
+#else
+            if (ms > 0) {
+                unsigned sec = ms / 1000u;
+                unsigned usec = (ms % 1000u) * 1000u;
+                if (sec > 0) sleep(sec);
+                if (usec > 0) usleep(usec);
+            }
+#endif
+            vm_set_register(vm, inst.operand_a, 1u);
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
         case OP_IMPRIMIR_TEXTO: {
             uint32_t id = 0;
             if (inst.flags & IR_INST_FLAG_A_REGISTER) {
@@ -3692,7 +4136,7 @@ int vm_step(VM* vm) {
                 VMTextCacheEntry* ent = vm_text_cache_find(vm, id);
                 if (ent) {
                     if (ent->kind == VM_TEXT_RAW && ent->text) {
-                        vm_escribir_texto_bytes(ent->text, ent->text_len);
+                    vm_escribir_texto_bytes(ent->text, ent->text_len);
                     } else if (ent->kind == VM_TEXT_CONCAT) {
                         vm_text_emit_id(vm, id, stdout);
                         vm_flush_stdout_after_text(NULL, 0);
@@ -4297,13 +4741,33 @@ int vm_step(VM* vm) {
         }
 
         case OP_MEM_COPIAR_TEXTO: {
-            uint32_t off24 = (uint32_t)inst.operand_a | ((uint32_t)inst.operand_b << 8) | ((uint32_t)inst.operand_c << 16);
 #ifdef JASBOOT_LANG_INTEGRATION
-            if (vm->mem_neuronal && vm->ir && vm->ir->data && off24 + 8 <= vm->ir->header.data_size) {
+            if ((inst.flags & IR_INST_FLAG_A_REGISTER) && (inst.flags & IR_INST_FLAG_B_REGISTER)) {
+                uint32_t id_o = (uint32_t)vm->registers[inst.operand_b];
+                size_t text_len = 0;
+                char* text = vm_text_materialize_owned(vm, id_o, &text_len);
+                if (text) {
+                    uint32_t id_res = vm_alloc_runtime_text_id(vm);
+                    if (id_res != 0) {
+                        vm_text_cache_put_owned(vm, id_res, text, text_len);
+                        if (vm->mem_neuronal)
+                            jmn_guardar_texto(vm->mem_neuronal, id_res, vm_text_cache_get(vm, id_res));
+                        vm->registers[inst.operand_a] = (uint64_t)id_res;
+                    } else {
+                        free(text);
+                        vm->registers[inst.operand_a] = 0;
+                    }
+                } else {
+                    vm->registers[inst.operand_a] = 0;
+                }
+            } else if (vm->mem_neuronal) {
+                uint32_t off24 = (uint32_t)inst.operand_a | ((uint32_t)inst.operand_b << 8) | ((uint32_t)inst.operand_c << 16);
+                if (vm->ir && vm->ir->data && off24 + 8 <= vm->ir->header.data_size) {
                 uint32_t id_d = 0, id_o = 0;
                 vm_leer_u32(vm->ir->data, vm->ir->header.data_size, off24, &id_d);
                 vm_leer_u32(vm->ir->data, vm->ir->header.data_size, off24 + 4, &id_o);
                 jmn_copiar_texto(vm->mem_neuronal, id_o, id_d);
+                }
             }
 #endif
             vm->pc += IR_INSTRUCTION_SIZE;
@@ -4311,13 +4775,45 @@ int vm_step(VM* vm) {
         }
 
         case OP_MEM_ULTIMA_PALABRA: {
-            uint32_t off24 = (uint32_t)inst.operand_a | ((uint32_t)inst.operand_b << 8) | ((uint32_t)inst.operand_c << 16);
 #ifdef JASBOOT_LANG_INTEGRATION
-            if (vm->mem_neuronal && vm->ir && vm->ir->data && off24 + 8 <= vm->ir->header.data_size) {
+            if ((inst.flags & IR_INST_FLAG_A_REGISTER) && (inst.flags & IR_INST_FLAG_B_REGISTER)) {
+                uint32_t id_f = (uint32_t)vm->registers[inst.operand_b];
+                uint32_t res = 0;
+                size_t text_len = 0;
+                char* text = vm_text_materialize_owned(vm, id_f, &text_len);
+                if (text) {
+                    char* start = text;
+                    char* p = text;
+                    while (*p) {
+                        if (*p == ' ' || *p == '\t') {
+                            start = p + 1;
+                        }
+                        p++;
+                    }
+                    res = vm_alloc_runtime_text_id(vm);
+                    if (res != 0) {
+                        size_t out_len = strlen(start);
+                        char* out = (char*)malloc(out_len + 1);
+                        if (out) {
+                            memcpy(out, start, out_len + 1);
+                            vm_text_cache_put_owned(vm, res, out, out_len);
+                            if (vm->mem_neuronal)
+                                jmn_guardar_texto(vm->mem_neuronal, res, vm_text_cache_get(vm, res));
+                        } else {
+                            res = 0;
+                        }
+                    }
+                    free(text);
+                }
+                vm->registers[inst.operand_a] = (uint64_t)res;
+            } else if (vm->mem_neuronal) {
+                uint32_t off24 = (uint32_t)inst.operand_a | ((uint32_t)inst.operand_b << 8) | ((uint32_t)inst.operand_c << 16);
+                if (vm->ir && vm->ir->data && off24 + 8 <= vm->ir->header.data_size) {
                 uint32_t id_f = 0, id_d = 0;
                 vm_leer_u32(vm->ir->data, vm->ir->header.data_size, off24, &id_f);
                 vm_leer_u32(vm->ir->data, vm->ir->header.data_size, off24 + 4, &id_d);
                 jmn_ultima_palabra(vm->mem_neuronal, id_f, id_d);
+                }
             }
 #endif
             vm->pc += IR_INSTRUCTION_SIZE;
@@ -4455,8 +4951,23 @@ int vm_step(VM* vm) {
 
 
         case OP_MEM_PENSAR: {
-            // Se mantiene por compatibilidad legacy, pero redirige internamente si es necesario
-            // ... (implementación anterior omitida para brevedad si no se usa)
+            uint32_t id_in = (uint32_t)vm_get_register(vm, inst.operand_b);
+            int depth = 2;
+            if (inst.flags & IR_INST_FLAG_C_IMMEDIATE)
+                depth = (int)inst.operand_c;
+            if (depth < 1) depth = 1;
+            if (depth > 32) depth = 32;
+            uint32_t out_id = id_in;
+#ifdef JASBOOT_LANG_INTEGRATION
+            if (vm->mem_neuronal && id_in != 0)
+                out_id = jmn_razonamiento_multipath(vm->mem_neuronal, id_in, depth);
+            if (vm->mem_neuronal && out_id != 0) {
+                char buf[4096];
+                if (jmn_obtener_texto(vm->mem_neuronal, out_id, buf, sizeof(buf)) >= 0 && buf[0])
+                    vm_text_cache_put(vm, out_id, buf);
+            }
+#endif
+            vm_set_register(vm, inst.operand_a, (uint64_t)out_id);
             vm->pc += IR_INSTRUCTION_SIZE;
             break;
         }
@@ -4791,6 +5302,8 @@ int vm_step(VM* vm) {
                 jmn_finalizar_escritura(vm->mem_neuronal);
                 jmn_cerrar(vm->mem_neuronal);
                 vm->mem_neuronal = NULL;
+                vm->mem_neuronal_owner_depth = 0;
+                vm->mem_neuronal_open_line = 0;
             }
             
             // Usar jmn_abrir_escritura que maneja apertura/creación sin truncar
@@ -4812,6 +5325,8 @@ int vm_step(VM* vm) {
                 fprintf(stderr, "Error: No se pudo crear/cargar memoria '%s'\n", nombre);
                 vm_set_register(vm, inst.operand_a, 0); 
             } else {
+                vm->mem_neuronal_owner_depth = vm_call_depth(vm);
+                vm->mem_neuronal_open_line = vm->current_line;
                 vm_set_register(vm, inst.operand_a, 1); 
             }
 #endif
@@ -4827,6 +5342,8 @@ int vm_step(VM* vm) {
                 jmn_finalizar_escritura(vm->mem_neuronal);
                 jmn_cerrar(vm->mem_neuronal);
                 vm->mem_neuronal = NULL;
+                vm->mem_neuronal_owner_depth = 0;
+                vm->mem_neuronal_open_line = 0;
             }
 #endif
             vm->pc += IR_INSTRUCTION_SIZE;
@@ -4958,11 +5475,8 @@ int vm_step(VM* vm) {
                     if (s2 == jbuf_r) vm_text_cache_put(vm, id_der, s2);
                     size_t total_len = l1 + l2;
                     if (total_len >= 4096) {
-                        uint32_t h1 = id_izq * 16777619u;
-                        uint32_t h2 = id_der * 2166136261u;
-                        id_res = h1 ^ h2 ^ (uint32_t)total_len ^ 0x9E3779B9u;
-                        if (!vm_text_cache_find(vm, id_res))
-                            vm_text_cache_put_concat(vm, id_res, id_izq, id_der, total_len);
+                        id_res = vm_alloc_runtime_text_id(vm);
+                        vm_text_cache_put_concat(vm, id_res, id_izq, id_der, total_len);
                     } else {
                         char left_small[4096];
                         char right_small[4096];
@@ -4977,14 +5491,11 @@ int vm_step(VM* vm) {
                             s2 = right_small;
                         }
                         char* combined = (char*)malloc(total_len + 1);
-                        if (combined) {
-                            memcpy(combined, s1, l1);
-                            memcpy(combined + l1, s2, l2 + 1);
-                            id_res = vm_hash_texto(combined);
-                            if (!vm_text_cache_find(vm, id_res))
-                                vm_text_cache_put_owned(vm, id_res, combined, total_len);
-                            else
-                                free(combined);
+                    if (combined) {
+                        memcpy(combined, s1, l1);
+                        memcpy(combined + l1, s2, l2 + 1);
+                            id_res = vm_alloc_runtime_text_id(vm);
+                            vm_text_cache_put_owned(vm, id_res, combined, total_len);
                         }
                     }
                 }
@@ -5189,13 +5700,13 @@ int vm_step(VM* vm) {
                 frase = frase_stack;
                 f_len = strlen(frase_stack);
                 if (f_len > 0) {
-                    if (start < f_len) {
-                        if ((size_t)start + (size_t)len > f_len)
-                            len = (uint32_t)(f_len - start);
-                        if (len >= 4096) len = 4095;
-                        char salida[4096];
-                        memcpy(salida, frase + start, len);
-                        salida[len] = '\0';
+                if (start < f_len) {
+                    if ((size_t)start + (size_t)len > f_len)
+                        len = (uint32_t)(f_len - start);
+                    if (len >= 4096) len = 4095;
+                    char salida[4096];
+                    memcpy(salida, frase + start, len);
+                    salida[len] = '\0';
                         uint32_t id_res = vm_hash_texto(salida);
                         if (vm->mem_neuronal) jmn_guardar_texto(vm->mem_neuronal, id_res, salida);
                         vm_text_cache_put(vm, id_res, salida);
@@ -5216,23 +5727,13 @@ int vm_step(VM* vm) {
                     if (len >= 4096) len = 4095;
                     char salida[4096];
                     size_t wrote = 0;
-                    if (start == 0 && ent->preview && ent->preview_len > 0) {
-                        wrote = len;
-                        if (wrote > ent->preview_len) wrote = ent->preview_len;
-                        memcpy(salida, ent->preview, wrote);
-                    } else {
-                        wrote = vm_text_extract_range(vm, id_frase, start, len, salida);
-                    }
+                    wrote = vm_text_extract_range(vm, id_frase, start, len, salida);
                     salida[wrote] = '\0';
                     uint32_t id_res = vm_hash_texto(salida);
 #ifdef JASBOOT_LANG_INTEGRATION
                     if (vm->mem_neuronal) jmn_guardar_texto(vm->mem_neuronal, id_res, salida);
 #endif
                     vm_text_cache_put(vm, id_res, salida);
-                    if (start == 0 && ent->preview && wrote <= ent->preview_len) {
-                        ent->preview_id = id_res;
-                        ent->preview_id_len = (uint16_t)wrote;
-                    }
                     vm_substring_cache_put(vm, id_frase, start, len, id_res);
                     vm_set_register(vm, inst.operand_a, (uint64_t)id_res);
                 } else {
@@ -5449,9 +5950,16 @@ int vm_step(VM* vm) {
 
         case OP_JSON_STRINGIFY: {
             uint32_t json_h = (uint32_t)vm_get_register(vm, inst.operand_b);
+            int indent_step = 0;
+            if (inst.flags & IR_INST_FLAG_C_IMMEDIATE)
+                indent_step = (int)inst.operand_c;
+            else
+                indent_step = (int)vm_get_register(vm, inst.operand_c);
+            if (indent_step < 0) indent_step = 0;
+            if (indent_step > 16) indent_step = 16;
             VMJsonBuf out = {0};
             uint32_t text_id = 0;
-            if (!vm_json_stringify_value(vm, json_h, &out)) {
+            if (!vm_json_stringify_inner(vm, json_h, &out, indent_step, 0)) {
                 if (vm_try_catch_or_abort(vm, "json_stringify: valor JSON invalido")) return 0;
                 fprintf(stderr, "Error de ejecucion (VM): json_stringify: valor JSON invalido\n");
                 free(out.data);
@@ -5810,8 +6318,10 @@ int vm_step(VM* vm) {
         }
 
         case OP_BYTES_DESDE_TEXTO: {
-            const char* text = vm_text_cache_get(vm, (uint32_t)vm_get_register(vm, inst.operand_b));
-            vm->registers[inst.operand_a] = (uint64_t)vm_bytes_from_raw(vm, (const uint8_t*)(text ? text : ""), text ? (uint32_t)strlen(text) : 0u);
+            size_t text_len = 0;
+            char* text = vm_text_materialize_owned(vm, (uint32_t)vm_get_register(vm, inst.operand_b), &text_len);
+            vm->registers[inst.operand_a] = (uint64_t)vm_bytes_from_raw(vm, (const uint8_t*)(text ? text : ""), (uint32_t)text_len);
+            free(text);
             vm->pc += IR_INSTRUCTION_SIZE;
             break;
         }
@@ -5831,6 +6341,13 @@ int vm_step(VM* vm) {
                 }
             }
             vm->registers[inst.operand_a] = (uint64_t)text_id;
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
+        case OP_BYTES_PUNTERO: {
+            VMBytesEntry* entry = vm_bytes_get(vm, (uint32_t)vm_get_register(vm, inst.operand_b));
+            vm->registers[inst.operand_a] = (uint64_t)(uintptr_t)(entry ? entry->data : NULL);
             vm->pc += IR_INSTRUCTION_SIZE;
             break;
         }
@@ -5890,14 +6407,29 @@ int vm_step(VM* vm) {
                 s = socket(it->ai_family, it->ai_socktype, it->ai_protocol);
                 if (s == VM_SOCKET_INVALID) continue;
                 if (inst.opcode == OP_TCP_ESCUCHAR) {
+#if defined(_WIN32) || defined(_WIN64)
+                    int opt = 1;
+                    setsockopt(s, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, (const char*)&opt, sizeof(opt));
+#else
                     int opt = 1;
                     setsockopt(s, SOL_SOCKET, SO_REUSEADDR, (const char*)&opt, sizeof(opt));
-                    if (bind(s, it->ai_addr, (int)it->ai_addrlen) == 0 && listen(s, 16) == 0) {
-                        handle = vm_socket_wrap(vm, s, 1, 0);
+#endif
+                    if (bind(s, it->ai_addr, (int)it->ai_addrlen) == 0 && listen(s, 128) == 0) {
+                        vm_net_debugf("listen ok host=%s port=%u family=%d socket=%lld",
+                                      (host && host[0]) ? host : "*", (unsigned)port, (int)it->ai_family, (long long)s);
+                        handle = vm_socket_wrap(vm, s, 1, VM_SOCK_TO_NONE);
                         break;
                     }
-                } else if (connect(s, it->ai_addr, (int)it->ai_addrlen) == 0) {
-                    handle = vm_socket_wrap(vm, s, 0, 1);
+                    vm_net_debugf("listen fail host=%s port=%u family=%d wsa=%d errno=%d",
+                                  (host && host[0]) ? host : "*", (unsigned)port, (int)it->ai_family,
+#if defined(_WIN32) || defined(_WIN64)
+                                  (int)WSAGetLastError(),
+#else
+                                  0,
+#endif
+                                  errno);
+                } else if (vm_tcp_connect_with_timeout(s, it->ai_addr, (int)it->ai_addrlen, VM_TCP_CONNECT_TIMEOUT_SEC) == 0) {
+                    handle = vm_socket_wrap(vm, s, 0, VM_SOCK_TO_OUTBOUND);
                     break;
                 }
                 vm_socket_close(s);
@@ -5915,7 +6447,19 @@ int vm_step(VM* vm) {
             uint32_t handle = 0;
             if (listener && listener->is_listener) {
                 accepted = accept((vm_socket_native_t)listener->native_handle, NULL, NULL);
-                if (accepted != VM_SOCKET_INVALID) handle = vm_socket_wrap(vm, accepted, 0, 0);
+                if (accepted != VM_SOCKET_INVALID) {
+                    vm_net_debugf("accept ok listener=%u socket=%lld", (unsigned)vm_get_register(vm, inst.operand_b), (long long)accepted);
+                    handle = vm_socket_wrap(vm, accepted, 0, VM_SOCK_TO_INBOUND);
+                } else {
+                    vm_net_debugf("accept fail listener=%u wsa=%d errno=%d",
+                                  (unsigned)vm_get_register(vm, inst.operand_b),
+#if defined(_WIN32) || defined(_WIN64)
+                                  (int)WSAGetLastError(),
+#else
+                                  0,
+#endif
+                                  errno);
+                }
             }
             vm->registers[inst.operand_a] = (uint64_t)handle;
             vm->pc += IR_INSTRUCTION_SIZE;
@@ -5926,12 +6470,26 @@ int vm_step(VM* vm) {
             VMSocketEntry* sock = vm_socket_get(vm, (uint32_t)vm_get_register(vm, inst.operand_b));
             uint32_t payload_h = (uint32_t)vm_get_register(vm, inst.operand_c);
             VMBytesEntry* payload_b = vm_bytes_get(vm, payload_h);
-            const char* payload_t = payload_b ? NULL : vm_text_cache_get(vm, payload_h);
+            size_t payload_t_len = 0;
+            char* payload_t = payload_b ? NULL : vm_text_materialize_owned(vm, payload_h, &payload_t_len);
             int sent = 0;
             if (sock) {
-                if (payload_b) sent = (int)send((vm_socket_native_t)sock->native_handle, (const char*)payload_b->data, (int)payload_b->len, 0);
-                else if (payload_t) sent = (int)send((vm_socket_native_t)sock->native_handle, payload_t, (int)strlen(payload_t), 0);
+                if (payload_b) sent = vm_socket_send_all((vm_socket_native_t)sock->native_handle, payload_b->data, payload_b->len);
+                else if (payload_t) sent = vm_socket_send_all((vm_socket_native_t)sock->native_handle, (const uint8_t*)payload_t, (uint32_t)payload_t_len);
             }
+            vm_net_debugf("send socket=%u payload_h=%u sent=%d bytes_len=%u text=%s wsa=%d errno=%d",
+                          (unsigned)vm_get_register(vm, inst.operand_b),
+                          (unsigned)payload_h,
+                          sent,
+                          payload_b ? (unsigned)payload_b->len : 0u,
+                          payload_t ? "si" : "no",
+#if defined(_WIN32) || defined(_WIN64)
+                          (int)WSAGetLastError(),
+#else
+                          0,
+#endif
+                          errno);
+            free(payload_t);
             vm->registers[inst.operand_a] = (uint64_t)(sent > 0 ? sent : 0);
             vm->pc += IR_INSTRUCTION_SIZE;
             break;
@@ -5946,6 +6504,16 @@ int vm_step(VM* vm) {
                 if (out_h) {
                     VMBytesEntry* entry = vm_bytes_get(vm, out_h);
                     int n = entry ? (int)recv((vm_socket_native_t)sock->native_handle, (char*)entry->data, (int)max_len, 0) : -1;
+                    vm_net_debugf("recv socket=%u requested=%u got=%d wsa=%d errno=%d",
+                                  (unsigned)vm_get_register(vm, inst.operand_b),
+                                  (unsigned)max_len,
+                                  n,
+#if defined(_WIN32) || defined(_WIN64)
+                                  (int)WSAGetLastError(),
+#else
+                                  0,
+#endif
+                                  errno);
                     if (n > 0 && entry) {
                         entry->len = (uint32_t)n;
                     } else {
@@ -5991,12 +6559,14 @@ int vm_step(VM* vm) {
             VMTlsEntry* tls = vm_tls_get(vm, (uint32_t)vm_get_register(vm, inst.operand_b));
             uint32_t payload_h = (uint32_t)vm_get_register(vm, inst.operand_c);
             VMBytesEntry* payload_b = vm_bytes_get(vm, payload_h);
-            const char* payload_t = payload_b ? NULL : vm_text_cache_get(vm, payload_h);
+            size_t payload_t_len = 0;
+            char* payload_t = payload_b ? NULL : vm_text_materialize_owned(vm, payload_h, &payload_t_len);
             int sent = 0;
             if (tls) {
-                if (payload_b) sent = vm_tls_write_entry(tls, payload_b->data, payload_b->len);
-                else if (payload_t) sent = vm_tls_write_entry(tls, (const uint8_t*)payload_t, (uint32_t)strlen(payload_t));
+                if (payload_b) sent = vm_tls_write_all(tls, payload_b->data, payload_b->len);
+                else if (payload_t) sent = vm_tls_write_all(tls, (const uint8_t*)payload_t, (uint32_t)payload_t_len);
             }
+            free(payload_t);
             vm->registers[inst.operand_a] = (uint64_t)(sent > 0 ? sent : 0);
             vm->pc += IR_INSTRUCTION_SIZE;
             break;
@@ -6364,7 +6934,7 @@ int vm_step(VM* vm) {
             tam = vm_list_size_cache_get(vm, list_id_val, &ok_size);
 #ifdef JASBOOT_LANG_INTEGRATION
             if (!ok_size) {
-                ensure_jmn_col(vm);
+            ensure_jmn_col(vm);
             }
             if (!ok_size && vm->mem_colecciones) {
                 tam = (uint32_t)jmn_lista_tamano(vm->mem_colecciones, list_id_val);
@@ -6498,13 +7068,44 @@ int vm_step(VM* vm) {
         }
 
         case OP_MEM_OBTENER_VALOR: {
-            /* A = valor almacenado en clave B (recordar key con valor X); tipo ASOCIACION (1). Si no hay, A = B.
-             * Varias aristas tipo 1 desde la misma clave: la primera en la lista puede ser basura (p. ej. id sin texto
-             * por aprendizaje viejo). Se elige el primer destino con cadena en cache o JMN; si ninguno tiene texto, A = B. */
+            /* A = valor almacenado en clave B (recordar key con valor X); tipo ASOCIACION (1).
+             * Si la clave existe como concepto pero no tiene valor asociado, A = B.
+             * Si la clave no existe en JMN, es error de ejecucion capturable.
+             * Varias aristas tipo 1 desde la misma clave: la primera en la lista puede ser basura
+             * (p. ej. id sin texto por aprendizaje viejo). Se elige el primer destino con cadena en cache o JMN. */
 #ifdef JASBOOT_LANG_INTEGRATION
             if (vm->mem_neuronal) {
                 uint32_t key_id = (uint32_t)vm_get_register(vm, inst.operand_b);
                 JMNBusquedaResultado res[32];
+                JMNNodo* key_node = jmn_obtener_nodo(vm->mem_neuronal, key_id);
+                if (!key_node) {
+                    char trymsg[512];
+                    const char* key_txt = vm_text_cache_get(vm, key_id);
+                    char buf_txt[256];
+                    if ((!key_txt || !key_txt[0]) &&
+                        jmn_obtener_texto(vm->mem_neuronal, key_id, buf_txt, sizeof(buf_txt)) >= 0 &&
+                        buf_txt[0]) {
+                        vm_text_cache_put(vm, key_id, buf_txt);
+                        key_txt = vm_text_cache_get(vm, key_id);
+                    }
+                    if (key_txt && key_txt[0]) {
+                        snprintf(trymsg, sizeof trymsg,
+                                 "buscar: clave inexistente `%s`.",
+                                 key_txt);
+                    } else {
+                        snprintf(trymsg, sizeof trymsg,
+                                 "buscar: clave inexistente (id %u).",
+                                 (unsigned)key_id);
+                    }
+                    if (vm_try_catch_or_abort(vm, trymsg)) return 0;
+                    if (vm->current_line > 0)
+                        fprintf(stderr, "Error de ejecucion (VM) en la linea %d: %s\n", vm->current_line, trymsg);
+                    else
+                        fprintf(stderr, "Error de ejecucion (VM): %s\n", trymsg);
+                    vm->running = 0;
+                    vm->exit_code = 1;
+                    return 0;
+                }
                 int n = jmn_buscar_asociaciones(vm->mem_neuronal, key_id, 1, 0.01f, 1, res, 32);
                 uint32_t chosen = key_id;
                 if (n > 0) {
@@ -7185,8 +7786,8 @@ int vm_run_with_limit(VM* vm, uint64_t max_steps) {
     vm->exit_code = 0;
     if (!vm->ir_validated) {
         if (vm_load(vm, vm->ir) != 0) {
-            vm->exit_code = 1;
-            return 1;
+        vm->exit_code = 1;
+        return 1;
         }
     }
     
@@ -7661,6 +8262,7 @@ int vm_run_with_limit(VM* vm, uint64_t max_steps) {
         }
     }
     #endif
+    vm_fallar_si_memoria_sigue_abierta(vm);
     vm_print_profile_summary(vm);
     return vm->exit_code;
 }
