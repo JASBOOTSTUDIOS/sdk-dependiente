@@ -13,11 +13,13 @@
 #include <string.h>
 #include <stdlib.h>
 #include <sys/stat.h>
+#include <errno.h>
 
 #ifdef _WIN32
 #include <process.h>
 #include <direct.h>
 #include <io.h>
+int jbc_win_spawn_wait(const char *exe_path, const char *first_arg);
 /* No incluir windows.h: en MinGW choca con TokenType en lexer.h */
 typedef void *HMODULE_;
 typedef unsigned long DWORD_;
@@ -356,11 +358,12 @@ static int should_merge_function(const FunctionNode *f, const ProgramNode *mp, c
     (void)mp;
     if (!f || !spec) return 0;
     if (!f->is_exported) return 0;
+    /* USAR_IMPORT_NAMES valida la lista en validate_named_imports_for_module, pero aqui se fusiona
+     * todo lo exportado del modulo: cuerpos internos y estado comparten simbolos no listados;
+     * ademas el primer `usar` que toca la ruta canonica debe dejar el modulo completo para
+     * importaciones posteriores (misma ruta ya en loaded). */
     if (spec->import_kind == USAR_IMPORT_TODO) return 1;
-    if (spec->import_kind == USAR_IMPORT_NAMES) {
-        for (size_t i = 0; i < spec->n_import_names; i++)
-            if (spec->import_names[i] && f->name && strcmp(spec->import_names[i], f->name) == 0) return 1;
-    }
+    if (spec->import_kind == USAR_IMPORT_NAMES) return 1;
     return 0;
 }
 
@@ -369,10 +372,7 @@ static int should_merge_global_var(const VarDeclNode *vd, const ProgramNode *mp,
     if (!vd || !spec) return 0;
     if (!vd->is_exported) return 0;
     if (spec->import_kind == USAR_IMPORT_TODO) return 1;
-    if (spec->import_kind == USAR_IMPORT_NAMES) {
-        for (size_t i = 0; i < spec->n_import_names; i++)
-            if (spec->import_names[i] && vd->name && strcmp(spec->import_names[i], vd->name) == 0) return 1;
-    }
+    if (spec->import_kind == USAR_IMPORT_NAMES) return 1;
     return 0;
 }
 
@@ -452,6 +452,18 @@ static int validate_named_imports_for_module(const ProgramNode *mp, const Activa
         }
     }
     free(mod_canon);
+    return 0;
+}
+
+static int usar_path_is_absolute(const char *path) {
+    if (!path || !path[0]) return 0;
+#ifdef _WIN32
+    if ((((path[0] >= 'A' && path[0] <= 'Z') || (path[0] >= 'a' && path[0] <= 'z'))) &&
+        path[1] == ':' && (path[2] == '/' || path[2] == '\\'))
+        return 1;
+#endif
+    if (path[0] == '/' || (path[0] == '\\' && path[1] == '\\'))
+        return 1;
     return 0;
 }
 
@@ -555,7 +567,10 @@ static int process_usar_module_recursive(ProgramNode *main_p, const char *full_o
         const char *rel = ln->value.str;
         if (!rel || !rel[0]) continue;
         char child_full[2048];
-        snprintf(child_full, sizeof(child_full), "%s%c%s", child_base, PATH_SEP, rel);
+        if (usar_path_is_absolute(rel))
+            snprintf(child_full, sizeof(child_full), "%s", rel);
+        else
+            snprintf(child_full, sizeof(child_full), "%s%c%s", child_base, PATH_SEP, rel);
         for (char *c = child_full; *c; c++) if (*c == '/') *c = PATH_SEP;
         int sub_err = process_usar_module_recursive(main_p, child_full, full_open_path,
             an->base.line, an->base.col, cg, stack, loaded, an, compile_entry_diag);
@@ -672,7 +687,10 @@ static int register_usar_modules(ProgramNode *p, const char *in_path, const char
         const char *rel = ln->value.str;
         if (!rel || !rel[0]) continue;
         char full[2048];
-        snprintf(full, sizeof(full), "%s%c%s", base_dir, PATH_SEP, rel);
+        if (usar_path_is_absolute(rel))
+            snprintf(full, sizeof(full), "%s", rel);
+        else
+            snprintf(full, sizeof(full), "%s%c%s", base_dir, PATH_SEP, rel);
         for (char *c = full; *c; c++) if (*c == '/') *c = PATH_SEP;
         int one = process_usar_module_recursive(p, full, diag_path, an->base.line, an->base.col, cg, &stack, &loaded, an, diag_path);
         if (one) errs++;
@@ -1449,7 +1467,17 @@ int do_compile(const char *in_path, const char *out_path, char **err_msg) {
 
     SymbolTable sym;
     sym_init(&sym);
-    resolve_program(ast, &sym);
+    if (resolve_program(ast, &sym) > 0) {
+        fprintf(stderr, "%sCompilacion fallida: error al registrar clases/registros (herencia o orden de tipos).%s\n",
+                ANSI_RED, ANSI_RESET);
+        codegen_free(cg);
+        ast_free(ast);
+        sym_free(&sym);
+        parser_free(&par);
+        token_vec_free(&tvec);
+        free(buf);
+        return 1;
+    }
     
     /* Limpiar scopes de simbolos tras resolve_program. */
     sym_exit_scope(&sym);
@@ -1645,6 +1673,23 @@ static int find_vm_path(char *out, size_t out_size) {
     char path_tr[1024];
     /* 1) Desde el directorio del ejecutable: bin/../sdk-dependiente/jasboot-ir/bin/ */
     if (g_jbc_exe_dir[0]) {
+        /* 1) jas-compiler-c/bin: ../../jasboot-ir/bin (sdk-dependiente hermano de jas-compiler-c) */
+#ifdef _WIN32
+        snprintf(path, sizeof path, "%s%c..%c..%cjasboot-ir%cbin%cjasboot-ir-vm.exe",
+                 g_jbc_exe_dir, PATH_SEP, PATH_SEP, PATH_SEP, PATH_SEP, PATH_SEP);
+        snprintf(path_tr, sizeof path_tr, "%s%c..%c..%cjasboot-ir%cbin%cjasboot-ir-vm-trace.exe",
+                 g_jbc_exe_dir, PATH_SEP, PATH_SEP, PATH_SEP, PATH_SEP, PATH_SEP);
+#else
+        snprintf(path, sizeof path, "%s%c..%c..%cjasboot-ir%cbin%cjasboot-ir-vm",
+                 g_jbc_exe_dir, PATH_SEP, PATH_SEP, PATH_SEP, PATH_SEP, PATH_SEP);
+        snprintf(path_tr, sizeof path_tr, "%s%c..%c..%cjasboot-ir%cbin%cjasboot-ir-vm-trace",
+                 g_jbc_exe_dir, PATH_SEP, PATH_SEP, PATH_SEP, PATH_SEP, PATH_SEP);
+#endif
+        jbc_normalize_path_seps(path);
+        jbc_normalize_path_seps(path_tr);
+        if (jbc_pick_newest_vm(path, path_tr, out, out_size) == 0)
+            return 0;
+        /* 2) raiz/bin o similar: ../sdk-dependiente/jasboot-ir/bin */
 #ifdef _WIN32
         snprintf(path, sizeof path, "%s%c..%csdk-dependiente%cjasboot-ir%cbin%cjasboot-ir-vm.exe",
                  g_jbc_exe_dir, PATH_SEP, PATH_SEP, PATH_SEP, PATH_SEP, PATH_SEP);
@@ -1701,19 +1746,85 @@ static int find_vm_path(char *out, size_t out_size) {
     return 0;
 }
 
-/* Ejecuta VM con el binario */
-static int run_vm(const char *bin_path, const char *ruta_cerebro, const char *cwd) {
+#ifdef _WIN32
+static int jbc_is_dir_path(const char *path) {
+    struct _stat st;
+    if (!path || !path[0]) return 0;
+    if (_stat(path, &st) != 0) return 0;
+    return (st.st_mode & _S_IFDIR) != 0;
+}
+#else
+static int jbc_is_dir_path(const char *path) {
+    struct stat st;
+    if (!path || !path[0]) return 0;
+    if (stat(path, &st) != 0) return 0;
+    return S_ISDIR(st.st_mode);
+}
+#endif
+
+/* Subiendo desde el .jasb: primer ancestro que contiene sdk-dependiente/. */
+static int jbc_find_jasboot_repo_root(const char *input_abs, char *out, size_t out_sz) {
+    char cur[1024];
+    char *slash;
+    if (!input_abs || !out || out_sz < 4) return -1;
+    snprintf(cur, sizeof cur, "%s", input_abs);
+    slash = strrchr(cur, PATH_SEP);
+#ifndef _WIN32
+    if (!slash) slash = strrchr(cur, '/');
+#endif
+    if (slash) *slash = '\0';
+    else return -1;
+
+    while (cur[0]) {
+        char marker[1100];
+        snprintf(marker, sizeof marker, "%s%csdk-dependiente", cur, PATH_SEP);
+        if (jbc_is_dir_path(marker)) {
+            snprintf(out, out_sz, "%s", cur);
+            return 0;
+        }
+        slash = strrchr(cur, PATH_SEP);
+#ifndef _WIN32
+        if (!slash) slash = strrchr(cur, '/');
+#endif
+        if (!slash) break;
+        *slash = '\0';
+#ifdef _WIN32
+        if (cur[0] && cur[1] == ':' && cur[2] == '\0') break;
+#endif
+    }
+    return -1;
+}
+
+/* Ejecuta VM con el binario. jasb_input: ruta al .jasb (cualquier forma) para fijar JASBOOT_REPO_ROOT y ffi_cargar. */
+static int run_vm(const char *bin_path, const char *ruta_cerebro, const char *cwd, const char *jasb_input) {
     char vm_path[1024];
     find_vm_path(vm_path, sizeof vm_path);
+
+#ifdef _WIN32
+    if (jasb_input && jasb_input[0]) {
+        char input_abs[1024];
+        char root[1024];
+        if (_fullpath(input_abs, jasb_input, sizeof input_abs) && jbc_find_jasboot_repo_root(input_abs, root, sizeof root) == 0)
+            _putenv_s("JASBOOT_REPO_ROOT", root);
+    }
+#else
+    if (jasb_input && jasb_input[0]) {
+        char *resolved = realpath(jasb_input, NULL);
+        if (resolved) {
+            char root[1024];
+            if (jbc_find_jasboot_repo_root(resolved, root, sizeof root) == 0)
+                setenv("JASBOOT_REPO_ROOT", root, 1);
+            free(resolved);
+        }
+    }
+#endif
 
     if (cwd && chdir(cwd) != 0) { /* ignorar error cwd */ }
 
 #ifdef _WIN32
-    /* Usar _spawnv para evitar que cmd.exe interprete el comando */
-    const char *argv[] = { vm_path, bin_path, NULL };
     if (ruta_cerebro) _putenv_s("JASBOOT_RUTA_CEREBRO", ruta_cerebro);
     if (verbose_flag) _putenv_s("JASBOOT_DEBUG", "1");
-    intptr_t r = _spawnv(_P_WAIT, vm_path, argv);
+    int r = jbc_win_spawn_wait(vm_path, bin_path);
     if (ruta_cerebro) _putenv_s("JASBOOT_RUTA_CEREBRO", "");
     if (verbose_flag) _putenv_s("JASBOOT_DEBUG", "");
     if (r < 0) {
@@ -1724,13 +1835,13 @@ static int run_vm(const char *bin_path, const char *ruta_cerebro, const char *cw
     }
     if (r != 0) {
         fprintf(stderr, "%sjbc (-e): la VM termino con codigo de salida %d.%s\n",
-                ANSI_RED, (int)r, ANSI_RESET);
-        if ((int)r == 1)
+                ANSI_RED, r, ANSI_RESET);
+        if (r == 1)
             fprintf(stderr,
                     "         Motivo frecuente: error de ejecucion en la VM (p. ej. `mat4_inversa` singular, "
                     "division por cero o indice de lista invalido). Revise el mensaje que imprimio la VM justo encima.\n");
     }
-    return (int)r;
+    return r;
 #else
     char cmd[2048];
     snprintf(cmd, sizeof cmd, "JASBOOT_RUTA_CEREBRO=%s JASBOOT_DEBUG=%s \"%s\" \"%s\"",
@@ -1830,7 +1941,7 @@ static int do_test(const char *tests_dir) {
 #if !defined(JBC_TEST_DO_COMPILE)
 #if defined(JBC_MINIMAL_MAIN)
 static int find_vm_path(char *out, size_t out_size);
-static int run_vm(const char *bin_path, const char *ruta_cerebro, const char *cwd);
+static int run_vm(const char *bin_path, const char *ruta_cerebro, const char *cwd, const char *jasb_input);
 
 int main(int argc, char **argv) {
     init_jbc_exe_dir();
@@ -1899,7 +2010,7 @@ int main(int argc, char **argv) {
         size_t dlen = (size_t)(in_dir - input);
         if (dlen < sizeof cwd) { memcpy(cwd, input, dlen); cwd[dlen] = '\0'; } else cwd[0] = '\0';
     } else { cwd[0] = '.'; cwd[1] = '\0'; }
-    return run_vm(bin_abs, ruta_cerebro, cwd[0] ? cwd : NULL);
+    return run_vm(bin_abs, ruta_cerebro, cwd[0] ? cwd : NULL, input);
 }
 #else
 int main(int argc, char **argv) {
@@ -1994,7 +2105,7 @@ int main(int argc, char **argv) {
                 cwd[0] = '\0';
         } else
             strcpy(cwd, ".");
-        return run_vm(bin_abs, ruta_cerebro, cwd[0] ? cwd : NULL);
+        return run_vm(bin_abs, ruta_cerebro, cwd[0] ? cwd : NULL, input_file);
     }
 
     return 0;

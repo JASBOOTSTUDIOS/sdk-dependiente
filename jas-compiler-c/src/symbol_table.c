@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <stddef.h>
 
 #define DEFAULT_SIZE 8
 
@@ -190,6 +191,16 @@ const char *sym_lookup_lista_elem(SymbolTable *st, const char *name) {
     return NULL;
 }
 
+const char *sym_lookup_tarea_elem(SymbolTable *st, const char *name) {
+    if (!name) return NULL;
+    for (size_t i = st->scope_depth; i > 0; i--) {
+        SymbolEntry *e = find_in_scope(st->scopes[i - 1], name);
+        if (e && e->type_name && strcmp(e->type_name, "tarea") == 0 && e->lista_elem_type)
+            return e->lista_elem_type;
+    }
+    return NULL;
+}
+
 /* 3.6 */
 SymResult sym_get_or_create(SymbolTable *st, const char *name, const char *type_name) {
     SymResult r = sym_lookup(st, name);
@@ -210,8 +221,12 @@ static size_t get_field_size(SymbolTable *st, const char *type_name) {
     if (strcmp(type_name, "vec4") == 0) return 32;   /* 4 x 8 */
     if (strcmp(type_name, "mat4") == 0) return 128;  /* 16 x 8 bytes, row-major */
     if (strcmp(type_name, "mat3") == 0) return 72;   /* 9 x 8 bytes, row-major */
-    if (strcmp(type_name, "lista") == 0 || strcmp(type_name, "mapa") == 0) return 8;
+    if (strcmp(type_name, "lista") == 0 || strcmp(type_name, "mapa") == 0 || strcmp(type_name, "tarea") == 0)
+        return 8;
     if (strcmp(type_name, "funcion") == 0) return 8;  /* puntero de codigo (desplazamiento IR) */
+    if (strcmp(type_name, "bytes") == 0 || strcmp(type_name, "socket") == 0 || strcmp(type_name, "tls") == 0 ||
+        strcmp(type_name, "http_solicitud") == 0 || strcmp(type_name, "http_respuesta") == 0 || strcmp(type_name, "http_servidor") == 0)
+        return 8;
     return 8;  /* entero, u64, bool, etc. */
 }
 
@@ -240,6 +255,67 @@ void sym_register_struct(SymbolTable *st, const char *name, const char **field_t
     }
     si->total_size = offset;
     st->n_structs++;
+}
+
+int sym_register_struct_extends(SymbolTable *st, const char *name, const char *base_name,
+                                const char **field_types, const char **field_names, size_t n_fields) {
+    if (!st || !name || !base_name) return -1;
+    StructInfo *base_si = NULL;
+    for (size_t i = 0; i < st->n_structs; i++) {
+        if (strcmp(st->structs[i].name, base_name) == 0) {
+            base_si = &st->structs[i];
+            break;
+        }
+    }
+    if (!base_si) return -1;
+
+    for (size_t i = 0; i < n_fields; i++) {
+        if (!field_names[i]) continue;
+        for (size_t j = 0; j < base_si->n_fields; j++) {
+            if (base_si->fields[j].name && strcmp(field_names[i], base_si->fields[j].name) == 0)
+                return -2;
+        }
+    }
+
+    if (st->n_structs >= st->structs_cap) {
+        size_t new_cap = st->structs_cap ? st->structs_cap * 2 : 8;
+        StructInfo *p = realloc(st->structs, new_cap * sizeof(StructInfo));
+        if (!p) return -1;
+        st->structs = p;
+        st->structs_cap = new_cap;
+    }
+    StructInfo *si = &st->structs[st->n_structs];
+    memset(si, 0, sizeof(*si));
+    si->name = strdup(name);
+    if (!si->name) return -1;
+    size_t n_total = base_si->n_fields + n_fields;
+    si->fields = calloc(n_total, sizeof(StructFieldInfo));
+    if (!si->fields) {
+        free(si->name);
+        return -1;
+    }
+    si->n_fields = n_total;
+    size_t offset = 0;
+    for (size_t j = 0; j < base_si->n_fields; j++) {
+        StructFieldInfo *f = &si->fields[j];
+        f->name = strdup_safe(base_si->fields[j].name);
+        f->type_name = strdup_safe(base_si->fields[j].type_name);
+        f->offset = offset;
+        f->size = base_si->fields[j].size;
+        offset += f->size;
+    }
+    for (size_t i = 0; i < n_fields; i++) {
+        StructFieldInfo *f = &si->fields[base_si->n_fields + i];
+        f->name = strdup_safe(field_names[i]);
+        f->type_name = strdup_safe(field_types[i]);
+        f->offset = offset;
+        size_t fsize = get_field_size(st, field_types[i]);
+        f->size = fsize;
+        offset += fsize;
+    }
+    si->total_size = offset;
+    st->n_structs++;
+    return 0;
 }
 
 int sym_get_struct_field(SymbolTable *st, const char *struct_name, const char *field_name, size_t *out_offset, const char **out_type, size_t *out_size) {

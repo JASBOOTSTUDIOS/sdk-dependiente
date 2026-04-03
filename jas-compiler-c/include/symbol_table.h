@@ -75,12 +75,17 @@ int sym_is_parameter(SymbolTable *st, const char *name);
 SymResult sym_lookup(SymbolTable *st, const char *name);
 const char *sym_lookup_type(SymbolTable *st, const char *name);
 const char *sym_lookup_lista_elem(SymbolTable *st, const char *name);
+const char *sym_lookup_tarea_elem(SymbolTable *st, const char *name);
 
 /* 3.6 get_or_create */
 SymResult sym_get_or_create(SymbolTable *st, const char *name, const char *type_name);
 
 /* 3.7 Estructuras */
 void sym_register_struct(SymbolTable *st, const char *name, const char **field_types, const char **field_names, size_t n_fields);
+/* Herencia de datos: campos de base_name primero, luego los propios. base_name debe estar ya registrado.
+ * Devuelve 0 si ok; -1 base inexistente; -2 campo duplicado con la base. */
+int sym_register_struct_extends(SymbolTable *st, const char *name, const char *base_name,
+                                const char **field_types, const char **field_names, size_t n_fields);
 int sym_get_struct_field(SymbolTable *st, const char *struct_name, const char *field_name, size_t *out_offset, const char **out_type, size_t *out_size);
 size_t sym_get_struct_size(SymbolTable *st, const char *struct_name);
 size_t sym_struct_n_fields(SymbolTable *st, const char *struct_name);

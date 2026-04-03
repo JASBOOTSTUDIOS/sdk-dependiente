@@ -7,22 +7,102 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdarg.h>
 #include <errno.h>
 #include <math.h>
 #include <time.h>
 #include <ctype.h>
+#include <stdint.h>
 #if defined(_WIN32) || defined(_WIN64)
+#include <winsock2.h>
+#include <ws2tcpip.h>
 #include <windows.h>
 #include <conio.h>
 #else
 #include <unistd.h>
+#include <fcntl.h>
 #include <dlfcn.h>
 #include <sys/select.h>
 #include <termios.h>
+#include <glob.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
+#include <arpa/inet.h>
 #endif
 
 /* Maximo de caracteres '0'-'9' en la entrada (no cuenta '-' ni '.'). Alineado con precision util de flotante en VM. */
 #define VM_ENTRADA_FLOTANTE_MAX_DIGITOS 17
+
+#if defined(_WIN32) || defined(_WIN64)
+typedef SOCKET vm_socket_native_t;
+#define VM_SOCKET_INVALID INVALID_SOCKET
+#define vm_socket_close closesocket
+#else
+typedef int vm_socket_native_t;
+#define VM_SOCKET_INVALID (-1)
+#define vm_socket_close close
+#endif
+
+#if defined(_WIN32) || defined(_WIN64)
+static int vm_ffi_path_is_absolute(const char* p) {
+    if (!p || !p[0]) return 0;
+    if (p[0] == '\\' || p[0] == '/') return 1;
+    if (p[0] && p[1] == ':') return 1;
+    return 0;
+}
+#else
+static int vm_ffi_path_is_absolute(const char* p) { return p && p[0] == '/'; }
+#endif
+
+#define VM_TLS_MODO_CLIENTE 1
+#define VM_TLS_MODO_SERVIDOR 2
+#define VM_SSL_FILETYPE_PEM 1
+
+static int vm_tls_write_entry(VMTlsEntry* tls, const uint8_t* data, uint32_t len);
+static void vm_tls_close_entry(VM* vm, uint32_t handle);
+
+static int vm_net_debug_enabled(void) {
+    const char* v = getenv("JASBOOT_DEBUG_NET");
+    return v && v[0] && strcmp(v, "0") != 0;
+}
+
+static void vm_net_debugf(const char* fmt, ...) {
+    va_list ap;
+    if (!vm_net_debug_enabled()) return;
+    va_start(ap, fmt);
+    fprintf(stderr, "[jasboot-net] ");
+    vfprintf(stderr, fmt, ap);
+    fprintf(stderr, "\n");
+    fflush(stderr);
+    va_end(ap);
+}
+
+static int vm_socket_send_all(vm_socket_native_t s, const uint8_t* data, uint32_t len) {
+    uint32_t total = 0;
+    if (!data || len == 0) return 0;
+    while (total < len) {
+        int n = (int)send(s, (const char*)data + total, (int)(len - total), 0);
+        if (n <= 0) {
+            return total > 0 ? (int)total : n;
+        }
+        total += (uint32_t)n;
+    }
+    return (int)total;
+}
+
+static int vm_tls_write_all(VMTlsEntry* tls, const uint8_t* data, uint32_t len) {
+    uint32_t total = 0;
+    if (!data || len == 0) return 0;
+    while (total < len) {
+        int n = vm_tls_write_entry(tls, data + total, len - total);
+        if (n <= 0) {
+            return total > 0 ? (int)total : n;
+        }
+        total += (uint32_t)n;
+    }
+    return (int)total;
+}
 
 static int vm_entrada_fl_cuenta_digitos(const char *s, size_t n) {
     int d = 0;
@@ -247,6 +327,42 @@ static float vm_io_entrada_flotante_leer(void) {
     return strtof(buf, NULL);
 }
 
+static void vm_io_pausa(const char* mensaje) {
+    fflush(stdout);
+    fputs((mensaje && mensaje[0]) ? mensaje : "Ingrese una tecla para continuar...", stdout);
+    fflush(stdout);
+#if defined(_WIN32) || defined(_WIN64)
+    for (;;) {
+        int c = _getch();
+        if (c == 0 || c == 224) {
+            (void)_getch();
+            continue;
+        }
+        break;
+    }
+    fputc('\n', stdout);
+    fflush(stdout);
+#else
+    {
+        struct termios tsav, traw;
+        int raw_ok = isatty(STDIN_FILENO) && tcgetattr(STDIN_FILENO, &tsav) == 0;
+        if (raw_ok) {
+            traw = tsav;
+            traw.c_lflag &= (tcflag_t)~(ICANON | ECHO);
+            traw.c_cc[VMIN] = 1;
+            traw.c_cc[VTIME] = 0;
+            (void)tcsetattr(STDIN_FILENO, TCSANOW, &traw);
+        }
+        (void)getchar();
+        if (raw_ok) {
+            (void)tcsetattr(STDIN_FILENO, TCSANOW, &tsav);
+        }
+        fputc('\n', stdout);
+        fflush(stdout);
+    }
+#endif
+}
+
 #define VM_PERCEPCION_CAP_DEFAULT 64u
 #define VM_PERCEPCION_CAP_MIN 8u
 #define VM_PERCEPCION_CAP_MAX 4096u
@@ -455,6 +571,7 @@ static void vm_text_cache_free(VM* vm) {
         while (it) {
             VMTextCacheEntry* next = it->next;
             free(it->text);
+            free(it->preview);
             free(it);
             it = next;
         }
@@ -463,13 +580,143 @@ static void vm_text_cache_free(VM* vm) {
     vm->text_cache_buckets = NULL;
 }
 
+static void vm_list_size_cache_free(VM* vm) {
+    if (!vm || !vm->list_size_buckets) return;
+    for (size_t i = 0; i < vm->list_size_cache_size; i++) {
+        VMListSizeCacheEntry* it = vm->list_size_buckets[i];
+        while (it) {
+            VMListSizeCacheEntry* next = it->next;
+            free(it);
+            it = next;
+        }
+    }
+    free(vm->list_size_buckets);
+    vm->list_size_buckets = NULL;
+}
+
+static void vm_substring_cache_free(VM* vm) {
+    if (!vm || !vm->substring_cache_buckets) return;
+    for (size_t i = 0; i < vm->substring_cache_size; i++) {
+        VMSubstringCacheEntry* it = vm->substring_cache_buckets[i];
+        while (it) {
+            VMSubstringCacheEntry* next = it->next;
+            free(it);
+            it = next;
+        }
+    }
+    free(vm->substring_cache_buckets);
+    vm->substring_cache_buckets = NULL;
+}
+
+static size_t vm_substring_cache_hash(VM* vm, uint32_t text_id, uint32_t start, uint32_t len) {
+    uint32_t h = text_id * 16777619u;
+    h ^= start + 0x9E3779B9u + (h << 6) + (h >> 2);
+    h ^= len + 0x85EBCA6Bu + (h << 6) + (h >> 2);
+    return vm && vm->substring_cache_size ? ((size_t)h % vm->substring_cache_size) : 0;
+}
+
+static int vm_substring_cache_get(VM* vm, uint32_t text_id, uint32_t start, uint32_t len, uint32_t* out_result_id) {
+    if (!vm || !vm->substring_cache_buckets || vm->substring_cache_size == 0) return 0;
+    size_t index = vm_substring_cache_hash(vm, text_id, start, len);
+    for (VMSubstringCacheEntry* it = vm->substring_cache_buckets[index]; it; it = it->next) {
+        if (it->text_id == text_id && it->start == start && it->len == len) {
+            if (out_result_id) *out_result_id = it->result_id;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static void vm_substring_cache_put(VM* vm, uint32_t text_id, uint32_t start, uint32_t len, uint32_t result_id) {
+    if (!vm || !vm->substring_cache_buckets || vm->substring_cache_size == 0) return;
+    size_t index = vm_substring_cache_hash(vm, text_id, start, len);
+    for (VMSubstringCacheEntry* it = vm->substring_cache_buckets[index]; it; it = it->next) {
+        if (it->text_id == text_id && it->start == start && it->len == len) {
+            it->result_id = result_id;
+            return;
+        }
+    }
+    VMSubstringCacheEntry* n = (VMSubstringCacheEntry*)calloc(1, sizeof(VMSubstringCacheEntry));
+    if (!n) return;
+    n->text_id = text_id;
+    n->start = start;
+    n->len = len;
+    n->result_id = result_id;
+    n->next = vm->substring_cache_buckets[index];
+    vm->substring_cache_buckets[index] = n;
+}
+
+static VMListSizeCacheEntry* vm_list_size_cache_find(VM* vm, uint32_t id) {
+    if (!vm || !vm->list_size_buckets || vm->list_size_cache_size == 0) return NULL;
+    size_t index = (size_t)id % vm->list_size_cache_size;
+    for (VMListSizeCacheEntry* it = vm->list_size_buckets[index]; it; it = it->next) {
+        if (it->id == id) return it;
+    }
+    return NULL;
+}
+
+static void vm_list_size_cache_set(VM* vm, uint32_t id, uint32_t size) {
+    if (!vm || !vm->list_size_buckets || vm->list_size_cache_size == 0) return;
+    size_t index = (size_t)id % vm->list_size_cache_size;
+    VMListSizeCacheEntry* it = vm->list_size_buckets[index];
+    while (it) {
+        if (it->id == id) {
+            it->size = size;
+            return;
+        }
+        it = it->next;
+    }
+    VMListSizeCacheEntry* n = (VMListSizeCacheEntry*)calloc(1, sizeof(VMListSizeCacheEntry));
+    if (!n) return;
+    n->id = id;
+    n->size = size;
+    n->next = vm->list_size_buckets[index];
+    vm->list_size_buckets[index] = n;
+}
+
+static uint32_t vm_list_size_cache_get(VM* vm, uint32_t id, int* ok) {
+    VMListSizeCacheEntry* e = vm_list_size_cache_find(vm, id);
+    if (ok) *ok = (e != NULL);
+    return e ? e->size : 0;
+}
+
+static size_t vm_text_entry_len(VMTextCacheEntry* e) {
+    if (!e) return 0;
+    if (e->text) return e->text_len;
+    return e->text_len;
+}
+
+static size_t vm_text_entry_copy_prefix(VMTextCacheEntry* e, char* out, size_t max_len) {
+    if (!e || !out || max_len == 0) return 0;
+    if (e->kind == VM_TEXT_RAW) {
+        if (!e->text) return 0;
+        size_t take = e->text_len;
+        if (take > max_len) take = max_len;
+        memcpy(out, e->text, take);
+        return take;
+    }
+    if (e->preview && e->preview_len > 0) {
+        size_t take = e->preview_len;
+        if (take > max_len) take = max_len;
+        memcpy(out, e->preview, take);
+        return take;
+    }
+    if (e->text) {
+        size_t take = e->text_len;
+        if (take > max_len) take = max_len;
+        memcpy(out, e->text, take);
+        return take;
+    }
+    return 0;
+}
+
 static VMTextCacheEntry* vm_text_cache_find(VM* vm, uint32_t id) {
     if (!vm || !vm->text_cache_buckets) return NULL;
     size_t index = (size_t)id % vm->text_cache_size;
     for (VMTextCacheEntry* it = vm->text_cache_buckets[index]; it; it = it->next) {
         if (it->id == id) {
             /* Entradas antiguas sin text_len rellenado */
-            if (it->text && it->text_len == 0 && it->text[0] != '\0')
+            if (it->kind == VM_TEXT_RAW && it->text && it->text_len == 0 && it->text[0] != '\0')
                 it->text_len = strlen(it->text);
             return it;
         }
@@ -477,9 +724,308 @@ static VMTextCacheEntry* vm_text_cache_find(VM* vm, uint32_t id) {
     return NULL;
 }
 
+static size_t vm_text_extract_range(VM* vm, uint32_t id, size_t start, size_t len, char* out) {
+    typedef struct VMTextExtractFrame {
+        uint32_t id;
+        size_t start;
+        size_t len;
+    } VMTextExtractFrame;
+
+    if (!vm || !out || len == 0) return 0;
+
+    size_t written = 0;
+    size_t cap = 64;
+    size_t top = 0;
+    VMTextExtractFrame* stack = (VMTextExtractFrame*)malloc(cap * sizeof(VMTextExtractFrame));
+    if (!stack) return 0;
+    stack[top++] = (VMTextExtractFrame){ id, start, len };
+
+    while (top > 0) {
+        VMTextExtractFrame fr = stack[--top];
+        VMTextCacheEntry* e = vm_text_cache_find(vm, fr.id);
+        if (!e || fr.len == 0) continue;
+
+        if (e->kind == VM_TEXT_RAW) {
+            if (!e->text || fr.start >= e->text_len) continue;
+            size_t take = fr.len;
+            if (fr.start + take > e->text_len) take = e->text_len - fr.start;
+            memcpy(out + written, e->text + fr.start, take);
+            written += take;
+            continue;
+        }
+
+        if (e->kind == VM_TEXT_CONCAT) {
+            VMTextCacheEntry* left = vm_text_cache_find(vm, e->left_id);
+            size_t left_len = vm_text_entry_len(left);
+            if (fr.start < left_len) {
+                size_t take_left = left_len - fr.start;
+                if (take_left > fr.len) take_left = fr.len;
+                size_t remain = fr.len - take_left;
+                if (remain > 0) {
+                    if (top >= cap) {
+                        cap *= 2;
+                        VMTextExtractFrame* grown = (VMTextExtractFrame*)realloc(stack, cap * sizeof(VMTextExtractFrame));
+                        if (!grown) break;
+                        stack = grown;
+                    }
+                    stack[top++] = (VMTextExtractFrame){ e->right_id, 0, remain };
+                }
+                if (top >= cap) {
+                    cap *= 2;
+                    VMTextExtractFrame* grown = (VMTextExtractFrame*)realloc(stack, cap * sizeof(VMTextExtractFrame));
+                    if (!grown) break;
+                    stack = grown;
+                }
+                stack[top++] = (VMTextExtractFrame){ e->left_id, fr.start, take_left };
+            } else {
+                if (top >= cap) {
+                    cap *= 2;
+                    VMTextExtractFrame* grown = (VMTextExtractFrame*)realloc(stack, cap * sizeof(VMTextExtractFrame));
+                    if (!grown) break;
+                    stack = grown;
+                }
+                stack[top++] = (VMTextExtractFrame){ e->right_id, fr.start - left_len, fr.len };
+            }
+        }
+    }
+
+    free(stack);
+    return written;
+}
+
+static void vm_text_emit_id(VM* vm, uint32_t id, FILE* out) {
+    typedef struct VMEmitFrame {
+        uint32_t id;
+    } VMEmitFrame;
+
+    if (!vm || !out || id == 0) return;
+    VMTextCacheEntry* root = vm_text_cache_find(vm, id);
+    if (!root) return;
+    if (root->kind == VM_TEXT_RAW) {
+        if (root->text && root->text_len > 0) fwrite(root->text, 1, root->text_len, out);
+        return;
+    }
+
+    size_t cap = 64;
+    size_t top = 0;
+    VMEmitFrame* stack = (VMEmitFrame*)malloc(cap * sizeof(VMEmitFrame));
+    if (!stack) return;
+    stack[top++] = (VMEmitFrame){ id };
+
+    while (top > 0) {
+        VMEmitFrame fr = stack[--top];
+        VMTextCacheEntry* e = vm_text_cache_find(vm, fr.id);
+        if (!e) continue;
+        if (e->kind == VM_TEXT_RAW) {
+            if (e->text && e->text_len > 0) fwrite(e->text, 1, e->text_len, out);
+            continue;
+        }
+        if (top + 2 >= cap) {
+            cap *= 2;
+            VMEmitFrame* grown = (VMEmitFrame*)realloc(stack, cap * sizeof(VMEmitFrame));
+            if (!grown) break;
+            stack = grown;
+        }
+        stack[top++] = (VMEmitFrame){ e->right_id };
+        stack[top++] = (VMEmitFrame){ e->left_id };
+    }
+
+    free(stack);
+}
+
+static int vm_text_resolve_info(VM* vm, uint32_t id, char* scratch, size_t scratch_sz, const char** out_text, size_t* out_len) {
+    if (out_text) *out_text = NULL;
+    if (out_len) *out_len = 0;
+    if (!vm) return 0;
+    if (id == 0) {
+        if (out_text) *out_text = "";
+        return 1;
+    }
+
+    VMTextCacheEntry* e = vm_text_cache_find(vm, id);
+    if (e) {
+        if (out_text && e->kind == VM_TEXT_RAW) *out_text = e->text;
+        if (out_len) *out_len = e->text_len;
+        return 1;
+    }
+
+#ifdef JASBOOT_LANG_INTEGRATION
+    if (vm->mem_neuronal && scratch && scratch_sz > 0) {
+        if (jmn_obtener_texto(vm->mem_neuronal, id, scratch, scratch_sz) >= 0) {
+            if (out_text) *out_text = scratch;
+            if (out_len) *out_len = strlen(scratch);
+            return 1;
+        }
+    }
+#endif
+    return 0;
+}
+
 static const char* vm_text_cache_get(VM* vm, uint32_t id) {
     VMTextCacheEntry* e = vm_text_cache_find(vm, id);
-    return e ? e->text : NULL;
+    if (!e) return NULL;
+    if (e->kind == VM_TEXT_RAW) return e->text;
+    if (e->kind == VM_TEXT_CONCAT && !e->text) {
+        char* flat = (char*)malloc(e->text_len + 1);
+        if (!flat) return NULL;
+        size_t wrote = vm_text_extract_range(vm, id, 0, e->text_len, flat);
+        flat[wrote] = '\0';
+        e->text = flat;
+    }
+    return e->text;
+}
+
+static char* vm_text_materialize_owned(VM* vm, uint32_t id, size_t* out_len) {
+    if (out_len) *out_len = 0;
+    if (id == 0) {
+        char* empty = (char*)malloc(1);
+        if (empty) empty[0] = '\0';
+        return empty;
+    }
+    VMTextCacheEntry* e = vm_text_cache_find(vm, id);
+    if (!e) {
+        const char* cached = vm_text_cache_get(vm, id);
+        if (!cached) return NULL;
+        size_t len = strlen(cached);
+        char* copy = (char*)malloc(len + 1);
+        if (!copy) return NULL;
+        memcpy(copy, cached, len + 1);
+        if (out_len) *out_len = len;
+        return copy;
+    }
+    size_t len = vm_text_entry_len(e);
+    char* flat = (char*)malloc(len + 1);
+    if (!flat) return NULL;
+    size_t wrote = vm_text_extract_range(vm, id, 0, len, flat);
+    flat[wrote] = '\0';
+    if (out_len) *out_len = wrote;
+    return flat;
+}
+
+static int vm_text_cache_put_owned(VM* vm, uint32_t id, char* text, size_t text_len) {
+    if (!vm || !vm->text_cache_buckets) {
+        free(text);
+        return -1;
+    }
+    size_t index = id % vm->text_cache_size;
+    VMTextCacheEntry* it = vm->text_cache_buckets[index];
+    while (it) {
+        if (it->id == id) {
+            if (text && it->text && it->text_len == text_len && memcmp(it->text, text, text_len + 1) == 0) {
+                free(text);
+                return 0;
+            }
+            free(it->text);
+            free(it->preview);
+            it->text = text ? text : strdup("");
+            if (!it->text) return -1;
+            it->text_len = text ? text_len : 0;
+            it->preview = NULL;
+            it->preview_len = 0;
+            it->preview_id_len = 0;
+            it->preview_id = 0;
+            it->left_id = 0;
+            it->right_id = 0;
+            it->kind = VM_TEXT_RAW;
+            return 0;
+        }
+        it = it->next;
+    }
+
+    VMTextCacheEntry* n = (VMTextCacheEntry*)calloc(1, sizeof(VMTextCacheEntry));
+    if (!n) {
+        free(text);
+        return -1;
+    }
+    n->id = id;
+    n->text = text ? text : strdup("");
+    if (!n->text) {
+        free(n);
+        return -1;
+    }
+    n->text_len = text ? text_len : 0;
+    n->preview = NULL;
+    n->preview_len = 0;
+    n->preview_id_len = 0;
+    n->preview_id = 0;
+    n->left_id = 0;
+    n->right_id = 0;
+    n->kind = VM_TEXT_RAW;
+    n->next = vm->text_cache_buckets[index];
+    vm->text_cache_buckets[index] = n;
+    vm->text_cache_count++;
+    return 0;
+}
+
+static int vm_text_cache_put_concat(VM* vm, uint32_t id, uint32_t left_id, uint32_t right_id, size_t text_len) {
+    if (!vm || !vm->text_cache_buckets) return -1;
+    size_t index = id % vm->text_cache_size;
+    VMTextCacheEntry* it = vm->text_cache_buckets[index];
+    while (it) {
+        if (it->id == id) {
+            free(it->text);
+            free(it->preview);
+            it->text = NULL;
+            it->text_len = text_len;
+            it->left_id = left_id;
+            it->right_id = right_id;
+            it->kind = VM_TEXT_CONCAT;
+            it->preview = NULL;
+            it->preview_len = 0;
+            it->preview_id_len = 0;
+            it->preview_id = 0;
+            {
+                VMTextCacheEntry* left = vm_text_cache_find(vm, left_id);
+                VMTextCacheEntry* right = vm_text_cache_find(vm, right_id);
+                size_t preview_cap = text_len < VM_TEXT_PREVIEW_MAX ? text_len : VM_TEXT_PREVIEW_MAX;
+                if (preview_cap > 0) {
+                    it->preview = (char*)malloc(preview_cap + 1);
+                    if (it->preview) {
+                        size_t wrote = 0;
+                        wrote += vm_text_entry_copy_prefix(left, it->preview, preview_cap);
+                        if (wrote < preview_cap)
+                            wrote += vm_text_entry_copy_prefix(right, it->preview + wrote, preview_cap - wrote);
+                        it->preview[wrote] = '\0';
+                        it->preview_len = (uint16_t)wrote;
+                    }
+                }
+            }
+            return 0;
+        }
+        it = it->next;
+    }
+    VMTextCacheEntry* n = (VMTextCacheEntry*)calloc(1, sizeof(VMTextCacheEntry));
+    if (!n) return -1;
+    n->id = id;
+    n->text = NULL;
+    n->text_len = text_len;
+    n->preview = NULL;
+    n->preview_len = 0;
+    n->preview_id_len = 0;
+    n->preview_id = 0;
+    n->left_id = left_id;
+    n->right_id = right_id;
+    n->kind = VM_TEXT_CONCAT;
+    {
+        VMTextCacheEntry* left = vm_text_cache_find(vm, left_id);
+        VMTextCacheEntry* right = vm_text_cache_find(vm, right_id);
+        size_t preview_cap = text_len < VM_TEXT_PREVIEW_MAX ? text_len : VM_TEXT_PREVIEW_MAX;
+        if (preview_cap > 0) {
+            n->preview = (char*)malloc(preview_cap + 1);
+            if (n->preview) {
+                size_t wrote = 0;
+                wrote += vm_text_entry_copy_prefix(left, n->preview, preview_cap);
+                if (wrote < preview_cap)
+                    wrote += vm_text_entry_copy_prefix(right, n->preview + wrote, preview_cap - wrote);
+                n->preview[wrote] = '\0';
+                n->preview_len = (uint16_t)wrote;
+            }
+        }
+    }
+    n->next = vm->text_cache_buckets[index];
+    vm->text_cache_buckets[index] = n;
+    vm->text_cache_count++;
+    return 0;
 }
 
 static int vm_text_cache_put(VM* vm, uint32_t id, const char* text) {
@@ -523,10 +1069,17 @@ static int vm_text_cache_put(VM* vm, uint32_t id, const char* text) {
 }
 
 static int vm_text_cache_get_copy(VM* vm, uint32_t id, char* buf, size_t max_len) {
-    const char* txt = vm_text_cache_get(vm, id);
-    if (txt) {
-        strncpy(buf, txt, max_len - 1);
+    VMTextCacheEntry* e = vm_text_cache_find(vm, id);
+    if (e) {
+        size_t n = 0;
+        if (max_len == 0) return 0;
+        if (e->kind == VM_TEXT_RAW && e->text) {
+            strncpy(buf, e->text, max_len - 1);
         buf[max_len - 1] = '\0';
+            return 1;
+        }
+        n = vm_text_extract_range(vm, id, 0, max_len - 1, buf);
+        buf[n] = '\0';
         return 1;
     }
 #ifdef JASBOOT_LANG_INTEGRATION
@@ -538,6 +1091,15 @@ static int vm_text_cache_get_copy(VM* vm, uint32_t id, char* buf, size_t max_len
 }
 
 static uint32_t vm_hash_texto(const char* texto); /* forward */
+
+static uint32_t vm_alloc_runtime_text_id(VM* vm) {
+    if (!vm) return 0;
+    if (vm->next_runtime_text_id < 0x80000000u)
+        vm->next_runtime_text_id = 0x80000000u;
+    while (vm->next_runtime_text_id == 0 || vm_text_cache_find(vm, vm->next_runtime_text_id))
+        vm->next_runtime_text_id++;
+    return vm->next_runtime_text_id++;
+}
 
 /* Resolver path desde id: argv, cache, JMN. Para sys_argv paths que no están en cache. */
 static const char* vm_resolve_path(VM* vm, uint32_t id) {
@@ -574,6 +1136,85 @@ static const char* vm_resolve_path(VM* vm, uint32_t id) {
     return NULL;
 }
 
+#define VM_FS_LISTAR_MAX_FILES 8192
+#define VM_FS_LISTAR_MAX_BYTES ((size_t)262144)
+
+static int vm_fs_listar_name_cmp(const void* a, const void* b) {
+    return strcmp(*(const char* const*)a, *(const char* const*)b);
+}
+
+static void vm_fs_listar_push(char*** names, size_t* n, size_t* cap, const char* s) {
+    if (!s || !names || !n || !cap) return;
+    if (*n >= VM_FS_LISTAR_MAX_FILES) return;
+    if (*n + 1 > *cap) {
+        size_t nc = *cap ? (*cap * 2) : 32;
+        char** p = (char**)realloc(*names, nc * sizeof(char*));
+        if (!p) return;
+        *names = p;
+        *cap = nc;
+    }
+    (*names)[*n] = strdup(s);
+    if ((*names)[*n]) (*n)++;
+}
+
+/* Lista coincidencias de `pattern` (glob); solo nombres base, ordenados, separados por '\\n'. */
+static char* vm_fs_glob_list(const char* pattern) {
+    if (!pattern || !pattern[0]) return strdup("");
+    char** names = NULL;
+    size_t n = 0, cap = 0;
+#if defined(_WIN32) || defined(_WIN64)
+    WIN32_FIND_DATAA fd;
+    HANDLE h = FindFirstFileA(pattern, &fd);
+    if (h == INVALID_HANDLE_VALUE) return strdup("");
+    do {
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+        vm_fs_listar_push(&names, &n, &cap, fd.cFileName);
+    } while (FindNextFileA(h, &fd));
+    FindClose(h);
+#else
+    glob_t g;
+    memset(&g, 0, sizeof(g));
+    if (glob(pattern, 0, NULL, &g) != 0) return strdup("");
+    for (size_t i = 0; i < g.gl_pathc && n < VM_FS_LISTAR_MAX_FILES; i++) {
+        const char* full = g.gl_pathv[i];
+        const char* base = strrchr(full, '/');
+        base = base ? (base + 1) : full;
+        vm_fs_listar_push(&names, &n, &cap, base);
+    }
+    globfree(&g);
+#endif
+    if (n == 0) {
+        free(names);
+        return strdup("");
+    }
+    qsort(names, n, sizeof(names[0]), vm_fs_listar_name_cmp);
+    char* out = (char*)malloc(VM_FS_LISTAR_MAX_BYTES + 1);
+    if (!out) {
+        for (size_t i = 0; i < n; i++) free(names[i]);
+        free(names);
+        return strdup("");
+    }
+    size_t pos = 0;
+    for (size_t i = 0; i < n; i++) {
+        if (i > 0) {
+            if (pos + 1 >= VM_FS_LISTAR_MAX_BYTES) break;
+            out[pos++] = '\n';
+        }
+        size_t sl = strlen(names[i]);
+        if (pos + sl >= VM_FS_LISTAR_MAX_BYTES) {
+            memcpy(out + pos, names[i], VM_FS_LISTAR_MAX_BYTES - pos);
+            pos = VM_FS_LISTAR_MAX_BYTES;
+            break;
+        }
+        memcpy(out + pos, names[i], sl);
+        pos += sl;
+    }
+    out[pos] = '\0';
+    for (size_t i = 0; i < n; i++) free(names[i]);
+    free(names);
+    return out;
+}
+
 
 VM* vm_create(void) {
     setvbuf(stdout, NULL, _IONBF, 0);
@@ -595,6 +1236,11 @@ VM* vm_create(void) {
     vm->text_cache_size = 4096; // Suficiente para un compilador
     vm->text_cache_buckets = (VMTextCacheEntry**)calloc(vm->text_cache_size, sizeof(VMTextCacheEntry*));
     vm->text_cache_count = 0;
+    vm->next_runtime_text_id = 0x80000000u;
+    vm->list_size_cache_size = 2048;
+    vm->list_size_buckets = (VMListSizeCacheEntry**)calloc(vm->list_size_cache_size, sizeof(VMListSizeCacheEntry*));
+    vm->substring_cache_size = 4096;
+    vm->substring_cache_buckets = (VMSubstringCacheEntry**)calloc(vm->substring_cache_size, sizeof(VMSubstringCacheEntry*));
 
     vm->stack_ptr = 0;
     vm->fp_stack_ptr = 0;
@@ -606,6 +1252,8 @@ VM* vm_create(void) {
     vm->try_depth = 0;
     vm->ir = ir_file_create();
     vm->mem_neuronal = NULL;
+    vm->mem_neuronal_owner_depth = 0;
+    vm->mem_neuronal_open_line = 0;
     vm->context = NULL;
     vm->self_path = NULL;
 
@@ -630,6 +1278,26 @@ VM* vm_create(void) {
     vm->rastro_head = 0;
     vm->rastro_count = 0;
     vm->elegir_por_peso_seed = 0;
+    vm->ir_validated = 0;
+    vm->pc_hits = NULL;
+    vm->pc_hits_len = 0;
+    vm->profile_enabled = getenv("JASBOOT_VM_PROFILE") ? 1 : 0;
+    vm->bytes_values = NULL;
+    vm->bytes_count = 0;
+    vm->bytes_cap = 0;
+    vm->sockets = NULL;
+    vm->socket_count = 0;
+    vm->socket_cap = 0;
+    vm->tls_entries = NULL;
+    vm->tls_count = 0;
+    vm->tls_cap = 0;
+    vm->http_servers = NULL;
+    vm->http_server_count = 0;
+    vm->http_server_cap = 0;
+    vm->tls_server_ctx_cached = NULL;
+    vm->tls_server_cert_cached = NULL;
+    vm->tls_server_key_cached = NULL;
+    vm->net_initialized = 0;
 
     // Pre-poblar cache con cadena vacía (hash 5381) para estabilidad
     vm_text_cache_put(vm, 5381, "");
@@ -685,8 +1353,16 @@ static void vm_escribir_entero(uint64_t valor) {
     fflush(stdout);
 }
 
+/* Compat opcional: solo convertir epoch -> fecha cuando el usuario lo pida explícitamente.
+ * Por defecto, imprimir un entero debe imprimir el entero exacto, sin heurísticas. */
+static int vm_pretty_timestamp_enabled(void) {
+    const char *env = getenv("JASBOOT_IMPRIMIR_TIMESTAMP_COMO_FECHA");
+    return env && strcmp(env, "1") == 0;
+}
+
 /* Si valor parece timestamp Unix (segundos 2001-2038), imprime fecha/hora legible y devuelve 1; si no, 0. */
 static int vm_escribir_si_timestamp(uint64_t valor) {
+    if (!vm_pretty_timestamp_enabled()) return 0;
     if (valor < 1000000000ULL || valor > 2500000000ULL) return 0;
     time_t t = (time_t)valor;
     struct tm* tm = localtime(&t);
@@ -777,6 +1453,44 @@ static void vm_mem_write_float(VM* vm, size_t addr, float f) {
     *(uint64_t*)(vm->memory + addr) = uf.u64;
 }
 
+static void vm_free_cached_tls_server_ctx(VM* vm);
+
+static uint32_t vm_call_depth(VM* vm) {
+    if (!vm) return 0;
+    return (uint32_t)vm->stack_ptr;
+}
+
+static void vm_format_source_path(VM* vm, char* out, size_t out_size) {
+    size_t len;
+    if (!out || out_size == 0) return;
+    out[0] = '\0';
+    if (!vm || !vm->ir_path || !vm->ir_path[0]) return;
+    snprintf(out, out_size, "%s", vm->ir_path);
+    len = strlen(out);
+    if (len >= 4 && strcmp(out + len - 4, ".jbo") == 0) {
+        memcpy(out + len - 4, ".jasb", 6);
+    }
+}
+
+static void vm_fallar_si_memoria_sigue_abierta(VM* vm) {
+    if (!vm) return;
+#ifdef JASBOOT_LANG_INTEGRATION
+    if (vm->exit_code == 0 && vm->mem_neuronal) {
+        if (vm->mem_neuronal_open_line > 0) {
+            fprintf(stderr,
+                    "Error de ejecucion (VM): memoria neuronal abierta en la linea %d sin `cerrar_memoria()`. Cierra la memoria antes de terminar el programa.\n",
+                    vm->mem_neuronal_open_line);
+        } else {
+            fprintf(stderr,
+                    "Error de ejecucion (VM): memoria neuronal abierta sin `cerrar_memoria()`. Cierra la memoria antes de terminar el programa.\n");
+        }
+        vm->exit_code = 1;
+    }
+#else
+    (void)vm;
+#endif
+}
+
 void vm_destroy(VM* vm) {
     if (!vm) return;
 #ifdef JASBOOT_LANG_INTEGRATION
@@ -784,6 +1498,8 @@ void vm_destroy(VM* vm) {
         jmn_finalizar_escritura(vm->mem_neuronal);
         jmn_cerrar(vm->mem_neuronal);
         vm->mem_neuronal = NULL;
+        vm->mem_neuronal_owner_depth = 0;
+        vm->mem_neuronal_open_line = 0;
     }
     if (vm->mem_colecciones) {
         jmn_cerrar(vm->mem_colecciones);
@@ -791,6 +1507,8 @@ void vm_destroy(VM* vm) {
     }
 #endif
     vm_text_cache_free(vm);
+    vm_list_size_cache_free(vm);
+    vm_substring_cache_free(vm);
     if (vm->ffi_handles) {
 #if defined(_WIN32) || defined(_WIN64)
         for (size_t i = 0; i < vm->ffi_handles_count; i++)
@@ -812,6 +1530,47 @@ void vm_destroy(VM* vm) {
     vm->percepcion_buf = NULL;
     free(vm->rastro_buf);
     vm->rastro_buf = NULL;
+    free(vm->pc_hits);
+    vm->pc_hits = NULL;
+    if (vm->json_values) {
+        for (uint32_t i = 0; i < vm->json_count; i++) {
+            free(vm->json_values[i].items);
+            free(vm->json_values[i].keys);
+        }
+        free(vm->json_values);
+        vm->json_values = NULL;
+    }
+    free(vm->closures);
+    vm->closures = NULL;
+    if (vm->bytes_values) {
+        for (uint32_t i = 0; i < vm->bytes_count; i++) free(vm->bytes_values[i].data);
+        free(vm->bytes_values);
+        vm->bytes_values = NULL;
+    }
+    if (vm->sockets) {
+        for (uint32_t i = 0; i < vm->socket_count; i++) {
+            if (vm->sockets[i].is_open) vm_socket_close((vm_socket_native_t)vm->sockets[i].native_handle);
+        }
+        free(vm->sockets);
+        vm->sockets = NULL;
+    }
+    if (vm->tls_entries) {
+        for (uint32_t i = 0; i < vm->tls_count; i++) {
+            if (vm->tls_entries[i].is_open) vm_tls_close_entry(vm, i + 1);
+        }
+        free(vm->tls_entries);
+        vm->tls_entries = NULL;
+    }
+    vm_free_cached_tls_server_ctx(vm);
+    free(vm->tls_server_cert_cached);
+    vm->tls_server_cert_cached = NULL;
+    free(vm->tls_server_key_cached);
+    vm->tls_server_key_cached = NULL;
+    free(vm->http_servers);
+    vm->http_servers = NULL;
+#if defined(_WIN32) || defined(_WIN64)
+    if (vm->net_initialized) WSACleanup();
+#endif
     if (vm->memory) free(vm->memory);
     if (vm->context) free(vm->context);
     if (vm->ir_path) free(vm->ir_path);
@@ -835,15 +1594,1202 @@ static uint32_t vm_hash_texto(const char* texto) {
     return hash;
 }
 
+#define VM_CLOSURE_TAG UINT64_C(0x8000000000000000)
+
+static int vm_closure_is_handle(uint64_t value) {
+    return (value & VM_CLOSURE_TAG) != 0;
+}
+
+static uint32_t vm_closure_handle_id(uint64_t value) {
+    return (uint32_t)(value & UINT64_C(0x7FFFFFFF));
+}
+
+static int vm_closure_reserve(VM* vm, uint32_t needed) {
+    if (!vm) return 0;
+    if (needed <= vm->closure_cap) return 1;
+    {
+        uint32_t cap = vm->closure_cap ? vm->closure_cap * 2u : 32u;
+        while (cap < needed) cap *= 2u;
+        VMClosureEntry* next = (VMClosureEntry*)realloc(vm->closures, cap * sizeof(VMClosureEntry));
+        if (!next) return 0;
+        memset(next + vm->closure_cap, 0, (cap - vm->closure_cap) * sizeof(VMClosureEntry));
+        vm->closures = next;
+        vm->closure_cap = cap;
+    }
+    return 1;
+}
+
+static uint64_t vm_closure_create(VM* vm, size_t target_pc, uint32_t env_list_id) {
+    uint32_t id;
+    if (!vm_closure_reserve(vm, vm->closure_count + 1)) return 0;
+    vm->closures[vm->closure_count].target_pc = target_pc;
+    vm->closures[vm->closure_count].env_list_id = env_list_id;
+    vm->closure_count++;
+    id = vm->closure_count;
+    return VM_CLOSURE_TAG | (uint64_t)id;
+}
+
+static VMClosureEntry* vm_closure_get(VM* vm, uint64_t handle) {
+    uint32_t id;
+    if (!vm || !vm_closure_is_handle(handle)) return NULL;
+    id = vm_closure_handle_id(handle);
+    if (id == 0 || id > vm->closure_count) return NULL;
+    return &vm->closures[id - 1];
+}
+
+static int vm_net_init(VM* vm) {
+    if (!vm) return 0;
+    if (vm->net_initialized) return 1;
+#if defined(_WIN32) || defined(_WIN64)
+    {
+        WSADATA wsa;
+        if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) return 0;
+    }
+#endif
+    vm->net_initialized = 1;
+    return 1;
+}
+
+static int vm_bytes_reserve(VM* vm, uint32_t needed) {
+    if (!vm) return 0;
+    if (needed <= vm->bytes_cap) return 1;
+    {
+        uint32_t cap = vm->bytes_cap ? vm->bytes_cap * 2u : 32u;
+        while (cap < needed) cap *= 2u;
+        VMBytesEntry* next = (VMBytesEntry*)realloc(vm->bytes_values, cap * sizeof(VMBytesEntry));
+        if (!next) return 0;
+        memset(next + vm->bytes_cap, 0, (cap - vm->bytes_cap) * sizeof(VMBytesEntry));
+        vm->bytes_values = next;
+        vm->bytes_cap = cap;
+    }
+    return 1;
+}
+
+static uint32_t vm_bytes_new(VM* vm, uint32_t len) {
+    VMBytesEntry* entry;
+    if (!vm_bytes_reserve(vm, vm->bytes_count + 1)) return 0;
+    entry = &vm->bytes_values[vm->bytes_count];
+    memset(entry, 0, sizeof(*entry));
+    if (len > 0) {
+        entry->data = (uint8_t*)calloc(len, 1);
+        if (!entry->data) return 0;
+        entry->len = len;
+        entry->cap = len;
+    }
+    vm->bytes_count++;
+    return vm->bytes_count;
+}
+
+static VMBytesEntry* vm_bytes_get(VM* vm, uint32_t handle) {
+    if (!vm || handle == 0 || handle > vm->bytes_count) return NULL;
+    return &vm->bytes_values[handle - 1];
+}
+
+static uint32_t vm_bytes_from_raw(VM* vm, const uint8_t* data, uint32_t len) {
+    uint32_t handle = vm_bytes_new(vm, len);
+    VMBytesEntry* entry = vm_bytes_get(vm, handle);
+    if (!entry) return 0;
+    if (len > 0 && data) memcpy(entry->data, data, len);
+    return handle;
+}
+
+static uint32_t vm_bytes_new_uninitialized(VM* vm, uint32_t len) {
+    VMBytesEntry* entry;
+    if (!vm_bytes_reserve(vm, vm->bytes_count + 1)) return 0;
+    entry = &vm->bytes_values[vm->bytes_count];
+    memset(entry, 0, sizeof(*entry));
+    if (len > 0) {
+        entry->data = (uint8_t*)malloc(len);
+        if (!entry->data) return 0;
+        entry->len = len;
+        entry->cap = len;
+    }
+    vm->bytes_count++;
+    return vm->bytes_count;
+}
+
+/* connect() bloqueante puede colgarse indefinidamente si el SYN no recibe RST (firewall). */
+#define VM_TCP_CONNECT_TIMEOUT_SEC 30
+
+static int vm_socket_set_blocking(vm_socket_native_t s, int blocking) {
+#if defined(_WIN32) || defined(_WIN64)
+    u_long mode = blocking ? 0UL : 1UL;
+    return ioctlsocket(s, FIONBIO, &mode) == 0 ? 0 : -1;
+#else
+    int fl = fcntl((int)s, F_GETFL, 0);
+    if (fl < 0) return -1;
+    if (blocking)
+        fl &= ~O_NONBLOCK;
+    else
+        fl |= O_NONBLOCK;
+    return fcntl((int)s, F_SETFL, fl) == 0 ? 0 : -1;
+#endif
+}
+
+/* Conecta con plazo maximo; deja el socket en modo bloqueante si tiene exito. */
+static int vm_tcp_connect_with_timeout(vm_socket_native_t s, const struct sockaddr* addr, int addrlen, int timeout_sec) {
+    if (vm_socket_set_blocking(s, 0) != 0) return -1;
+    int cr = connect(s, addr, addrlen);
+    if (cr == 0) {
+        return vm_socket_set_blocking(s, 1);
+    }
+#if defined(_WIN32) || defined(_WIN64)
+    {
+        int w = (int)WSAGetLastError();
+        if (w != WSAEWOULDBLOCK && w != WSAEINPROGRESS) {
+            (void)vm_socket_set_blocking(s, 1);
+            return -1;
+        }
+    }
+#else
+    if (errno != EINPROGRESS && errno != EALREADY) {
+        (void)vm_socket_set_blocking(s, 1);
+        return -1;
+    }
+#endif
+    fd_set wf;
+    fd_set xf;
+    FD_ZERO(&wf);
+    FD_ZERO(&xf);
+    FD_SET(s, &wf);
+    FD_SET(s, &xf);
+    struct timeval tv;
+    tv.tv_sec = timeout_sec;
+    tv.tv_usec = 0;
+#if defined(_WIN32) || defined(_WIN64)
+    int sel = select(0, NULL, &wf, &xf, &tv);
+#else
+    int sel = select((int)s + 1, NULL, &wf, &xf, &tv);
+#endif
+    if (sel <= 0) {
+        (void)vm_socket_set_blocking(s, 1);
+        return -1;
+    }
+    int soe = 0;
+#if defined(_WIN32) || defined(_WIN64)
+    int solen = (int)sizeof(soe);
+#else
+    socklen_t solen = (socklen_t)sizeof(soe);
+#endif
+    if (getsockopt(s, SOL_SOCKET, SO_ERROR, (char*)&soe, &solen) != 0 || soe != 0) {
+        (void)vm_socket_set_blocking(s, 1);
+        return -1;
+    }
+    return vm_socket_set_blocking(s, 1);
+}
+
+static int vm_socket_reserve(VM* vm, uint32_t needed) {
+    if (!vm) return 0;
+    if (needed <= vm->socket_cap) return 1;
+    {
+        uint32_t cap = vm->socket_cap ? vm->socket_cap * 2u : 16u;
+        while (cap < needed) cap *= 2u;
+        VMSocketEntry* next = (VMSocketEntry*)realloc(vm->sockets, cap * sizeof(VMSocketEntry));
+        if (!next) return 0;
+        memset(next + vm->socket_cap, 0, (cap - vm->socket_cap) * sizeof(VMSocketEntry));
+        vm->sockets = next;
+        vm->socket_cap = cap;
+    }
+    return 1;
+}
+
+/* Cliente saliente (p. ej. HTTPS a Supabase): plazos cortos para no bloquear el servidor monohilo tanto tiempo.
+ * Cliente entrante (aceptado en el API HTTP): plazo largo para cuerpos POST lentos. */
+typedef enum {
+    VM_SOCK_TO_NONE = 0,
+    VM_SOCK_TO_INBOUND = 1,
+    VM_SOCK_TO_OUTBOUND = 2
+} vm_sock_to_mode;
+
+static void vm_socket_apply_timeouts_mode(vm_socket_native_t s, vm_sock_to_mode mode) {
+    if (mode == VM_SOCK_TO_NONE) return;
+#if defined(_WIN32) || defined(_WIN64)
+    /* Entrante: 60s (suficiente para POST; evita esperas de 2min si el cliente deja la conexion a medias). */
+    DWORD ms = (mode == VM_SOCK_TO_OUTBOUND) ? 20000u : 60000u;
+    setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, (const char*)&ms, sizeof(ms));
+    setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, (const char*)&ms, sizeof(ms));
+#else
+    struct timeval tv;
+    tv.tv_sec = (mode == VM_SOCK_TO_OUTBOUND) ? 20 : 60;
+    tv.tv_usec = 0;
+    setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+#endif
+}
+
+static void vm_socket_enable_nodelay(vm_socket_native_t s) {
+    int opt = 1;
+    setsockopt(s, IPPROTO_TCP, TCP_NODELAY, (const char*)&opt, sizeof(opt));
+}
+
+static uint32_t vm_socket_wrap(VM* vm, vm_socket_native_t native_handle, int is_listener, vm_sock_to_mode timeout_mode) {
+    if (!vm_socket_reserve(vm, vm->socket_count + 1)) return 0;
+    if (!is_listener) {
+        vm_socket_enable_nodelay(native_handle);
+        vm_socket_apply_timeouts_mode(native_handle, timeout_mode);
+    }
+    vm->sockets[vm->socket_count].native_handle = (intptr_t)native_handle;
+    vm->sockets[vm->socket_count].is_listener = (uint8_t)(is_listener ? 1 : 0);
+    vm->sockets[vm->socket_count].is_open = 1;
+    vm->socket_count++;
+    return vm->socket_count;
+}
+
+static VMSocketEntry* vm_socket_get(VM* vm, uint32_t handle) {
+    if (!vm || handle == 0 || handle > vm->socket_count) return NULL;
+    if (!vm->sockets[handle - 1].is_open) return NULL;
+    return &vm->sockets[handle - 1];
+}
+
+static void vm_socket_close_entry(VM* vm, uint32_t handle) {
+    VMSocketEntry* entry = vm_socket_get(vm, handle);
+    if (!entry) return;
+    vm_socket_close((vm_socket_native_t)entry->native_handle);
+    entry->native_handle = (intptr_t)VM_SOCKET_INVALID;
+    entry->is_open = 0;
+}
+
+static int vm_tls_reserve(VM* vm, uint32_t needed) {
+    if (!vm) return 0;
+    if (needed <= vm->tls_cap) return 1;
+    {
+        uint32_t cap = vm->tls_cap ? vm->tls_cap * 2u : 8u;
+        while (cap < needed) cap *= 2u;
+        VMTlsEntry* next = (VMTlsEntry*)realloc(vm->tls_entries, cap * sizeof(VMTlsEntry));
+        if (!next) return 0;
+        memset(next + vm->tls_cap, 0, (cap - vm->tls_cap) * sizeof(VMTlsEntry));
+        vm->tls_entries = next;
+        vm->tls_cap = cap;
+    }
+    return 1;
+}
+
+static uint32_t vm_tls_wrap(VM* vm, uint32_t socket_id, uint8_t mode) {
+    if (!vm_tls_reserve(vm, vm->tls_count + 1)) return 0;
+    vm->tls_entries[vm->tls_count].socket_id = socket_id;
+    vm->tls_entries[vm->tls_count].mode = mode;
+    vm->tls_entries[vm->tls_count].is_open = 1;
+    vm->tls_entries[vm->tls_count].owns_ctx = 0;
+    vm->tls_count++;
+    return vm->tls_count;
+}
+
+static VMTlsEntry* vm_tls_get(VM* vm, uint32_t handle) {
+    if (!vm || handle == 0 || handle > vm->tls_count) return NULL;
+    if (!vm->tls_entries[handle - 1].is_open) return NULL;
+    return &vm->tls_entries[handle - 1];
+}
+
+static int vm_http_server_reserve(VM* vm, uint32_t needed) {
+    if (!vm) return 0;
+    if (needed <= vm->http_server_cap) return 1;
+    {
+        uint32_t cap = vm->http_server_cap ? vm->http_server_cap * 2u : 8u;
+        while (cap < needed) cap *= 2u;
+        VMHttpServerEntry* next = (VMHttpServerEntry*)realloc(vm->http_servers, cap * sizeof(VMHttpServerEntry));
+        if (!next) return 0;
+        memset(next + vm->http_server_cap, 0, (cap - vm->http_server_cap) * sizeof(VMHttpServerEntry));
+        vm->http_servers = next;
+        vm->http_server_cap = cap;
+    }
+    return 1;
+}
+
+typedef struct VMOpenSslApi {
+    int loaded;
+    int attempted;
+    void* libssl;
+    void* libcrypto;
+    uint64_t (*OPENSSL_init_ssl)(uint64_t, const void*);
+    const void* (*TLS_client_method)(void);
+    const void* (*TLS_server_method)(void);
+    void* (*SSL_CTX_new)(const void*);
+    void (*SSL_CTX_free)(void*);
+    void* (*SSL_new)(void*);
+    void (*SSL_free)(void*);
+    int (*SSL_set_fd)(void*, int);
+    int (*SSL_connect)(void*);
+    int (*SSL_accept)(void*);
+    int (*SSL_read)(void*, void*, int);
+    int (*SSL_write)(void*, const void*, int);
+    int (*SSL_shutdown)(void*);
+    int (*SSL_get_error)(const void*, int);
+    int (*SSL_set_tlsext_host_name)(void*, const char*);
+    long (*SSL_ctrl)(void*, int, long, void*);
+    int (*SSL_CTX_use_certificate_file)(void*, const char*, int);
+    int (*SSL_CTX_use_PrivateKey_file)(void*, const char*, int);
+    int (*SSL_CTX_check_private_key)(const void*);
+    unsigned long (*ERR_get_error)(void);
+    void (*ERR_error_string_n)(unsigned long, char*, size_t);
+    void* (*OSSL_PROVIDER_load)(void*, const char*);
+} VMOpenSslApi;
+
+static VMOpenSslApi g_vm_ssl = {0};
+static char g_vm_ssl_crypto_path[512] = {0};
+
+static void vm_free_cached_tls_server_ctx(VM* vm) {
+    if (!vm) return;
+    if (vm->tls_server_ctx_cached && g_vm_ssl.SSL_CTX_free) {
+        g_vm_ssl.SSL_CTX_free(vm->tls_server_ctx_cached);
+    }
+    vm->tls_server_ctx_cached = NULL;
+}
+
+#if defined(_WIN32) || defined(_WIN64)
+static void* vm_dynlib_open(const char* path) { return (void*)LoadLibraryA(path); }
+static void* vm_dynlib_sym(void* h, const char* name) { return h ? (void*)GetProcAddress((HMODULE)h, name) : NULL; }
+#else
+static void* vm_dynlib_open(const char* path) { return dlopen(path, RTLD_NOW | RTLD_LOCAL); }
+static void* vm_dynlib_sym(void* h, const char* name) { return h ? dlsym(h, name) : NULL; }
+#endif
+
+static int vm_openssl_try_load_libs(VMOpenSslApi* api) {
+#if defined(_WIN32) || defined(_WIN64)
+    static const struct { const char* ssl; const char* crypto; } win_pairs[] = {
+        { "C:\\Program Files\\Git\\mingw64\\bin\\libssl-3-x64.dll", "C:\\Program Files\\Git\\mingw64\\bin\\libcrypto-3-x64.dll" },
+        { "C:\\Program Files\\PostgreSQL\\18\\bin\\libssl-3-x64.dll", "C:\\Program Files\\PostgreSQL\\18\\bin\\libcrypto-3-x64.dll" },
+        { "libssl-3-x64.dll", "libcrypto-3-x64.dll" },
+        { NULL, NULL }
+    };
+    size_t i;
+    for (i = 0; win_pairs[i].ssl; i++) {
+        void* libcrypto = vm_dynlib_open(win_pairs[i].crypto);
+        void* libssl = NULL;
+        if (!libcrypto) continue;
+        libssl = vm_dynlib_open(win_pairs[i].ssl);
+        if (libssl) {
+            api->libcrypto = libcrypto;
+            api->libssl = libssl;
+            strncpy(g_vm_ssl_crypto_path, win_pairs[i].crypto, sizeof(g_vm_ssl_crypto_path) - 1);
+            return 1;
+        }
+    }
+#else
+    const char* ssl_candidates[] = {"libssl.so.3", "libssl.so", "libssl.dylib", NULL};
+    const char* crypto_candidates[] = {"libcrypto.so.3", "libcrypto.so", "libcrypto.dylib", NULL};
+#endif
+#if !defined(_WIN32) && !defined(_WIN64)
+    size_t i;
+    for (i = 0; !api->libssl && ssl_candidates[i]; i++) api->libssl = vm_dynlib_open(ssl_candidates[i]);
+    for (i = 0; !api->libcrypto && crypto_candidates[i]; i++) api->libcrypto = vm_dynlib_open(crypto_candidates[i]);
+#endif
+    return api->libssl && api->libcrypto;
+}
+
+static int vm_openssl_load(void) {
+    VMOpenSslApi* api = &g_vm_ssl;
+    if (api->loaded) return 1;
+    if (api->attempted) return 0;
+    api->attempted = 1;
+    if (!vm_openssl_try_load_libs(api)) return 0;
+    api->OPENSSL_init_ssl = (uint64_t (*)(uint64_t, const void*))vm_dynlib_sym(api->libssl, "OPENSSL_init_ssl");
+    api->TLS_client_method = (const void* (*)(void))vm_dynlib_sym(api->libssl, "TLS_client_method");
+    api->TLS_server_method = (const void* (*)(void))vm_dynlib_sym(api->libssl, "TLS_server_method");
+    api->SSL_CTX_new = (void* (*)(const void*))vm_dynlib_sym(api->libssl, "SSL_CTX_new");
+    api->SSL_CTX_free = (void (*)(void*))vm_dynlib_sym(api->libssl, "SSL_CTX_free");
+    api->SSL_new = (void* (*)(void*))vm_dynlib_sym(api->libssl, "SSL_new");
+    api->SSL_free = (void (*)(void*))vm_dynlib_sym(api->libssl, "SSL_free");
+    api->SSL_set_fd = (int (*)(void*, int))vm_dynlib_sym(api->libssl, "SSL_set_fd");
+    api->SSL_connect = (int (*)(void*))vm_dynlib_sym(api->libssl, "SSL_connect");
+    api->SSL_accept = (int (*)(void*))vm_dynlib_sym(api->libssl, "SSL_accept");
+    api->SSL_read = (int (*)(void*, void*, int))vm_dynlib_sym(api->libssl, "SSL_read");
+    api->SSL_write = (int (*)(void*, const void*, int))vm_dynlib_sym(api->libssl, "SSL_write");
+    api->SSL_shutdown = (int (*)(void*))vm_dynlib_sym(api->libssl, "SSL_shutdown");
+    api->SSL_get_error = (int (*)(const void*, int))vm_dynlib_sym(api->libssl, "SSL_get_error");
+    api->SSL_set_tlsext_host_name = (int (*)(void*, const char*))vm_dynlib_sym(api->libssl, "SSL_set_tlsext_host_name");
+    api->SSL_ctrl = (long (*)(void*, int, long, void*))vm_dynlib_sym(api->libssl, "SSL_ctrl");
+    api->SSL_CTX_use_certificate_file = (int (*)(void*, const char*, int))vm_dynlib_sym(api->libssl, "SSL_CTX_use_certificate_file");
+    api->SSL_CTX_use_PrivateKey_file = (int (*)(void*, const char*, int))vm_dynlib_sym(api->libssl, "SSL_CTX_use_PrivateKey_file");
+    api->SSL_CTX_check_private_key = (int (*)(const void*))vm_dynlib_sym(api->libssl, "SSL_CTX_check_private_key");
+    api->ERR_get_error = (unsigned long (*)(void))vm_dynlib_sym(api->libcrypto, "ERR_get_error");
+    api->ERR_error_string_n = (void (*)(unsigned long, char*, size_t))vm_dynlib_sym(api->libcrypto, "ERR_error_string_n");
+    api->OSSL_PROVIDER_load = (void* (*)(void*, const char*))vm_dynlib_sym(api->libcrypto, "OSSL_PROVIDER_load");
+    if (!api->TLS_client_method || !api->TLS_server_method || !api->SSL_CTX_new || !api->SSL_CTX_free ||
+        !api->SSL_new || !api->SSL_free || !api->SSL_set_fd || !api->SSL_connect || !api->SSL_accept ||
+        !api->SSL_read || !api->SSL_write || !api->SSL_shutdown || !api->SSL_ctrl) return 0;
+#if defined(_WIN32) || defined(_WIN64)
+    if (g_vm_ssl_crypto_path[0]) {
+        char modules_path[512];
+        const char* bin = strstr(g_vm_ssl_crypto_path, "\\bin\\");
+        modules_path[0] = '\0';
+        if (bin) {
+            size_t prefix = (size_t)(bin - g_vm_ssl_crypto_path);
+            if (prefix + strlen("\\lib\\ossl-modules") + 1 < sizeof(modules_path)) {
+                memcpy(modules_path, g_vm_ssl_crypto_path, prefix);
+                modules_path[prefix] = '\0';
+                strcat(modules_path, "\\lib\\ossl-modules");
+                SetEnvironmentVariableA("OPENSSL_MODULES", modules_path);
+            }
+        }
+    }
+#endif
+    if (api->OPENSSL_init_ssl) api->OPENSSL_init_ssl(0, NULL);
+    if (api->OSSL_PROVIDER_load) {
+        api->OSSL_PROVIDER_load(NULL, "default");
+        api->OSSL_PROVIDER_load(NULL, "legacy");
+    }
+    api->loaded = 1;
+    return 1;
+}
+
+static int vm_tls_enable_sni(void* ssl, const char* host) {
+    if (!ssl || !host || !host[0]) return 1;
+    if (g_vm_ssl.SSL_set_tlsext_host_name) return g_vm_ssl.SSL_set_tlsext_host_name(ssl, host) == 1;
+    if (!g_vm_ssl.SSL_ctrl) return 1;
+    return g_vm_ssl.SSL_ctrl(ssl, 55, 0, (void*)host) == 1;
+}
+
+static void vm_tls_log_last_error(const char* where, void* ssl, int ssl_rc) {
+    char buf[256];
+    unsigned long err = 0;
+    int ssl_err = 0;
+    buf[0] = '\0';
+    if (g_vm_ssl.SSL_get_error && ssl && ssl_rc != 1) ssl_err = g_vm_ssl.SSL_get_error(ssl, ssl_rc);
+    if (g_vm_ssl.ERR_get_error) err = g_vm_ssl.ERR_get_error();
+    if (err && g_vm_ssl.ERR_error_string_n) g_vm_ssl.ERR_error_string_n(err, buf, sizeof(buf));
+    fprintf(stderr, "[TLS] %s fallo rc=%d ssl_err=%d openssl=%s\n", where ? where : "tls", ssl_rc, ssl_err, buf[0] ? buf : "(sin detalle)");
+}
+
+/* OpenSSL: SSL_ERROR_WANT_READ=2, SSL_ERROR_WANT_WRITE=3 (estables entre versiones). */
+#define VM_SSL_ERR_WANT_READ 2
+#define VM_SSL_ERR_WANT_WRITE 3
+#define VM_TLS_HANDSHAKE_DEADLINE_SEC 30
+
+/* SSL_connect bloqueante puede ignorar SO_RCVTIMEO en algunos casos; handshake con socket no bloqueante + select. */
+static int vm_tls_handshake_connect_with_deadline(void* ssl, vm_socket_native_t fd, int deadline_sec) {
+    if (!g_vm_ssl.SSL_connect || !g_vm_ssl.SSL_get_error) return -1;
+    if (vm_socket_set_blocking(fd, 0) != 0) return -1;
+    time_t start = time(NULL);
+    for (;;) {
+        int rc = g_vm_ssl.SSL_connect(ssl);
+        if (rc == 1) {
+            if (vm_socket_set_blocking(fd, 1) != 0) return -1;
+            return 0;
+        }
+        int err = g_vm_ssl.SSL_get_error(ssl, rc);
+        if ((time_t)time(NULL) - start >= (time_t)deadline_sec) {
+            fprintf(stderr, "[TLS] SSL_connect: plazo de handshake (%ds) agotado\n", deadline_sec);
+            (void)vm_socket_set_blocking(fd, 1);
+            return -1;
+        }
+        fd_set rf;
+        fd_set wf;
+        struct timeval tv;
+        tv.tv_sec = 1;
+        tv.tv_usec = 0;
+        FD_ZERO(&rf);
+        FD_ZERO(&wf);
+        if (err == VM_SSL_ERR_WANT_READ)
+            FD_SET(fd, &rf);
+        else if (err == VM_SSL_ERR_WANT_WRITE)
+            FD_SET(fd, &wf);
+        else {
+            (void)vm_socket_set_blocking(fd, 1);
+            return -1;
+        }
+#if defined(_WIN32) || defined(_WIN64)
+        int sel = select(0, &rf, &wf, NULL, &tv);
+#else
+        int sel = select((int)fd + 1, &rf, &wf, NULL, &tv);
+#endif
+        if (sel < 0) {
+            (void)vm_socket_set_blocking(fd, 1);
+            return -1;
+        }
+    }
+}
+
+static uint32_t vm_tls_create_client(VM* vm, uint32_t socket_id, const char* host) {
+    VMSocketEntry* sock = vm_socket_get(vm, socket_id);
+    const void* method;
+    void* ctx;
+    void* ssl;
+    uint32_t tls_id;
+    if (!sock || !vm_openssl_load()) return 0;
+    method = g_vm_ssl.TLS_client_method();
+    if (!method) {
+        fprintf(stderr, "[TLS] TLS_client_method no disponible\n");
+        return 0;
+    }
+    ctx = g_vm_ssl.SSL_CTX_new(method);
+    if (!ctx) return 0;
+    ssl = g_vm_ssl.SSL_new(ctx);
+    if (!ssl) {
+        g_vm_ssl.SSL_CTX_free(ctx);
+        return 0;
+    }
+    if (!g_vm_ssl.SSL_set_fd(ssl, (int)sock->native_handle)) {
+        vm_tls_log_last_error("SSL_set_fd(client)", ssl, 0);
+        g_vm_ssl.SSL_free(ssl);
+        g_vm_ssl.SSL_CTX_free(ctx);
+        return 0;
+    }
+    vm_tls_enable_sni(ssl, host);
+    if (vm_tls_handshake_connect_with_deadline(ssl, (vm_socket_native_t)sock->native_handle, VM_TLS_HANDSHAKE_DEADLINE_SEC) != 0) {
+        vm_tls_log_last_error("SSL_connect(handshake)", ssl, -1);
+        g_vm_ssl.SSL_free(ssl);
+        g_vm_ssl.SSL_CTX_free(ctx);
+        return 0;
+    }
+    vm_socket_apply_timeouts_mode((vm_socket_native_t)sock->native_handle, VM_SOCK_TO_OUTBOUND);
+    tls_id = vm_tls_wrap(vm, socket_id, VM_TLS_MODO_CLIENTE);
+    if (!tls_id) {
+        g_vm_ssl.SSL_free(ssl);
+        g_vm_ssl.SSL_CTX_free(ctx);
+        return 0;
+    }
+    vm->tls_entries[tls_id - 1].ctx = ctx;
+    vm->tls_entries[tls_id - 1].ssl = ssl;
+    vm->tls_entries[tls_id - 1].handshake_ok = 1;
+    vm->tls_entries[tls_id - 1].owns_ctx = 1;
+    return tls_id;
+}
+
+static uint32_t vm_tls_create_server(VM* vm, uint32_t socket_id, const char* cert_path, const char* key_path) {
+    VMSocketEntry* sock = vm_socket_get(vm, socket_id);
+    const void* method;
+    void* ctx;
+    void* ssl;
+    uint32_t tls_id;
+    int rc;
+    if (!sock || !vm_openssl_load()) return 0;
+    if (!vm->tls_server_ctx_cached ||
+        !vm->tls_server_cert_cached || !vm->tls_server_key_cached ||
+        !cert_path || !key_path ||
+        strcmp(vm->tls_server_cert_cached, cert_path) != 0 ||
+        strcmp(vm->tls_server_key_cached, key_path) != 0) {
+        method = g_vm_ssl.TLS_server_method();
+        if (!method) {
+            fprintf(stderr, "[TLS] TLS_server_method no disponible\n");
+            return 0;
+        }
+        ctx = g_vm_ssl.SSL_CTX_new(method);
+        if (!ctx) return 0;
+        if (!g_vm_ssl.SSL_CTX_use_certificate_file || !g_vm_ssl.SSL_CTX_use_PrivateKey_file || !g_vm_ssl.SSL_CTX_check_private_key) {
+            g_vm_ssl.SSL_CTX_free(ctx);
+            return 0;
+        }
+        if (g_vm_ssl.SSL_CTX_use_certificate_file(ctx, cert_path, VM_SSL_FILETYPE_PEM) != 1 ||
+            g_vm_ssl.SSL_CTX_use_PrivateKey_file(ctx, key_path, VM_SSL_FILETYPE_PEM) != 1 ||
+            g_vm_ssl.SSL_CTX_check_private_key(ctx) != 1) {
+            g_vm_ssl.SSL_CTX_free(ctx);
+            return 0;
+        }
+        if (vm->tls_server_ctx_cached && g_vm_ssl.SSL_CTX_free) g_vm_ssl.SSL_CTX_free(vm->tls_server_ctx_cached);
+        free(vm->tls_server_cert_cached);
+        free(vm->tls_server_key_cached);
+        vm->tls_server_ctx_cached = ctx;
+        vm->tls_server_cert_cached = strdup(cert_path);
+        vm->tls_server_key_cached = strdup(key_path);
+        if (!vm->tls_server_cert_cached || !vm->tls_server_key_cached) {
+            free(vm->tls_server_cert_cached);
+            free(vm->tls_server_key_cached);
+            vm->tls_server_cert_cached = NULL;
+            vm->tls_server_key_cached = NULL;
+            if (vm->tls_server_ctx_cached && g_vm_ssl.SSL_CTX_free) g_vm_ssl.SSL_CTX_free(vm->tls_server_ctx_cached);
+            vm->tls_server_ctx_cached = NULL;
+            return 0;
+        }
+    }
+    ctx = vm->tls_server_ctx_cached;
+    ssl = g_vm_ssl.SSL_new(ctx);
+    if (!ssl) {
+        return 0;
+    }
+    if (!g_vm_ssl.SSL_set_fd(ssl, (int)sock->native_handle)) {
+        vm_tls_log_last_error("SSL_set_fd(server)", ssl, 0);
+        g_vm_ssl.SSL_free(ssl);
+        return 0;
+    }
+    rc = g_vm_ssl.SSL_accept(ssl);
+    if (rc != 1) {
+        vm_tls_log_last_error("SSL_accept", ssl, rc);
+        g_vm_ssl.SSL_free(ssl);
+        return 0;
+    }
+    tls_id = vm_tls_wrap(vm, socket_id, VM_TLS_MODO_SERVIDOR);
+    if (!tls_id) {
+        g_vm_ssl.SSL_shutdown(ssl);
+        g_vm_ssl.SSL_free(ssl);
+        return 0;
+    }
+    vm->tls_entries[tls_id - 1].ctx = ctx;
+    vm->tls_entries[tls_id - 1].ssl = ssl;
+    vm->tls_entries[tls_id - 1].handshake_ok = 1;
+    vm->tls_entries[tls_id - 1].owns_ctx = 0;
+    return tls_id;
+}
+
+static int vm_tls_write_entry(VMTlsEntry* tls, const uint8_t* data, uint32_t len) {
+    if (!tls || !tls->ssl || !g_vm_ssl.SSL_write) return -1;
+    return g_vm_ssl.SSL_write(tls->ssl, data, (int)len);
+}
+
+static int vm_tls_read_entry(VMTlsEntry* tls, uint8_t* data, uint32_t len) {
+    if (!tls || !tls->ssl || !g_vm_ssl.SSL_read) return -1;
+    return g_vm_ssl.SSL_read(tls->ssl, data, (int)len);
+}
+
+static void vm_tls_close_entry(VM* vm, uint32_t handle) {
+    VMTlsEntry* tls = vm_tls_get(vm, handle);
+    if (!tls) return;
+    /* Cliente HTTP: no llamar SSL_shutdown bloqueante. Muchos servidores cierran el TCP tras el cuerpo
+     * sin close_notify TLS; SSL_shutdown aqui puede colgarse esperando respuesta del peer. */
+    if (tls->ssl && g_vm_ssl.SSL_free) g_vm_ssl.SSL_free(tls->ssl);
+    if (tls->owns_ctx && tls->ctx && g_vm_ssl.SSL_CTX_free) g_vm_ssl.SSL_CTX_free(tls->ctx);
+    tls->ssl = NULL;
+    tls->ctx = NULL;
+    tls->handshake_ok = 0;
+    tls->owns_ctx = 0;
+    tls->is_open = 0;
+    (void)vm;
+}
+
+static uint32_t vm_json_store_text(VM* vm, const char* text) {
+    uint32_t id = vm_hash_texto(text ? text : "");
+    if (id == 0) id = 5381;
+    vm_text_cache_put(vm, id, text ? text : "");
+    return id;
+}
+
+static int vm_text_ids_equal(VM* vm, uint32_t left_id, uint32_t right_id) {
+    char left[1024];
+    char right[1024];
+    if (left_id == right_id) return 1;
+    if (!vm_text_cache_get_copy(vm, left_id, left, sizeof(left))) return 0;
+    if (!vm_text_cache_get_copy(vm, right_id, right, sizeof(right))) return 0;
+    return strcmp(left, right) == 0;
+}
+
+static int vm_json_reserve(VM* vm, uint32_t needed) {
+    if (!vm) return 0;
+    if (needed <= vm->json_cap) return 1;
+    {
+        uint32_t cap = vm->json_cap ? vm->json_cap * 2u : 64u;
+        while (cap < needed) cap *= 2u;
+        VMJsonValue* next = (VMJsonValue*)realloc(vm->json_values, cap * sizeof(VMJsonValue));
+        if (!next) return 0;
+        memset(next + vm->json_cap, 0, (cap - vm->json_cap) * sizeof(VMJsonValue));
+        vm->json_values = next;
+        vm->json_cap = cap;
+    }
+    return 1;
+}
+
+static uint32_t vm_json_new(VM* vm, VMJsonKind kind) {
+    if (!vm_json_reserve(vm, vm->json_count + 1)) return 0;
+    vm->json_values[vm->json_count] = (VMJsonValue){0};
+    vm->json_values[vm->json_count].kind = (uint8_t)kind;
+    vm->json_count++;
+    return vm->json_count;
+}
+
+static VMJsonValue* vm_json_get(VM* vm, uint32_t handle) {
+    if (!vm || handle == 0 || handle > vm->json_count) return NULL;
+    return &vm->json_values[handle - 1];
+}
+
+static int vm_json_push_item(uint32_t** arr, uint32_t* count, uint32_t* cap, uint32_t value) {
+    if (!arr || !count || !cap) return 0;
+    if (*count >= *cap) {
+        uint32_t next_cap = *cap ? (*cap * 2u) : 8u;
+        uint32_t* next = (uint32_t*)realloc(*arr, next_cap * sizeof(uint32_t));
+        if (!next) return 0;
+        *arr = next;
+        *cap = next_cap;
+    }
+    (*arr)[(*count)++] = value;
+    return 1;
+}
+
+static int vm_json_object_put(VMJsonValue* v, uint32_t key_id, uint32_t value_h) {
+    uint32_t cap;
+    uint32_t *next_keys;
+    uint32_t *next_items;
+    if (!v) return 0;
+    if (v->count >= v->cap) {
+        cap = v->cap ? (v->cap * 2u) : 8u;
+        next_keys = (uint32_t*)realloc(v->keys, cap * sizeof(uint32_t));
+        next_items = (uint32_t*)realloc(v->items, cap * sizeof(uint32_t));
+        if (!next_keys || !next_items) {
+            free(next_keys);
+            free(next_items);
+            return 0;
+        }
+        v->keys = next_keys;
+        v->items = next_items;
+        v->cap = cap;
+    }
+    v->keys[v->count] = key_id;
+    v->items[v->count] = value_h;
+    v->count++;
+    return 1;
+}
+
+typedef struct VMJsonParser {
+    VM* vm;
+    const char* p;
+    char error[128];
+} VMJsonParser;
+
+static void vm_json_skip_ws(VMJsonParser* jp) {
+    while (jp && *jp->p && isspace((unsigned char)*jp->p)) jp->p++;
+}
+
+static void vm_json_set_error(VMJsonParser* jp, const char* msg) {
+    if (!jp || jp->error[0]) return;
+    snprintf(jp->error, sizeof(jp->error), "%s", msg ? msg : "JSON invalido");
+}
+
+static char* vm_json_parse_string_raw(VMJsonParser* jp) {
+    size_t cap = 32, len = 0;
+    char* out;
+    if (!jp || *jp->p != '"') return NULL;
+    jp->p++;
+    out = (char*)malloc(cap);
+    if (!out) return NULL;
+    while (*jp->p && *jp->p != '"') {
+        unsigned char ch = (unsigned char)*jp->p++;
+        if (ch == '\\') {
+            unsigned char esc = (unsigned char)*jp->p++;
+            switch (esc) {
+                case '"': ch = '"'; break;
+                case '\\': ch = '\\'; break;
+                case '/': ch = '/'; break;
+                case 'b': ch = '\b'; break;
+                case 'f': ch = '\f'; break;
+                case 'n': ch = '\n'; break;
+                case 'r': ch = '\r'; break;
+                case 't': ch = '\t'; break;
+                case 'u':
+                    for (int i = 0; i < 4 && isxdigit((unsigned char)*jp->p); i++) jp->p++;
+                    ch = '?';
+                    break;
+                default:
+                    free(out);
+                    vm_json_set_error(jp, "Escape JSON invalido");
+                    return NULL;
+            }
+        }
+        if (len + 2 > cap) {
+            cap *= 2u;
+            out = (char*)realloc(out, cap);
+            if (!out) return NULL;
+        }
+        out[len++] = (char)ch;
+    }
+    if (*jp->p != '"') {
+        free(out);
+        vm_json_set_error(jp, "Cadena JSON sin cierre");
+        return NULL;
+    }
+    jp->p++;
+    out[len] = '\0';
+    return out;
+}
+
+static uint32_t vm_json_parse_value(VMJsonParser* jp);
+
+static uint32_t vm_json_parse_number(VMJsonParser* jp) {
+    const char* start = jp->p;
+    char* end = NULL;
+    double d;
+    int is_float = 0;
+    uint32_t h;
+    while (*jp->p && strchr("-+0123456789.eE", *jp->p)) {
+        if (*jp->p == '.' || *jp->p == 'e' || *jp->p == 'E') is_float = 1;
+        jp->p++;
+    }
+    errno = 0;
+    d = strtod(start, &end);
+    if (end == start || errno == ERANGE) {
+        vm_json_set_error(jp, "Numero JSON invalido");
+        return 0;
+    }
+    jp->p = end;
+    h = vm_json_new(jp->vm, is_float ? VM_JSON_FLOAT : VM_JSON_INT);
+    if (!h) return 0;
+    if (is_float) vm_json_get(jp->vm, h)->float_value = d;
+    else vm_json_get(jp->vm, h)->int_value = (int64_t)d;
+    return h;
+}
+
+static uint32_t vm_json_parse_array(VMJsonParser* jp) {
+    uint32_t h;
+    if (*jp->p != '[') return 0;
+    jp->p++;
+    h = vm_json_new(jp->vm, VM_JSON_ARRAY);
+    if (!h) return 0;
+    vm_json_skip_ws(jp);
+    if (*jp->p == ']') {
+        jp->p++;
+        return h;
+    }
+    while (*jp->p) {
+        uint32_t item;
+        vm_json_skip_ws(jp);
+        item = vm_json_parse_value(jp);
+        if (!item) return 0;
+        {
+            VMJsonValue* v = vm_json_get(jp->vm, h);
+            if (!v) return 0;
+        if (!vm_json_push_item(&v->items, &v->count, &v->cap, item)) {
+            vm_json_set_error(jp, "Sin memoria para array JSON");
+            return 0;
+        }
+        }
+        vm_json_skip_ws(jp);
+        if (*jp->p == ']') {
+            jp->p++;
+            return h;
+        }
+        if (*jp->p != ',') {
+            vm_json_set_error(jp, "Se esperaba ',' en array JSON");
+            return 0;
+        }
+        jp->p++;
+    }
+    vm_json_set_error(jp, "Array JSON sin cierre");
+    return 0;
+}
+
+static uint32_t vm_json_parse_object(VMJsonParser* jp) {
+    uint32_t h;
+    if (*jp->p != '{') return 0;
+    jp->p++;
+    h = vm_json_new(jp->vm, VM_JSON_OBJECT);
+    if (!h) return 0;
+    vm_json_skip_ws(jp);
+    if (*jp->p == '}') {
+        jp->p++;
+        return h;
+    }
+    while (*jp->p) {
+        char* key_raw;
+        uint32_t key_id;
+        uint32_t value_h;
+        vm_json_skip_ws(jp);
+        if (*jp->p != '"') {
+            vm_json_set_error(jp, "Clave JSON invalida");
+            return 0;
+        }
+        key_raw = vm_json_parse_string_raw(jp);
+        if (!key_raw) return 0;
+        key_id = vm_json_store_text(jp->vm, key_raw);
+        free(key_raw);
+        vm_json_skip_ws(jp);
+        if (*jp->p != ':') {
+            vm_json_set_error(jp, "Se esperaba ':' en objeto JSON");
+            return 0;
+        }
+        jp->p++;
+        vm_json_skip_ws(jp);
+        value_h = vm_json_parse_value(jp);
+        if (!value_h) return 0;
+        {
+            VMJsonValue* v = vm_json_get(jp->vm, h);
+            if (!v) return 0;
+        if (!vm_json_object_put(v, key_id, value_h)) {
+            vm_json_set_error(jp, "Sin memoria para objeto JSON");
+            return 0;
+        }
+        }
+        vm_json_skip_ws(jp);
+        if (*jp->p == '}') {
+            jp->p++;
+            return h;
+        }
+        if (*jp->p != ',') {
+            vm_json_set_error(jp, "Se esperaba ',' en objeto JSON");
+            return 0;
+        }
+        jp->p++;
+    }
+    vm_json_set_error(jp, "Objeto JSON sin cierre");
+    return 0;
+}
+
+static uint32_t vm_json_parse_value(VMJsonParser* jp) {
+    vm_json_skip_ws(jp);
+    if (!jp || !*jp->p) {
+        vm_json_set_error(jp, "JSON vacio");
+        return 0;
+    }
+    if (*jp->p == '"') {
+        char* raw = vm_json_parse_string_raw(jp);
+        uint32_t h;
+        if (!raw) return 0;
+        h = vm_json_new(jp->vm, VM_JSON_STRING);
+        if (!h) {
+            free(raw);
+            return 0;
+        }
+        vm_json_get(jp->vm, h)->text_id = vm_json_store_text(jp->vm, raw);
+        free(raw);
+        return h;
+    }
+    if (*jp->p == '{') return vm_json_parse_object(jp);
+    if (*jp->p == '[') return vm_json_parse_array(jp);
+    if (strncmp(jp->p, "true", 4) == 0) {
+        uint32_t h = vm_json_new(jp->vm, VM_JSON_BOOL);
+        if (!h) return 0;
+        vm_json_get(jp->vm, h)->bool_value = 1;
+        jp->p += 4;
+        return h;
+    }
+    if (strncmp(jp->p, "false", 5) == 0) {
+        uint32_t h = vm_json_new(jp->vm, VM_JSON_BOOL);
+        if (!h) return 0;
+        vm_json_get(jp->vm, h)->bool_value = 0;
+        jp->p += 5;
+        return h;
+    }
+    if (strncmp(jp->p, "null", 4) == 0) {
+        jp->p += 4;
+        return vm_json_new(jp->vm, VM_JSON_NULL);
+    }
+    return vm_json_parse_number(jp);
+}
+
+static uint32_t vm_json_parse_text(VM* vm, const char* text, char* err, size_t err_sz) {
+    VMJsonParser jp = {0};
+    uint32_t h;
+    jp.vm = vm;
+    jp.p = text ? text : "";
+    h = vm_json_parse_value(&jp);
+    if (h) {
+        vm_json_skip_ws(&jp);
+        if (*jp.p != '\0') {
+            vm_json_set_error(&jp, "Sobran caracteres tras el JSON");
+            h = 0;
+        }
+    }
+    if (!h && err && err_sz > 0) {
+        snprintf(err, err_sz, "%s", jp.error[0] ? jp.error : "JSON invalido");
+    }
+    return h;
+}
+
+typedef struct VMJsonBuf {
+    char* data;
+    size_t len;
+    size_t cap;
+} VMJsonBuf;
+
+static int vm_json_buf_append(VMJsonBuf* b, const char* s) {
+    size_t n = s ? strlen(s) : 0;
+    if (!b) return 0;
+    if (b->len + n + 1 > b->cap) {
+        size_t cap = b->cap ? b->cap * 2u : 128u;
+        while (cap < b->len + n + 1) cap *= 2u;
+        b->data = (char*)realloc(b->data, cap);
+        if (!b->data) return 0;
+        b->cap = cap;
+    }
+    if (n) memcpy(b->data + b->len, s, n);
+    b->len += n;
+    b->data[b->len] = '\0';
+    return 1;
+}
+
+static int vm_json_append_spaces(VMJsonBuf* b, int n) {
+    for (int i = 0; i < n; i++)
+        if (!vm_json_buf_append(b, " ")) return 0;
+    return 1;
+}
+
+/* indent_step 0 = compacto JSON; 1..16 = multilínea con esa cantidad de espacios por nivel. */
+static int vm_json_stringify_inner(VM* vm, uint32_t handle, VMJsonBuf* out, int indent_step, int depth) {
+    const int pretty = indent_step > 0;
+    char tmp[64];
+    VMJsonValue* v = vm_json_get(vm, handle);
+    if (!v) return vm_json_buf_append(out, "null");
+    switch (v->kind) {
+        case VM_JSON_NULL:
+            return vm_json_buf_append(out, "null");
+        case VM_JSON_BOOL:
+            return vm_json_buf_append(out, v->bool_value ? "true" : "false");
+        case VM_JSON_INT:
+            snprintf(tmp, sizeof(tmp), "%" PRId64, v->int_value);
+            return vm_json_buf_append(out, tmp);
+        case VM_JSON_FLOAT:
+            snprintf(tmp, sizeof(tmp), "%.15g", v->float_value);
+            return vm_json_buf_append(out, tmp);
+        case VM_JSON_STRING: {
+            char buf[4096];
+            if (!vm_text_cache_get_copy(vm, v->text_id, buf, sizeof(buf))) return 0;
+            if (!vm_json_buf_append(out, "\"")) return 0;
+            for (size_t i = 0; buf[i]; i++) {
+                char esc[3] = {0};
+                switch (buf[i]) {
+                    case '"': if (!vm_json_buf_append(out, "\\\"")) return 0; break;
+                    case '\\': if (!vm_json_buf_append(out, "\\\\")) return 0; break;
+                    case '\n': if (!vm_json_buf_append(out, "\\n")) return 0; break;
+                    case '\r': if (!vm_json_buf_append(out, "\\r")) return 0; break;
+                    case '\t': if (!vm_json_buf_append(out, "\\t")) return 0; break;
+                    default:
+                        esc[0] = buf[i];
+                        if (!vm_json_buf_append(out, esc)) return 0;
+                        break;
+                }
+            }
+            return vm_json_buf_append(out, "\"");
+        }
+        case VM_JSON_OBJECT:
+            if (!vm_json_buf_append(out, "{")) return 0;
+            if (v->count == 0) return vm_json_buf_append(out, "}");
+            if (pretty) {
+                if (!vm_json_buf_append(out, "\n")) return 0;
+                for (uint32_t i = 0; i < v->count; i++) {
+                    char keybuf[1024];
+                    if (!vm_json_append_spaces(out, (depth + 1) * indent_step)) return 0;
+                    if (!vm_text_cache_get_copy(vm, v->keys[i], keybuf, sizeof(keybuf))) return 0;
+                    if (!vm_json_buf_append(out, "\"")) return 0;
+                    for (size_t k = 0; keybuf[k]; k++) {
+                        char esc[3] = {0};
+                        switch (keybuf[k]) {
+                            case '"': if (!vm_json_buf_append(out, "\\\"")) return 0; break;
+                            case '\\': if (!vm_json_buf_append(out, "\\\\")) return 0; break;
+                            case '\n': if (!vm_json_buf_append(out, "\\n")) return 0; break;
+                            case '\r': if (!vm_json_buf_append(out, "\\r")) return 0; break;
+                            case '\t': if (!vm_json_buf_append(out, "\\t")) return 0; break;
+                            default:
+                                esc[0] = keybuf[k];
+                                if (!vm_json_buf_append(out, esc)) return 0;
+                                break;
+                        }
+                    }
+                    if (!vm_json_buf_append(out, "\": ")) return 0;
+                    if (!vm_json_stringify_inner(vm, v->items[i], out, indent_step, depth + 1)) return 0;
+                    if (i + 1 < v->count && !vm_json_buf_append(out, ",")) return 0;
+                    if (!vm_json_buf_append(out, "\n")) return 0;
+                }
+                if (!vm_json_append_spaces(out, depth * indent_step)) return 0;
+                return vm_json_buf_append(out, "}");
+            }
+            for (uint32_t i = 0; i < v->count; i++) {
+                char keybuf[1024];
+                if (i && !vm_json_buf_append(out, ",")) return 0;
+                if (!vm_text_cache_get_copy(vm, v->keys[i], keybuf, sizeof(keybuf))) return 0;
+                if (!vm_json_buf_append(out, "\"")) return 0;
+                for (size_t k = 0; keybuf[k]; k++) {
+                    char esc[3] = {0};
+                    switch (keybuf[k]) {
+                        case '"': if (!vm_json_buf_append(out, "\\\"")) return 0; break;
+                        case '\\': if (!vm_json_buf_append(out, "\\\\")) return 0; break;
+                        case '\n': if (!vm_json_buf_append(out, "\\n")) return 0; break;
+                        case '\r': if (!vm_json_buf_append(out, "\\r")) return 0; break;
+                        case '\t': if (!vm_json_buf_append(out, "\\t")) return 0; break;
+                        default:
+                            esc[0] = keybuf[k];
+                            if (!vm_json_buf_append(out, esc)) return 0;
+                            break;
+                    }
+                }
+                if (!vm_json_buf_append(out, "\":")) return 0;
+                if (!vm_json_stringify_inner(vm, v->items[i], out, indent_step, depth + 1)) return 0;
+            }
+            return vm_json_buf_append(out, "}");
+        case VM_JSON_ARRAY:
+            if (!vm_json_buf_append(out, "[")) return 0;
+            if (v->count == 0) return vm_json_buf_append(out, "]");
+            if (pretty) {
+                if (!vm_json_buf_append(out, "\n")) return 0;
+                for (uint32_t i = 0; i < v->count; i++) {
+                    if (!vm_json_append_spaces(out, (depth + 1) * indent_step)) return 0;
+                    if (!vm_json_stringify_inner(vm, v->items[i], out, indent_step, depth + 1)) return 0;
+                    if (i + 1 < v->count && !vm_json_buf_append(out, ",")) return 0;
+                    if (!vm_json_buf_append(out, "\n")) return 0;
+                }
+                if (!vm_json_append_spaces(out, depth * indent_step)) return 0;
+                return vm_json_buf_append(out, "]");
+            }
+            for (uint32_t i = 0; i < v->count; i++) {
+                if (i && !vm_json_buf_append(out, ",")) return 0;
+                if (!vm_json_stringify_inner(vm, v->items[i], out, indent_step, depth + 1)) return 0;
+            }
+            return vm_json_buf_append(out, "]");
+        default:
+            return 0;
+    }
+}
+
+static int vm_json_stringify_value(VM* vm, uint32_t handle, VMJsonBuf* out) {
+    return vm_json_stringify_inner(vm, handle, out, 0, 0);
+}
+
+static void vm_reset_profile(VM* vm) {
+    if (!vm || !vm->profile_enabled) return;
+    memset(vm->opcode_hits, 0, sizeof(vm->opcode_hits));
+    if (vm->pc_hits && vm->pc_hits_len > 0) {
+        memset(vm->pc_hits, 0, vm->pc_hits_len * sizeof(uint64_t));
+    }
+}
+
+static void vm_print_profile_summary(VM* vm) {
+    if (!vm || !vm->profile_enabled) return;
+    fprintf(stderr, "[VM PROFILE] Top opcodes:\n");
+    for (int rank = 0; rank < 8; rank++) {
+        uint64_t best_hits = 0;
+        int best_opcode = -1;
+        for (int opcode = 0; opcode < 256; opcode++) {
+            if (vm->opcode_hits[opcode] > best_hits) {
+                best_hits = vm->opcode_hits[opcode];
+                best_opcode = opcode;
+            }
+        }
+        if (best_opcode < 0 || best_hits == 0) break;
+        fprintf(stderr, "  opcode=0x%02X hits=%llu\n", best_opcode, (unsigned long long)best_hits);
+        vm->opcode_hits[best_opcode] = 0;
+    }
+    fprintf(stderr, "[VM PROFILE] Top PCs:\n");
+    if (!vm->pc_hits || vm->pc_hits_len == 0 || !vm->ir || !vm->ir->code) return;
+    for (int rank = 0; rank < 8; rank++) {
+        uint64_t best_hits = 0;
+        size_t best_idx = (size_t)-1;
+        for (size_t i = 0; i < vm->pc_hits_len; i++) {
+            if (vm->pc_hits[i] > best_hits) {
+                best_hits = vm->pc_hits[i];
+                best_idx = i;
+            }
+        }
+        if (best_idx == (size_t)-1 || best_hits == 0) break;
+        fprintf(stderr, "  pc=%zu opcode=0x%02X hits=%llu\n",
+                best_idx * (size_t)IR_INSTRUCTION_SIZE,
+                (unsigned)vm->ir->code[best_idx * (size_t)IR_INSTRUCTION_SIZE],
+                (unsigned long long)best_hits);
+        vm->pc_hits[best_idx] = 0;
+    }
+}
+
 #ifdef JASBOOT_LANG_INTEGRATION
 // Integración con memoria neuronal activa
 #endif
 
 int vm_load(VM* vm, IRFile* ir) {
     if (!vm || !ir) return -1;
+    {
+        IRValidationInfo info = ir_validate_memory(ir);
+        if (info.result != IR_VALID_OK) {
+            fprintf(stderr, "Error de validación: %s\n", info.message);
+            vm->exit_code = 1;
+            return -1;
+        }
+    }
     vm->ir = ir;
     vm->pc = 0; // Header no está en ir->code
     vm->try_depth = 0;
+    vm->ir_validated = 1;
+    vm->current_line = 0;
+    free(vm->pc_hits);
+    vm->pc_hits = NULL;
+    vm->pc_hits_len = 0;
+    if (vm->profile_enabled && ir->header.code_size >= IR_INSTRUCTION_SIZE) {
+        vm->pc_hits_len = ir->header.code_size / IR_INSTRUCTION_SIZE;
+        vm->pc_hits = (uint64_t*)calloc(vm->pc_hits_len, sizeof(uint64_t));
+        if (!vm->pc_hits) vm->pc_hits_len = 0;
+    }
+    vm_reset_profile(vm);
     
     // Saltar metadata IA si está presente
     if (ir->header.flags & IR_FLAG_IA_METADATA && ir->ia_metadata_size > 0) {
@@ -922,16 +2868,6 @@ int vm_get_exit_code(VM* vm) {
     return vm->exit_code;
 }
 
-static uint64_t get_operand_value(VM* vm, IRInstruction* inst, int operand, int flag) {
-    if (inst->flags & flag) {
-        // Es inmediato
-        return operand;
-    } else {
-        // Es registro
-        return vm_get_register(vm, operand);
-    }
-}
-
 static size_t vm_code_start(const IRFile* ir) {
     (void)ir;
     // El buffer ir->code contiene SOLO las instrucciones, empezando en offset 0.
@@ -970,6 +2906,59 @@ static int vm_try_catch_or_abort(VM* vm, const char* msg) {
     vm->running = 1;
     vm->exit_code = 0;
     return 1;
+}
+
+static int vm_memoria_abierta_en_este_bloque(VM* vm) {
+#ifdef JASBOOT_LANG_INTEGRATION
+    if (!vm || !vm->mem_neuronal) return 0;
+    return vm->mem_neuronal_owner_depth == vm_call_depth(vm);
+#else
+    (void)vm;
+    return 0;
+#endif
+}
+
+static int vm_error_memoria_sin_cerrar(VM* vm) {
+#ifdef JASBOOT_LANG_INTEGRATION
+    char msg[256];
+    char src_path[1024];
+    if (!vm || !vm_memoria_abierta_en_este_bloque(vm)) return 0;
+    vm_format_source_path(vm, src_path, sizeof(src_path));
+    if (vm->mem_neuronal_open_line > 0) {
+        if (src_path[0]) {
+            snprintf(msg, sizeof(msg),
+                     "archivo %s, linea %d: la memoria abierta aun no se ha cerrado con `cerrar_memoria()` antes de salir de este bloque de funcion.",
+                     src_path, vm->mem_neuronal_open_line);
+        } else {
+            snprintf(msg, sizeof(msg),
+                     "linea %d: la memoria abierta aun no se ha cerrado con `cerrar_memoria()` antes de salir de este bloque de funcion.",
+                     vm->mem_neuronal_open_line);
+        }
+    } else {
+        if (src_path[0]) {
+            snprintf(msg, sizeof(msg),
+                     "archivo %s: la memoria abierta aun no se ha cerrado con `cerrar_memoria()` antes de salir de este bloque de funcion.",
+                     src_path);
+        } else {
+            snprintf(msg, sizeof(msg),
+                     "la memoria abierta aun no se ha cerrado con `cerrar_memoria()` antes de salir de este bloque de funcion.");
+        }
+    }
+    if (vm_try_catch_or_abort(vm, msg)) return 1;
+    if (vm->current_line > 0) {
+        fprintf(stderr,
+                "Error de ejecucion (VM) en la linea %d: %s\n",
+                vm->current_line, msg);
+    } else {
+        fprintf(stderr, "Error de ejecucion (VM): %s\n", msg);
+    }
+    vm->running = 0;
+    vm->exit_code = 1;
+    return 1;
+#else
+    (void)vm;
+    return 0;
+#endif
 }
 
 int vm_step(VM* vm) {
@@ -1515,6 +3504,7 @@ int vm_step(VM* vm) {
             // Guardar contexto (PC y FP)
             vm->stack[vm->stack_ptr++] = vm->pc + IR_INSTRUCTION_SIZE;
             vm->fp_stack[vm->fp_stack_ptr++] = vm->fp;
+            vm->closure_env_stack[vm->fp_stack_ptr - 1] = vm->current_closure_env;
             
             // El nuevo frame empieza donde terminó el anterior (SP actual)
             vm->fp = vm->sp;
@@ -1523,14 +3513,32 @@ int vm_step(VM* vm) {
                 uint32_t target_call = vm_decode_u24(inst.operand_a, inst.operand_b, inst.operand_c, inst.flags);
                 if (inst.flags & IR_INST_FLAG_RELATIVE) vm->pc = vm->pc + (size_t)target_call;
                 else vm->pc = code_start + (size_t)target_call;
+                vm->current_closure_env = 0;
             } else {
+                if (vm_closure_is_handle(a_val)) {
+                    VMClosureEntry* cl = vm_closure_get(vm, a_val);
+                    if (!cl) {
+                        if (vm_try_catch_or_abort(vm, "closure invalido")) return 0;
+                        fprintf(stderr, "Error de ejecucion (VM): closure invalido\n");
+                        vm->running = 0;
+                        vm->exit_code = 1;
+                        return 0;
+                    }
+                    vm->current_closure_env = cl->env_list_id;
+                    vm->pc = code_start + cl->target_pc;
+                } else {
+                    vm->current_closure_env = 0;
                 if (inst.flags & IR_INST_FLAG_RELATIVE) vm->pc = vm->pc + (size_t)a_val;
                 else vm->pc = code_start + (size_t)a_val;
+                }
             }
             break;
         }
             
         case OP_RETORNAR: {
+            if (vm->mem_neuronal && vm_error_memoria_sin_cerrar(vm)) {
+                return 0;
+            }
             if (vm->stack_ptr == 0 || vm->fp_stack_ptr == 0) {
                 vm->running = 0;
                 vm->exit_code = (int)a_val;
@@ -1539,6 +3547,7 @@ int vm_step(VM* vm) {
             // Liberar variables locales del frame actual
             vm->sp = vm->fp;
             // Restaurar contexto (FP y PC)
+            vm->current_closure_env = vm->closure_env_stack[vm->fp_stack_ptr - 1];
             vm->fp = vm->fp_stack[--vm->fp_stack_ptr];
             vm->pc = vm->stack[--vm->stack_ptr];
             break;
@@ -1630,6 +3639,16 @@ int vm_step(VM* vm) {
                 const char* path = (const char*)vm->ir->data + offset;
 #if defined(_WIN32) || defined(_WIN64)
                 HMODULE h = LoadLibraryA(path);
+                {
+                    const char* repo = getenv("JASBOOT_REPO_ROOT");
+                    if (!h && repo && repo[0] && path && path[0] && !vm_ffi_path_is_absolute(path)) {
+                        char alt[1024];
+                        snprintf(alt, sizeof alt, "%s\\%s", repo, path);
+                        for (char* q = alt; *q; q++)
+                            if (*q == '/') *q = '\\';
+                        h = LoadLibraryA(alt);
+                    }
+                }
                 if (h) {
                     handle_val = (uint64_t)(uintptr_t)h;
                     if (vm->ffi_handles_count >= vm->ffi_handles_cap) {
@@ -1646,6 +3665,14 @@ int vm_step(VM* vm) {
                 }
 #else
                 void* h = dlopen(path, RTLD_LAZY);
+                {
+                    const char* repo = getenv("JASBOOT_REPO_ROOT");
+                    if (!h && repo && repo[0] && path && path[0] && !vm_ffi_path_is_absolute(path)) {
+                        char alt[1024];
+                        snprintf(alt, sizeof alt, "%s/%s", repo, path);
+                        h = dlopen(alt, RTLD_LAZY);
+                    }
+                }
                 if (h) {
                     handle_val = (uint64_t)(uintptr_t)h;
                     if (vm->ffi_handles_count >= vm->ffi_handles_cap) {
@@ -2057,6 +4084,35 @@ int vm_step(VM* vm) {
             break;
         }
 
+        case OP_IO_PAUSA: {
+            const char* mensaje = NULL;
+            if (inst.flags & IR_INST_FLAG_A_REGISTER) {
+                uint32_t msg_id = (uint32_t)vm_get_register(vm, inst.operand_a);
+                mensaje = vm_text_cache_get(vm, msg_id);
+            }
+            vm_io_pausa(mensaje);
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
+        case OP_PAUSA_MILISEGUNDOS: {
+            uint64_t ms_raw = vm_get_register(vm, inst.operand_b);
+            uint32_t ms = (uint32_t)(ms_raw > 86400000ull ? 86400000ull : ms_raw);
+#if defined(_WIN32) || defined(_WIN64)
+            Sleep((DWORD)ms);
+#else
+            if (ms > 0) {
+                unsigned sec = ms / 1000u;
+                unsigned usec = (ms % 1000u) * 1000u;
+                if (sec > 0) sleep(sec);
+                if (usec > 0) usleep(usec);
+            }
+#endif
+            vm_set_register(vm, inst.operand_a, 1u);
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
         case OP_IMPRIMIR_TEXTO: {
             uint32_t id = 0;
             if (inst.flags & IR_INST_FLAG_A_REGISTER) {
@@ -2078,8 +4134,25 @@ int vm_step(VM* vm) {
 
             if (id != 0 || (inst.flags & IR_INST_FLAG_A_REGISTER)) {
                 VMTextCacheEntry* ent = vm_text_cache_find(vm, id);
-                if (ent && ent->text) {
+                if (ent) {
+                    if (ent->kind == VM_TEXT_RAW && ent->text) {
                     vm_escribir_texto_bytes(ent->text, ent->text_len);
+                    } else if (ent->kind == VM_TEXT_CONCAT) {
+                        vm_text_emit_id(vm, id, stdout);
+                        vm_flush_stdout_after_text(NULL, 0);
+                    } else {
+                        char txt_buf[4096];
+#ifdef JASBOOT_LANG_INTEGRATION
+                        if (vm->mem_neuronal && jmn_obtener_texto(vm->mem_neuronal, id, txt_buf, sizeof(txt_buf)) >= 0 && txt_buf[0]) {
+                            vm_escribir_cadena(txt_buf);
+                        } else
+#endif
+                        {
+                            char buf[32];
+                            sprintf(buf, "<ID:%08X>", id);
+                            vm_escribir_cadena(buf);
+                        }
+                    }
                 } else {
                     char txt_buf[4096];
 #ifdef JASBOOT_LANG_INTEGRATION
@@ -2121,9 +4194,11 @@ int vm_step(VM* vm) {
                     char token_norm[512];
                     size_t sep_len = strlen(sep);
                     const char* p = texto;
+                    const char* texto_end = texto + strlen(texto);
+                    uint32_t token_count = 0;
                     if (sep_len == 0) {
                         p = texto;
-                        const char* end = p + strlen(p);
+                        const char* end = texto_end;
                         while (*p && ispunct((unsigned char)*p)) p++;
                         while (end > p && ispunct((unsigned char)*(end - 1))) end--;
                         size_t len = (size_t)(end - p);
@@ -2135,12 +4210,39 @@ int vm_step(VM* vm) {
                             vm_text_cache_put(vm, token_id, token_norm);
                             JMNValor v_val; v_val.u = token_id;
                             jmn_lista_agregar(vm->mem_colecciones, list_id, v_val);
+                            token_count++;
                             if (vm->mem_neuronal)
                                 jmn_guardar_texto(vm->mem_neuronal, token_id, token_norm);
                         }
+                    } else if (sep_len == 1) {
+                        unsigned char sep_ch = (unsigned char)sep[0];
+                        for (;;) {
+                            const char* found = p;
+                            while (found < texto_end && (unsigned char)*found != sep_ch) found++;
+                            const char* seg_end = found;
+                            const char* q = p;
+                            while (q < seg_end && ispunct((unsigned char)*q)) q++;
+                            const char* end = seg_end;
+                            while (end > q && ispunct((unsigned char)*(end - 1))) end--;
+                            size_t len = (size_t)(end - q);
+                            if (len >= sizeof(token_norm)) len = sizeof(token_norm) - 1;
+                            memcpy(token_norm, q, len);
+                            token_norm[len] = '\0';
+                            if (len > 0) {
+                                uint32_t token_id = vm_hash_texto(token_norm);
+                                vm_text_cache_put(vm, token_id, token_norm);
+                                JMNValor v_val; v_val.u = token_id;
+                                jmn_lista_agregar(vm->mem_colecciones, list_id, v_val);
+                                token_count++;
+                                if (vm->mem_neuronal)
+                                    jmn_guardar_texto(vm->mem_neuronal, token_id, token_norm);
+                            }
+                            if (found >= texto_end) break;
+                            p = found + 1;
+                        }
                     } else for (;;) {
                         const char* found = strstr(p, sep);
-                        const char* seg_end = found ? found : texto + strlen(texto);
+                        const char* seg_end = found ? found : texto_end;
                         const char* q = p;
                         while (q < seg_end && ispunct((unsigned char)*q)) q++;
                         const char* end = seg_end;
@@ -2154,12 +4256,14 @@ int vm_step(VM* vm) {
                             vm_text_cache_put(vm, token_id, token_norm);
                             JMNValor v_val; v_val.u = token_id;
                             jmn_lista_agregar(vm->mem_colecciones, list_id, v_val);
+                            token_count++;
                             if (vm->mem_neuronal)
                                 jmn_guardar_texto(vm->mem_neuronal, token_id, token_norm);
                         }
                         if (!found) break;
                         p = found + sep_len;
                     }
+                    vm_list_size_cache_set(vm, list_id, token_count);
                 }
 #endif
             }
@@ -2506,12 +4610,21 @@ int vm_step(VM* vm) {
         }
 
         case OP_MEM_TERMINA_CON_REG: {
+            uint32_t id_frase = (uint32_t)vm_get_register(vm, inst.operand_b);
+            uint32_t id_sufijo = (uint32_t)vm_get_register(vm, inst.operand_c);
+            uint64_t res = 0;
+            const char *s_f = vm_text_cache_get(vm, id_frase);
+            const char *s_s = vm_text_cache_get(vm, id_sufijo);
+            if (s_f && s_s) {
+                size_t lf = strlen(s_f), ls = strlen(s_s);
+                if (ls <= lf && memcmp(s_f + lf - ls, s_s, ls) == 0) res = 1;
+            } else {
 #ifdef JASBOOT_LANG_INTEGRATION
-            if (vm->mem_neuronal) {
-                uint32_t id_frase = (uint32_t)vm_get_register(vm, inst.operand_b), id_sufijo = (uint32_t)vm_get_register(vm, inst.operand_c);
-                vm->registers[inst.operand_a] = (uint64_t)jmn_termina_con(vm->mem_neuronal, id_frase, id_sufijo);
-            }
+                if (vm->mem_neuronal)
+                    res = (uint64_t)jmn_termina_con(vm->mem_neuronal, id_frase, id_sufijo);
 #endif
+            }
+            vm_set_register(vm, inst.operand_a, res);
             vm->pc += IR_INSTRUCTION_SIZE;
             break;
         }
@@ -2628,13 +4741,33 @@ int vm_step(VM* vm) {
         }
 
         case OP_MEM_COPIAR_TEXTO: {
-            uint32_t off24 = (uint32_t)inst.operand_a | ((uint32_t)inst.operand_b << 8) | ((uint32_t)inst.operand_c << 16);
 #ifdef JASBOOT_LANG_INTEGRATION
-            if (vm->mem_neuronal && vm->ir && vm->ir->data && off24 + 8 <= vm->ir->header.data_size) {
+            if ((inst.flags & IR_INST_FLAG_A_REGISTER) && (inst.flags & IR_INST_FLAG_B_REGISTER)) {
+                uint32_t id_o = (uint32_t)vm->registers[inst.operand_b];
+                size_t text_len = 0;
+                char* text = vm_text_materialize_owned(vm, id_o, &text_len);
+                if (text) {
+                    uint32_t id_res = vm_alloc_runtime_text_id(vm);
+                    if (id_res != 0) {
+                        vm_text_cache_put_owned(vm, id_res, text, text_len);
+                        if (vm->mem_neuronal)
+                            jmn_guardar_texto(vm->mem_neuronal, id_res, vm_text_cache_get(vm, id_res));
+                        vm->registers[inst.operand_a] = (uint64_t)id_res;
+                    } else {
+                        free(text);
+                        vm->registers[inst.operand_a] = 0;
+                    }
+                } else {
+                    vm->registers[inst.operand_a] = 0;
+                }
+            } else if (vm->mem_neuronal) {
+                uint32_t off24 = (uint32_t)inst.operand_a | ((uint32_t)inst.operand_b << 8) | ((uint32_t)inst.operand_c << 16);
+                if (vm->ir && vm->ir->data && off24 + 8 <= vm->ir->header.data_size) {
                 uint32_t id_d = 0, id_o = 0;
                 vm_leer_u32(vm->ir->data, vm->ir->header.data_size, off24, &id_d);
                 vm_leer_u32(vm->ir->data, vm->ir->header.data_size, off24 + 4, &id_o);
                 jmn_copiar_texto(vm->mem_neuronal, id_o, id_d);
+                }
             }
 #endif
             vm->pc += IR_INSTRUCTION_SIZE;
@@ -2642,13 +4775,45 @@ int vm_step(VM* vm) {
         }
 
         case OP_MEM_ULTIMA_PALABRA: {
-            uint32_t off24 = (uint32_t)inst.operand_a | ((uint32_t)inst.operand_b << 8) | ((uint32_t)inst.operand_c << 16);
 #ifdef JASBOOT_LANG_INTEGRATION
-            if (vm->mem_neuronal && vm->ir && vm->ir->data && off24 + 8 <= vm->ir->header.data_size) {
+            if ((inst.flags & IR_INST_FLAG_A_REGISTER) && (inst.flags & IR_INST_FLAG_B_REGISTER)) {
+                uint32_t id_f = (uint32_t)vm->registers[inst.operand_b];
+                uint32_t res = 0;
+                size_t text_len = 0;
+                char* text = vm_text_materialize_owned(vm, id_f, &text_len);
+                if (text) {
+                    char* start = text;
+                    char* p = text;
+                    while (*p) {
+                        if (*p == ' ' || *p == '\t') {
+                            start = p + 1;
+                        }
+                        p++;
+                    }
+                    res = vm_alloc_runtime_text_id(vm);
+                    if (res != 0) {
+                        size_t out_len = strlen(start);
+                        char* out = (char*)malloc(out_len + 1);
+                        if (out) {
+                            memcpy(out, start, out_len + 1);
+                            vm_text_cache_put_owned(vm, res, out, out_len);
+                            if (vm->mem_neuronal)
+                                jmn_guardar_texto(vm->mem_neuronal, res, vm_text_cache_get(vm, res));
+                        } else {
+                            res = 0;
+                        }
+                    }
+                    free(text);
+                }
+                vm->registers[inst.operand_a] = (uint64_t)res;
+            } else if (vm->mem_neuronal) {
+                uint32_t off24 = (uint32_t)inst.operand_a | ((uint32_t)inst.operand_b << 8) | ((uint32_t)inst.operand_c << 16);
+                if (vm->ir && vm->ir->data && off24 + 8 <= vm->ir->header.data_size) {
                 uint32_t id_f = 0, id_d = 0;
                 vm_leer_u32(vm->ir->data, vm->ir->header.data_size, off24, &id_f);
                 vm_leer_u32(vm->ir->data, vm->ir->header.data_size, off24 + 4, &id_d);
                 jmn_ultima_palabra(vm->mem_neuronal, id_f, id_d);
+                }
             }
 #endif
             vm->pc += IR_INSTRUCTION_SIZE;
@@ -2786,8 +4951,23 @@ int vm_step(VM* vm) {
 
 
         case OP_MEM_PENSAR: {
-            // Se mantiene por compatibilidad legacy, pero redirige internamente si es necesario
-            // ... (implementación anterior omitida para brevedad si no se usa)
+            uint32_t id_in = (uint32_t)vm_get_register(vm, inst.operand_b);
+            int depth = 2;
+            if (inst.flags & IR_INST_FLAG_C_IMMEDIATE)
+                depth = (int)inst.operand_c;
+            if (depth < 1) depth = 1;
+            if (depth > 32) depth = 32;
+            uint32_t out_id = id_in;
+#ifdef JASBOOT_LANG_INTEGRATION
+            if (vm->mem_neuronal && id_in != 0)
+                out_id = jmn_razonamiento_multipath(vm->mem_neuronal, id_in, depth);
+            if (vm->mem_neuronal && out_id != 0) {
+                char buf[4096];
+                if (jmn_obtener_texto(vm->mem_neuronal, out_id, buf, sizeof(buf)) >= 0 && buf[0])
+                    vm_text_cache_put(vm, out_id, buf);
+            }
+#endif
+            vm_set_register(vm, inst.operand_a, (uint64_t)out_id);
             vm->pc += IR_INSTRUCTION_SIZE;
             break;
         }
@@ -3122,6 +5302,8 @@ int vm_step(VM* vm) {
                 jmn_finalizar_escritura(vm->mem_neuronal);
                 jmn_cerrar(vm->mem_neuronal);
                 vm->mem_neuronal = NULL;
+                vm->mem_neuronal_owner_depth = 0;
+                vm->mem_neuronal_open_line = 0;
             }
             
             // Usar jmn_abrir_escritura que maneja apertura/creación sin truncar
@@ -3143,6 +5325,8 @@ int vm_step(VM* vm) {
                 fprintf(stderr, "Error: No se pudo crear/cargar memoria '%s'\n", nombre);
                 vm_set_register(vm, inst.operand_a, 0); 
             } else {
+                vm->mem_neuronal_owner_depth = vm_call_depth(vm);
+                vm->mem_neuronal_open_line = vm->current_line;
                 vm_set_register(vm, inst.operand_a, 1); 
             }
 #endif
@@ -3158,6 +5342,8 @@ int vm_step(VM* vm) {
                 jmn_finalizar_escritura(vm->mem_neuronal);
                 jmn_cerrar(vm->mem_neuronal);
                 vm->mem_neuronal = NULL;
+                vm->mem_neuronal_owner_depth = 0;
+                vm->mem_neuronal_open_line = 0;
             }
 #endif
             vm->pc += IR_INSTRUCTION_SIZE;
@@ -3275,32 +5461,42 @@ int vm_step(VM* vm) {
             uint32_t id_izq = (uint32_t)vm_get_register(vm, inst.operand_b);
             uint32_t id_der = (uint32_t)vm_get_register(vm, inst.operand_c);
             uint32_t id_res = 0;
-            /* Bypasseamos integración neuronal para mayor estabilidad en compilador */
-            /*
-#ifdef JASBOOT_LANG_INTEGRATION
-            if (vm->mem_neuronal) {
-                id_res = jmn_concatenar_dinamico(vm->mem_neuronal, id_izq, id_der);
-            }
-#endif
-            */
-            // Fallback a cache de texto si no hay integración o falló
-            if (id_res == 0) {
-                const char* s1 = vm_text_cache_get(vm, id_izq);
-                const char* s2 = vm_text_cache_get(vm, id_der);
-                if (!s1 && id_izq == 0) s1 = "";
-                if (!s2 && id_der == 0) s2 = "";
-                if (s1 && s2) {
-                    VMTextCacheEntry* e1 = vm_text_cache_find(vm, id_izq);
-                    VMTextCacheEntry* e2 = vm_text_cache_find(vm, id_der);
-                    size_t l1 = (e1 && e1->text == s1) ? e1->text_len : strlen(s1);
-                    size_t l2 = (e2 && e2->text == s2) ? e2->text_len : strlen(s2);
-                    char* combined = (char*)malloc(l1 + l2 + 1);
+            /* Evitar aplanar ropes grandes durante concatenar: solo necesitamos longitudes para la ruta perezosa. */
+            {
+                char jbuf_l[2048];
+                char jbuf_r[2048];
+                const char* s1 = NULL;
+                const char* s2 = NULL;
+                size_t l1 = 0, l2 = 0;
+                int ok1 = vm_text_resolve_info(vm, id_izq, jbuf_l, sizeof jbuf_l, &s1, &l1);
+                int ok2 = vm_text_resolve_info(vm, id_der, jbuf_r, sizeof jbuf_r, &s2, &l2);
+                if (ok1 && ok2) {
+                    if (s1 == jbuf_l) vm_text_cache_put(vm, id_izq, s1);
+                    if (s2 == jbuf_r) vm_text_cache_put(vm, id_der, s2);
+                    size_t total_len = l1 + l2;
+                    if (total_len >= 4096) {
+                        id_res = vm_alloc_runtime_text_id(vm);
+                        vm_text_cache_put_concat(vm, id_res, id_izq, id_der, total_len);
+                    } else {
+                        char left_small[4096];
+                        char right_small[4096];
+                        if (!s1) {
+                            size_t wrote = vm_text_extract_range(vm, id_izq, 0, l1, left_small);
+                            left_small[wrote] = '\0';
+                            s1 = left_small;
+                        }
+                        if (!s2) {
+                            size_t wrote = vm_text_extract_range(vm, id_der, 0, l2, right_small);
+                            right_small[wrote] = '\0';
+                            s2 = right_small;
+                        }
+                        char* combined = (char*)malloc(total_len + 1);
                     if (combined) {
-                        strcpy(combined, s1);
-                        strcat(combined, s2);
-                        id_res = vm_hash_texto(combined);
-                        vm_text_cache_put(vm, id_res, combined);
-                        free(combined);
+                        memcpy(combined, s1, l1);
+                        memcpy(combined + l1, s2, l2 + 1);
+                            id_res = vm_alloc_runtime_text_id(vm);
+                            vm_text_cache_put_owned(vm, id_res, combined, total_len);
+                        }
                     }
                 }
             }
@@ -3313,7 +5509,7 @@ int vm_step(VM* vm) {
             uint32_t id = (uint32_t)vm_get_register(vm, inst.operand_b);
             size_t len = 0;
             VMTextCacheEntry* e = vm_text_cache_find(vm, id);
-            if (e && e->text) {
+            if (e) {
                 len = e->text_len;
             } else {
                 const char* s = vm_text_cache_get(vm, id);
@@ -3478,22 +5674,32 @@ int vm_step(VM* vm) {
             uint32_t id_frase = (uint32_t)vm_get_register(vm, inst.operand_b);
             uint32_t start = (uint32_t)vm_get_register(vm, inst.operand_c);
             uint32_t len = (uint32_t)vm_get_register(vm, inst.operand_c + 1);
-            const char* frase = NULL;
             size_t f_len = 0;
-            char frase_stack[4096];
             VMTextCacheEntry* ent = vm_text_cache_find(vm, id_frase);
-            if (ent && ent->text) {
-                frase = ent->text;
-                f_len = ent->text_len;
+            if (ent) f_len = ent->text_len;
+            if (ent && start == 0 && ent->preview && ent->preview_len > 0) {
+                uint32_t prefix_len = len;
+                if (prefix_len > ent->preview_len) prefix_len = ent->preview_len;
+                if (ent->preview_id != 0 && ent->preview_id_len == prefix_len) {
+                    vm_set_register(vm, inst.operand_a, (uint64_t)ent->preview_id);
+                    vm->pc += IR_INSTRUCTION_SIZE;
+                    break;
+                }
+            }
+            uint32_t cached_id = 0;
+            if (vm_substring_cache_get(vm, id_frase, start, len, &cached_id)) {
+                vm_set_register(vm, inst.operand_a, (uint64_t)cached_id);
+                vm->pc += IR_INSTRUCTION_SIZE;
+                break;
             }
 #ifdef JASBOOT_LANG_INTEGRATION
-            if (!frase && vm->mem_neuronal &&
+            char frase_stack[4096];
+            const char* frase = NULL;
+            if (!ent && vm->mem_neuronal &&
                 jmn_obtener_texto(vm->mem_neuronal, id_frase, frase_stack, sizeof(frase_stack)) >= 0) {
                 frase = frase_stack;
                 f_len = strlen(frase_stack);
-            }
-#endif
-            if (frase && f_len > 0) {
+                if (f_len > 0) {
                 if (start < f_len) {
                     if ((size_t)start + (size_t)len > f_len)
                         len = (uint32_t)(f_len - start);
@@ -3501,11 +5707,34 @@ int vm_step(VM* vm) {
                     char salida[4096];
                     memcpy(salida, frase + start, len);
                     salida[len] = '\0';
+                        uint32_t id_res = vm_hash_texto(salida);
+                        if (vm->mem_neuronal) jmn_guardar_texto(vm->mem_neuronal, id_res, salida);
+                        vm_text_cache_put(vm, id_res, salida);
+                        vm_substring_cache_put(vm, id_frase, start, len, id_res);
+                        vm_set_register(vm, inst.operand_a, (uint64_t)id_res);
+                    } else {
+                        vm_set_register(vm, inst.operand_a, 5381);
+                    }
+                    vm->pc += IR_INSTRUCTION_SIZE;
+                    break;
+                }
+            }
+#endif
+            if (ent && f_len > 0) {
+                if (start < f_len) {
+                    if ((size_t)start + (size_t)len > f_len)
+                        len = (uint32_t)(f_len - start);
+                    if (len >= 4096) len = 4095;
+                    char salida[4096];
+                    size_t wrote = 0;
+                    wrote = vm_text_extract_range(vm, id_frase, start, len, salida);
+                    salida[wrote] = '\0';
                     uint32_t id_res = vm_hash_texto(salida);
 #ifdef JASBOOT_LANG_INTEGRATION
                     if (vm->mem_neuronal) jmn_guardar_texto(vm->mem_neuronal, id_res, salida);
 #endif
                     vm_text_cache_put(vm, id_res, salida);
+                    vm_substring_cache_put(vm, id_frase, start, len, id_res);
                     vm_set_register(vm, inst.operand_a, (uint64_t)id_res);
                 } else {
                     vm_set_register(vm, inst.operand_a, 5381);
@@ -3697,6 +5926,685 @@ int vm_step(VM* vm) {
             break;
         }
 
+        case OP_JSON_PARSE: {
+            uint32_t text_id = (uint32_t)vm_get_register(vm, inst.operand_b);
+            char buffer[65536];
+            char err[160];
+            uint32_t json_h = 0;
+            if (vm_text_cache_get_copy(vm, text_id, buffer, sizeof(buffer))) {
+                json_h = vm_json_parse_text(vm, buffer, err, sizeof(err));
+            } else {
+                snprintf(err, sizeof(err), "json_parse: no se pudo leer el texto (id %u)", (unsigned)text_id);
+            }
+            if (!json_h) {
+                if (vm_try_catch_or_abort(vm, err[0] ? err : "json_parse: JSON invalido")) return 0;
+                fprintf(stderr, "Error de ejecucion (VM): %s\n", err[0] ? err : "json_parse: JSON invalido");
+                vm->running = 0;
+                vm->exit_code = 1;
+                return 0;
+            }
+            vm->registers[inst.operand_a] = (uint64_t)json_h;
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
+        case OP_JSON_STRINGIFY: {
+            uint32_t json_h = (uint32_t)vm_get_register(vm, inst.operand_b);
+            int indent_step = 0;
+            if (inst.flags & IR_INST_FLAG_C_IMMEDIATE)
+                indent_step = (int)inst.operand_c;
+            else
+                indent_step = (int)vm_get_register(vm, inst.operand_c);
+            if (indent_step < 0) indent_step = 0;
+            if (indent_step > 16) indent_step = 16;
+            VMJsonBuf out = {0};
+            uint32_t text_id = 0;
+            if (!vm_json_stringify_inner(vm, json_h, &out, indent_step, 0)) {
+                if (vm_try_catch_or_abort(vm, "json_stringify: valor JSON invalido")) return 0;
+                fprintf(stderr, "Error de ejecucion (VM): json_stringify: valor JSON invalido\n");
+                free(out.data);
+                vm->running = 0;
+                vm->exit_code = 1;
+                return 0;
+            }
+            text_id = vm_json_store_text(vm, out.data ? out.data : "");
+            free(out.data);
+            vm->registers[inst.operand_a] = (uint64_t)text_id;
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
+        case OP_JSON_OBJETO_OBTENER: {
+            uint32_t json_h = (uint32_t)vm_get_register(vm, inst.operand_b);
+            uint32_t key_id = (uint32_t)vm_get_register(vm, inst.operand_c);
+            VMJsonValue* v = vm_json_get(vm, json_h);
+            uint32_t found = 0;
+            if (!v || v->kind != VM_JSON_OBJECT) {
+                if (vm_try_catch_or_abort(vm, "json_objeto_obtener: el valor no es un objeto JSON")) return 0;
+                fprintf(stderr, "Error de ejecucion (VM): json_objeto_obtener: el valor no es un objeto JSON\n");
+                vm->running = 0;
+                vm->exit_code = 1;
+                return 0;
+            }
+            for (uint32_t i = 0; i < v->count; i++) {
+                if (vm_text_ids_equal(vm, v->keys[i], key_id)) {
+                    found = v->items[i];
+                    break;
+                }
+            }
+            if (!found) {
+                if (vm_try_catch_or_abort(vm, "json_objeto_obtener: clave JSON inexistente")) return 0;
+                fprintf(stderr, "Error de ejecucion (VM): json_objeto_obtener: clave JSON inexistente\n");
+                vm->running = 0;
+                vm->exit_code = 1;
+                return 0;
+            }
+            vm->registers[inst.operand_a] = (uint64_t)found;
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
+        case OP_JSON_LISTA_OBTENER: {
+            uint32_t json_h = (uint32_t)vm_get_register(vm, inst.operand_b);
+            uint32_t idx = (uint32_t)vm_get_register(vm, inst.operand_c);
+            VMJsonValue* v = vm_json_get(vm, json_h);
+            if (!v || v->kind != VM_JSON_ARRAY || idx >= v->count) {
+                if (vm_try_catch_or_abort(vm, "json_lista_obtener: indice JSON invalido")) return 0;
+                fprintf(stderr, "Error de ejecucion (VM): json_lista_obtener: indice JSON invalido\n");
+                vm->running = 0;
+                vm->exit_code = 1;
+                return 0;
+            }
+            vm->registers[inst.operand_a] = (uint64_t)v->items[idx];
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
+        case OP_JSON_LISTA_TAMANO: {
+            uint32_t json_h = (uint32_t)vm_get_register(vm, inst.operand_b);
+            VMJsonValue* v = vm_json_get(vm, json_h);
+            if (!v || v->kind != VM_JSON_ARRAY) {
+                if (vm_try_catch_or_abort(vm, "json_lista_tamano: el valor no es un array JSON")) return 0;
+                fprintf(stderr, "Error de ejecucion (VM): json_lista_tamano: el valor no es un array JSON\n");
+                vm->running = 0;
+                vm->exit_code = 1;
+                return 0;
+            }
+            vm->registers[inst.operand_a] = (uint64_t)v->count;
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
+        case OP_JSON_A_TEXTO: {
+            uint32_t json_h = (uint32_t)vm_get_register(vm, inst.operand_b);
+            VMJsonValue* v = vm_json_get(vm, json_h);
+            char tmp[128];
+            uint32_t text_id = 0;
+            if (!v) {
+                if (vm_try_catch_or_abort(vm, "json_a_texto: handle JSON invalido")) return 0;
+                fprintf(stderr, "Error de ejecucion (VM): json_a_texto: handle JSON invalido\n");
+                vm->running = 0;
+                vm->exit_code = 1;
+                return 0;
+            }
+            switch (v->kind) {
+                case VM_JSON_STRING:
+                    text_id = v->text_id;
+                    break;
+                case VM_JSON_INT:
+                    snprintf(tmp, sizeof(tmp), "%" PRId64, v->int_value);
+                    text_id = vm_json_store_text(vm, tmp);
+                    break;
+                case VM_JSON_FLOAT:
+                    snprintf(tmp, sizeof(tmp), "%.15g", v->float_value);
+                    text_id = vm_json_store_text(vm, tmp);
+                    break;
+                case VM_JSON_BOOL:
+                    text_id = vm_json_store_text(vm, v->bool_value ? "true" : "false");
+                    break;
+                case VM_JSON_NULL:
+                    text_id = vm_json_store_text(vm, "null");
+                    break;
+                default: {
+                    VMJsonBuf out = {0};
+                    if (!vm_json_stringify_value(vm, json_h, &out)) {
+                        free(out.data);
+                        if (vm_try_catch_or_abort(vm, "json_a_texto: no se pudo serializar el valor")) return 0;
+                        fprintf(stderr, "Error de ejecucion (VM): json_a_texto: no se pudo serializar el valor\n");
+                        vm->running = 0;
+                        vm->exit_code = 1;
+                        return 0;
+                    }
+                    text_id = vm_json_store_text(vm, out.data ? out.data : "");
+                    free(out.data);
+                    break;
+                }
+            }
+            vm->registers[inst.operand_a] = (uint64_t)text_id;
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
+        case OP_JSON_A_ENTERO: {
+            uint32_t json_h = (uint32_t)vm_get_register(vm, inst.operand_b);
+            VMJsonValue* v = vm_json_get(vm, json_h);
+            int64_t iv = 0;
+            char buf[256];
+            if (!v) {
+                if (vm_try_catch_or_abort(vm, "json_a_entero: handle JSON invalido")) return 0;
+                fprintf(stderr, "Error de ejecucion (VM): json_a_entero: handle JSON invalido\n");
+                vm->running = 0;
+                vm->exit_code = 1;
+                return 0;
+            }
+            if (v->kind == VM_JSON_INT) iv = v->int_value;
+            else if (v->kind == VM_JSON_BOOL) iv = v->bool_value ? 1 : 0;
+            else if (v->kind == VM_JSON_FLOAT) iv = (int64_t)v->float_value;
+            else if (v->kind == VM_JSON_STRING && vm_text_cache_get_copy(vm, v->text_id, buf, sizeof(buf)) &&
+                     vm_parse_decimal_entero_estricto(buf, &iv)) { }
+            else {
+                if (vm_try_catch_or_abort(vm, "json_a_entero: conversion JSON invalida")) return 0;
+                fprintf(stderr, "Error de ejecucion (VM): json_a_entero: conversion JSON invalida\n");
+                vm->running = 0;
+                vm->exit_code = 1;
+                return 0;
+            }
+            vm->registers[inst.operand_a] = (uint64_t)iv;
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
+        case OP_JSON_A_FLOTANTE: {
+            uint32_t json_h = (uint32_t)vm_get_register(vm, inst.operand_b);
+            VMJsonValue* v = vm_json_get(vm, json_h);
+            float fv = 0.0f;
+            char buf[256];
+            if (!v) {
+                if (vm_try_catch_or_abort(vm, "json_a_flotante: handle JSON invalido")) return 0;
+                fprintf(stderr, "Error de ejecucion (VM): json_a_flotante: handle JSON invalido\n");
+                vm->running = 0;
+                vm->exit_code = 1;
+                return 0;
+            }
+            if (v->kind == VM_JSON_FLOAT) fv = (float)v->float_value;
+            else if (v->kind == VM_JSON_INT) fv = (float)v->int_value;
+            else if (v->kind == VM_JSON_BOOL) fv = v->bool_value ? 1.0f : 0.0f;
+            else if (v->kind == VM_JSON_STRING && vm_text_cache_get_copy(vm, v->text_id, buf, sizeof(buf))) fv = vm_parse_decimal_flotante_estricto(buf);
+            else fv = nanf("");
+            if (isnan((double)fv)) {
+                if (vm_try_catch_or_abort(vm, "json_a_flotante: conversion JSON invalida")) return 0;
+                fprintf(stderr, "Error de ejecucion (VM): json_a_flotante: conversion JSON invalida\n");
+                vm->running = 0;
+                vm->exit_code = 1;
+                return 0;
+            }
+            vm->registers[inst.operand_a] = 0;
+            *(float*)&vm->registers[inst.operand_a] = fv;
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
+        case OP_JSON_A_BOOL: {
+            uint32_t json_h = (uint32_t)vm_get_register(vm, inst.operand_b);
+            VMJsonValue* v = vm_json_get(vm, json_h);
+            uint64_t bv = 0;
+            if (!v) {
+                if (vm_try_catch_or_abort(vm, "json_a_bool: handle JSON invalido")) return 0;
+                fprintf(stderr, "Error de ejecucion (VM): json_a_bool: handle JSON invalido\n");
+                vm->running = 0;
+                vm->exit_code = 1;
+                return 0;
+            }
+            switch (v->kind) {
+                case VM_JSON_NULL: bv = 0; break;
+                case VM_JSON_BOOL: bv = v->bool_value ? 1u : 0u; break;
+                case VM_JSON_INT: bv = v->int_value != 0 ? 1u : 0u; break;
+                case VM_JSON_FLOAT: bv = v->float_value != 0.0 ? 1u : 0u; break;
+                case VM_JSON_STRING: bv = v->text_id != 5381 ? 1u : 0u; break;
+                default: bv = v->count != 0 ? 1u : 0u; break;
+            }
+            vm->registers[inst.operand_a] = bv;
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
+        case OP_JSON_TIPO: {
+            uint32_t json_h = (uint32_t)vm_get_register(vm, inst.operand_b);
+            VMJsonValue* v = vm_json_get(vm, json_h);
+            vm->registers[inst.operand_a] = (uint64_t)(v ? v->kind : 0u);
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
+        case OP_CLOSURE_CREAR: {
+            uint64_t target = vm_get_register(vm, inst.operand_b);
+            uint32_t env_list_id = (uint32_t)vm_get_register(vm, inst.operand_c);
+            vm->registers[inst.operand_a] = vm_closure_create(vm, (size_t)target, env_list_id);
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
+        case OP_CLOSURE_CARGAR: {
+            uint32_t idx = (uint32_t)GET_OPERAND(vm, &inst, IR_INST_FLAG_B_IMMEDIATE, inst.operand_b);
+            if (vm->current_closure_env == 0) {
+                if (vm_try_catch_or_abort(vm, "closure_cargar: no hay entorno capturado activo")) return 0;
+                fprintf(stderr, "Error de ejecucion (VM): closure_cargar: no hay entorno capturado activo\n");
+                vm->running = 0;
+                vm->exit_code = 1;
+                return 0;
+            }
+#ifdef JASBOOT_LANG_INTEGRATION
+            ensure_jmn_col(vm);
+            if (vm->mem_colecciones) {
+                if (jmn_lista_indice_fuera_de_rango(vm->mem_colecciones, vm->current_closure_env, idx)) {
+                    if (vm_try_catch_or_abort(vm, "closure_cargar: indice de captura invalido")) return 0;
+                    fprintf(stderr, "Error de ejecucion (VM): closure_cargar: indice de captura invalido\n");
+                    vm->running = 0;
+                    vm->exit_code = 1;
+                    return 0;
+                }
+                vm->registers[inst.operand_a] = (uint64_t)jmn_lista_obtener(vm->mem_colecciones, vm->current_closure_env, idx).u;
+            } else {
+                vm->registers[inst.operand_a] = 0;
+            }
+#else
+            vm->registers[inst.operand_a] = 0;
+#endif
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
+        case OP_BYTES_CREAR: {
+            uint32_t len = (uint32_t)vm_get_register(vm, inst.operand_b);
+            vm->registers[inst.operand_a] = (uint64_t)vm_bytes_new(vm, len);
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
+        case OP_BYTES_TAMANO: {
+            VMBytesEntry* entry = vm_bytes_get(vm, (uint32_t)vm_get_register(vm, inst.operand_b));
+            vm->registers[inst.operand_a] = (uint64_t)(entry ? entry->len : 0u);
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
+        case OP_BYTES_OBTENER: {
+            VMBytesEntry* entry = vm_bytes_get(vm, (uint32_t)vm_get_register(vm, inst.operand_b));
+            uint32_t idx = (uint32_t)vm_get_register(vm, inst.operand_c);
+            if (!entry || idx >= entry->len) {
+                if (vm_try_catch_or_abort(vm, "bytes_obtener: indice fuera de rango")) return 0;
+                fprintf(stderr, "Error de ejecucion (VM): bytes_obtener: indice fuera de rango\n");
+                vm->running = 0;
+                vm->exit_code = 1;
+                return 0;
+            }
+            vm->registers[inst.operand_a] = (uint64_t)entry->data[idx];
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
+        case OP_BYTES_PONER: {
+            VMBytesEntry* entry = vm_bytes_get(vm, (uint32_t)vm_get_register(vm, inst.operand_a));
+            uint32_t idx = (uint32_t)vm_get_register(vm, inst.operand_b);
+            uint32_t value = (uint32_t)vm_get_register(vm, inst.operand_c);
+            if (!entry || idx >= entry->len) {
+                if (vm_try_catch_or_abort(vm, "bytes_poner: indice fuera de rango")) return 0;
+                fprintf(stderr, "Error de ejecucion (VM): bytes_poner: indice fuera de rango\n");
+                vm->running = 0;
+                vm->exit_code = 1;
+                return 0;
+            }
+            entry->data[idx] = (uint8_t)(value & 0xFFu);
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
+        case OP_BYTES_ANEXAR: {
+            VMBytesEntry* left = vm_bytes_get(vm, (uint32_t)vm_get_register(vm, inst.operand_b));
+            uint32_t right_h = (uint32_t)vm_get_register(vm, inst.operand_c);
+            VMBytesEntry* right_bytes = vm_bytes_get(vm, right_h);
+            const char* right_text = NULL;
+            uint32_t right_len = 0;
+            uint32_t out_h;
+            VMBytesEntry* out;
+            if (!left) {
+                if (vm_try_catch_or_abort(vm, "bytes_anexar: bytes origen invalidos")) return 0;
+                fprintf(stderr, "Error de ejecucion (VM): bytes_anexar: bytes origen invalidos\n");
+                vm->running = 0;
+                vm->exit_code = 1;
+                return 0;
+            }
+            if (right_bytes) right_len = right_bytes->len;
+            else {
+                right_text = vm_text_cache_get(vm, right_h);
+                right_len = right_text ? (uint32_t)strlen(right_text) : 0u;
+            }
+            out_h = vm_bytes_new(vm, left->len + right_len);
+            out = vm_bytes_get(vm, out_h);
+            if (!out) {
+                vm->registers[inst.operand_a] = 0;
+                vm->pc += IR_INSTRUCTION_SIZE;
+                break;
+            }
+            if (left->len) memcpy(out->data, left->data, left->len);
+            if (right_len) {
+                if (right_bytes) memcpy(out->data + left->len, right_bytes->data, right_len);
+                else memcpy(out->data + left->len, right_text, right_len);
+            }
+            vm->registers[inst.operand_a] = (uint64_t)out_h;
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
+        case OP_BYTES_SUBBYTES: {
+            VMBytesEntry* entry = vm_bytes_get(vm, (uint32_t)vm_get_register(vm, inst.operand_b));
+            uint32_t start = (uint32_t)vm_get_register(vm, inst.operand_c);
+            uint32_t len = 0;
+            uint32_t out_h;
+            if (!entry) {
+                if (vm_try_catch_or_abort(vm, "bytes_subbytes: handle invalido")) return 0;
+                fprintf(stderr, "Error de ejecucion (VM): bytes_subbytes: handle invalido\n");
+                vm->running = 0;
+                vm->exit_code = 1;
+                return 0;
+            }
+            len = (uint32_t)vm_get_register(vm, inst.operand_c + 1);
+            if (start > entry->len) start = entry->len;
+            if (len > entry->len - start) len = entry->len - start;
+            out_h = vm_bytes_from_raw(vm, entry->data + start, len);
+            vm->registers[inst.operand_a] = (uint64_t)out_h;
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
+        case OP_BYTES_DESDE_TEXTO: {
+            size_t text_len = 0;
+            char* text = vm_text_materialize_owned(vm, (uint32_t)vm_get_register(vm, inst.operand_b), &text_len);
+            vm->registers[inst.operand_a] = (uint64_t)vm_bytes_from_raw(vm, (const uint8_t*)(text ? text : ""), (uint32_t)text_len);
+            free(text);
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
+        case OP_BYTES_A_TEXTO: {
+            VMBytesEntry* entry = vm_bytes_get(vm, (uint32_t)vm_get_register(vm, inst.operand_b));
+            uint32_t text_id = 5381;
+            if (entry) {
+                char* tmp = (char*)malloc((size_t)entry->len + 1u);
+                if (tmp) {
+                    if (entry->len) memcpy(tmp, entry->data, entry->len);
+                    tmp[entry->len] = '\0';
+                    text_id = vm_hash_texto(tmp);
+                    if (text_id == 0) text_id = 5381;
+                    vm_text_cache_put(vm, text_id, tmp);
+                    free(tmp);
+                }
+            }
+            vm->registers[inst.operand_a] = (uint64_t)text_id;
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
+        case OP_BYTES_PUNTERO: {
+            VMBytesEntry* entry = vm_bytes_get(vm, (uint32_t)vm_get_register(vm, inst.operand_b));
+            vm->registers[inst.operand_a] = (uint64_t)(uintptr_t)(entry ? entry->data : NULL);
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
+        case OP_DNS_RESOLVER: {
+            const char* host = vm_text_cache_get(vm, (uint32_t)vm_get_register(vm, inst.operand_b));
+            char ipbuf[INET6_ADDRSTRLEN] = {0};
+            struct addrinfo hints;
+            struct addrinfo* res = NULL;
+            memset(&hints, 0, sizeof(hints));
+            hints.ai_socktype = SOCK_STREAM;
+            hints.ai_family = AF_UNSPEC;
+            if (!vm_net_init(vm) || !host || getaddrinfo(host, NULL, &hints, &res) != 0 || !res) {
+                vm->registers[inst.operand_a] = (uint64_t)vm_json_store_text(vm, "");
+                vm->pc += IR_INSTRUCTION_SIZE;
+                break;
+            }
+            if (res->ai_family == AF_INET) {
+                struct sockaddr_in* addr4 = (struct sockaddr_in*)res->ai_addr;
+                inet_ntop(AF_INET, &addr4->sin_addr, ipbuf, sizeof(ipbuf));
+            } else if (res->ai_family == AF_INET6) {
+                struct sockaddr_in6* addr6 = (struct sockaddr_in6*)res->ai_addr;
+                inet_ntop(AF_INET6, &addr6->sin6_addr, ipbuf, sizeof(ipbuf));
+            }
+            freeaddrinfo(res);
+            vm->registers[inst.operand_a] = (uint64_t)vm_json_store_text(vm, ipbuf);
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
+        case OP_TCP_CONECTAR:
+        case OP_TCP_ESCUCHAR: {
+            const char* host = vm_text_cache_get(vm, (uint32_t)vm_get_register(vm, inst.operand_b));
+            uint32_t port = (uint32_t)vm_get_register(vm, inst.operand_c);
+            char portbuf[16];
+            struct addrinfo hints;
+            struct addrinfo* res = NULL;
+            struct addrinfo* it;
+            vm_socket_native_t s = VM_SOCKET_INVALID;
+            uint32_t handle = 0;
+            if (!vm_net_init(vm)) {
+                vm->registers[inst.operand_a] = 0;
+                vm->pc += IR_INSTRUCTION_SIZE;
+                break;
+            }
+            memset(&hints, 0, sizeof(hints));
+            hints.ai_family = AF_UNSPEC;
+            hints.ai_socktype = SOCK_STREAM;
+            if (inst.opcode == OP_TCP_ESCUCHAR) hints.ai_flags = AI_PASSIVE;
+            snprintf(portbuf, sizeof(portbuf), "%u", port);
+            if (getaddrinfo((host && host[0] && strcmp(host, "*") != 0) ? host : NULL, portbuf, &hints, &res) != 0 || !res) {
+                vm->registers[inst.operand_a] = 0;
+                vm->pc += IR_INSTRUCTION_SIZE;
+                break;
+            }
+            for (it = res; it; it = it->ai_next) {
+                s = socket(it->ai_family, it->ai_socktype, it->ai_protocol);
+                if (s == VM_SOCKET_INVALID) continue;
+                if (inst.opcode == OP_TCP_ESCUCHAR) {
+#if defined(_WIN32) || defined(_WIN64)
+                    int opt = 1;
+                    setsockopt(s, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, (const char*)&opt, sizeof(opt));
+#else
+                    int opt = 1;
+                    setsockopt(s, SOL_SOCKET, SO_REUSEADDR, (const char*)&opt, sizeof(opt));
+#endif
+                    if (bind(s, it->ai_addr, (int)it->ai_addrlen) == 0 && listen(s, 128) == 0) {
+                        vm_net_debugf("listen ok host=%s port=%u family=%d socket=%lld",
+                                      (host && host[0]) ? host : "*", (unsigned)port, (int)it->ai_family, (long long)s);
+                        handle = vm_socket_wrap(vm, s, 1, VM_SOCK_TO_NONE);
+                        break;
+                    }
+                    vm_net_debugf("listen fail host=%s port=%u family=%d wsa=%d errno=%d",
+                                  (host && host[0]) ? host : "*", (unsigned)port, (int)it->ai_family,
+#if defined(_WIN32) || defined(_WIN64)
+                                  (int)WSAGetLastError(),
+#else
+                                  0,
+#endif
+                                  errno);
+                } else if (vm_tcp_connect_with_timeout(s, it->ai_addr, (int)it->ai_addrlen, VM_TCP_CONNECT_TIMEOUT_SEC) == 0) {
+                    handle = vm_socket_wrap(vm, s, 0, VM_SOCK_TO_OUTBOUND);
+                    break;
+                }
+                vm_socket_close(s);
+                s = VM_SOCKET_INVALID;
+            }
+            freeaddrinfo(res);
+            vm->registers[inst.operand_a] = (uint64_t)handle;
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
+        case OP_TCP_ACEPTAR: {
+            VMSocketEntry* listener = vm_socket_get(vm, (uint32_t)vm_get_register(vm, inst.operand_b));
+            vm_socket_native_t accepted = VM_SOCKET_INVALID;
+            uint32_t handle = 0;
+            if (listener && listener->is_listener) {
+                accepted = accept((vm_socket_native_t)listener->native_handle, NULL, NULL);
+                if (accepted != VM_SOCKET_INVALID) {
+                    vm_net_debugf("accept ok listener=%u socket=%lld", (unsigned)vm_get_register(vm, inst.operand_b), (long long)accepted);
+                    handle = vm_socket_wrap(vm, accepted, 0, VM_SOCK_TO_INBOUND);
+                } else {
+                    vm_net_debugf("accept fail listener=%u wsa=%d errno=%d",
+                                  (unsigned)vm_get_register(vm, inst.operand_b),
+#if defined(_WIN32) || defined(_WIN64)
+                                  (int)WSAGetLastError(),
+#else
+                                  0,
+#endif
+                                  errno);
+                }
+            }
+            vm->registers[inst.operand_a] = (uint64_t)handle;
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
+        case OP_TCP_ENVIAR: {
+            VMSocketEntry* sock = vm_socket_get(vm, (uint32_t)vm_get_register(vm, inst.operand_b));
+            uint32_t payload_h = (uint32_t)vm_get_register(vm, inst.operand_c);
+            VMBytesEntry* payload_b = vm_bytes_get(vm, payload_h);
+            size_t payload_t_len = 0;
+            char* payload_t = payload_b ? NULL : vm_text_materialize_owned(vm, payload_h, &payload_t_len);
+            int sent = 0;
+            if (sock) {
+                if (payload_b) sent = vm_socket_send_all((vm_socket_native_t)sock->native_handle, payload_b->data, payload_b->len);
+                else if (payload_t) sent = vm_socket_send_all((vm_socket_native_t)sock->native_handle, (const uint8_t*)payload_t, (uint32_t)payload_t_len);
+            }
+            vm_net_debugf("send socket=%u payload_h=%u sent=%d bytes_len=%u text=%s wsa=%d errno=%d",
+                          (unsigned)vm_get_register(vm, inst.operand_b),
+                          (unsigned)payload_h,
+                          sent,
+                          payload_b ? (unsigned)payload_b->len : 0u,
+                          payload_t ? "si" : "no",
+#if defined(_WIN32) || defined(_WIN64)
+                          (int)WSAGetLastError(),
+#else
+                          0,
+#endif
+                          errno);
+            free(payload_t);
+            vm->registers[inst.operand_a] = (uint64_t)(sent > 0 ? sent : 0);
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
+        case OP_TCP_RECIBIR: {
+            VMSocketEntry* sock = vm_socket_get(vm, (uint32_t)vm_get_register(vm, inst.operand_b));
+            uint32_t max_len = (uint32_t)vm_get_register(vm, inst.operand_c);
+            uint32_t out_h = 0;
+            if (sock && max_len > 0) {
+                out_h = vm_bytes_new_uninitialized(vm, max_len);
+                if (out_h) {
+                    VMBytesEntry* entry = vm_bytes_get(vm, out_h);
+                    int n = entry ? (int)recv((vm_socket_native_t)sock->native_handle, (char*)entry->data, (int)max_len, 0) : -1;
+                    vm_net_debugf("recv socket=%u requested=%u got=%d wsa=%d errno=%d",
+                                  (unsigned)vm_get_register(vm, inst.operand_b),
+                                  (unsigned)max_len,
+                                  n,
+#if defined(_WIN32) || defined(_WIN64)
+                                  (int)WSAGetLastError(),
+#else
+                                  0,
+#endif
+                                  errno);
+                    if (n > 0 && entry) {
+                        entry->len = (uint32_t)n;
+                    } else {
+                        if (entry) {
+                            free(entry->data);
+                            entry->data = NULL;
+                            entry->len = 0;
+                            entry->cap = 0;
+                        }
+                        out_h = 0;
+                    }
+                }
+            }
+            vm->registers[inst.operand_a] = (uint64_t)out_h;
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
+        case OP_TCP_CERRAR: {
+            vm_socket_close_entry(vm, (uint32_t)vm_get_register(vm, inst.operand_a));
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
+        case OP_TLS_CLIENTE:
+        case OP_TLS_SERVIDOR: {
+            uint32_t socket_id = (uint32_t)vm_get_register(vm, inst.operand_b);
+            uint32_t tls_handle = 0;
+            if (inst.opcode == OP_TLS_CLIENTE) {
+                const char* host = vm_text_cache_get(vm, (uint32_t)vm_get_register(vm, inst.operand_c));
+                tls_handle = vm_tls_create_client(vm, socket_id, host);
+            } else {
+                const char* cert_path = vm_text_cache_get(vm, (uint32_t)vm_get_register(vm, inst.operand_c));
+                const char* key_path = vm_text_cache_get(vm, (uint32_t)vm_get_register(vm, inst.operand_c + 1));
+                tls_handle = vm_tls_create_server(vm, socket_id, cert_path, key_path);
+            }
+            vm->registers[inst.operand_a] = (uint64_t)tls_handle;
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
+        case OP_TLS_ENVIAR: {
+            VMTlsEntry* tls = vm_tls_get(vm, (uint32_t)vm_get_register(vm, inst.operand_b));
+            uint32_t payload_h = (uint32_t)vm_get_register(vm, inst.operand_c);
+            VMBytesEntry* payload_b = vm_bytes_get(vm, payload_h);
+            size_t payload_t_len = 0;
+            char* payload_t = payload_b ? NULL : vm_text_materialize_owned(vm, payload_h, &payload_t_len);
+            int sent = 0;
+            if (tls) {
+                if (payload_b) sent = vm_tls_write_all(tls, payload_b->data, payload_b->len);
+                else if (payload_t) sent = vm_tls_write_all(tls, (const uint8_t*)payload_t, (uint32_t)payload_t_len);
+            }
+            free(payload_t);
+            vm->registers[inst.operand_a] = (uint64_t)(sent > 0 ? sent : 0);
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
+        case OP_TLS_RECIBIR: {
+            VMTlsEntry* tls = vm_tls_get(vm, (uint32_t)vm_get_register(vm, inst.operand_b));
+            uint32_t max_len = (uint32_t)vm_get_register(vm, inst.operand_c);
+            uint32_t out_h = 0;
+            if (tls && max_len > 0) {
+                out_h = vm_bytes_new_uninitialized(vm, max_len);
+                if (out_h) {
+                    VMBytesEntry* entry = vm_bytes_get(vm, out_h);
+                    int n = entry ? vm_tls_read_entry(tls, entry->data, max_len) : -1;
+                    if (n > 0 && entry) {
+                        entry->len = (uint32_t)n;
+                    } else {
+                        if (entry) {
+                            free(entry->data);
+                            entry->data = NULL;
+                            entry->len = 0;
+                            entry->cap = 0;
+                        }
+                        out_h = 0;
+                    }
+                }
+            }
+            vm->registers[inst.operand_a] = (uint64_t)out_h;
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
+        case OP_TLS_CERRAR: {
+            vm_tls_close_entry(vm, (uint32_t)vm_get_register(vm, inst.operand_a));
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
         case OP_FS_ESCRIBIR_TEXTO: {
             size_t offset = (size_t)inst.operand_a |
                             ((size_t)inst.operand_b << 8) |
@@ -3859,6 +6767,7 @@ int vm_step(VM* vm) {
             ensure_jmn_col(vm);
             if (vm->mem_colecciones) {
                 jmn_crear_lista(vm->mem_colecciones, id);
+                vm_list_size_cache_set(vm, id, 0);
             }
 #endif
             vm_set_register(vm, inst.operand_a, (uint64_t)id);
@@ -3883,9 +6792,12 @@ int vm_step(VM* vm) {
 #ifdef JASBOOT_LANG_INTEGRATION
             ensure_jmn_col(vm);
             if (vm->mem_colecciones) {
+                int ok_size = 0;
+                uint32_t cached_size = vm_list_size_cache_get(vm, (uint32_t)a_val, &ok_size);
                 JMNValor val;
                 val.u = (uint32_t)b_val;
                 jmn_lista_agregar(vm->mem_colecciones, (uint32_t)a_val, val);
+                if (ok_size) vm_list_size_cache_set(vm, (uint32_t)a_val, cached_size + 1);
             }
 #endif
             vm->pc += IR_INSTRUCTION_SIZE;
@@ -3913,6 +6825,12 @@ int vm_step(VM* vm) {
                 uint32_t id_dest = (id_izq ^ id_der ^ 0x12345678) | 0x80000000;
                 
                 jmn_lista_unir(vm->mem_colecciones, id_izq, id_der, id_dest);
+                {
+                    int ok_l = 0, ok_r = 0;
+                    uint32_t tl = vm_list_size_cache_get(vm, id_izq, &ok_l);
+                    uint32_t tr = vm_list_size_cache_get(vm, id_der, &ok_r);
+                    if (ok_l && ok_r) vm_list_size_cache_set(vm, id_dest, tl + tr);
+                }
                 vm_set_register(vm, inst.operand_a, (uint64_t)id_dest);
             }
 #endif
@@ -3991,6 +6909,7 @@ int vm_step(VM* vm) {
                 jmn_vector_limpiar(vm->mem_colecciones, list_id);
                 JMNNodo* nodo = jmn_obtener_nodo(vm->mem_colecciones, list_id);
                 if (nodo) nodo->peso.f = 0.0f;
+                vm_list_size_cache_set(vm, list_id, 0);
             }
 #endif
             vm->pc += IR_INSTRUCTION_SIZE;
@@ -4011,10 +6930,15 @@ int vm_step(VM* vm) {
         case OP_MEM_LISTA_TAMANO: {
             uint32_t list_id_val = (uint32_t)b_val;
             uint32_t tam = 0;
+            int ok_size = 0;
+            tam = vm_list_size_cache_get(vm, list_id_val, &ok_size);
 #ifdef JASBOOT_LANG_INTEGRATION
+            if (!ok_size) {
             ensure_jmn_col(vm);
-            if (vm->mem_colecciones) {
+            }
+            if (!ok_size && vm->mem_colecciones) {
                 tam = (uint32_t)jmn_lista_tamano(vm->mem_colecciones, list_id_val);
+                vm_list_size_cache_set(vm, list_id_val, tam);
             }
 #endif
             vm_set_register(vm, inst.operand_a, (uint64_t)tam);
@@ -4144,13 +7068,44 @@ int vm_step(VM* vm) {
         }
 
         case OP_MEM_OBTENER_VALOR: {
-            /* A = valor almacenado en clave B (recordar key con valor X); tipo ASOCIACION (1). Si no hay, A = B.
-             * Varias aristas tipo 1 desde la misma clave: la primera en la lista puede ser basura (p. ej. id sin texto
-             * por aprendizaje viejo). Se elige el primer destino con cadena en cache o JMN; si ninguno tiene texto, A = B. */
+            /* A = valor almacenado en clave B (recordar key con valor X); tipo ASOCIACION (1).
+             * Si la clave existe como concepto pero no tiene valor asociado, A = B.
+             * Si la clave no existe en JMN, es error de ejecucion capturable.
+             * Varias aristas tipo 1 desde la misma clave: la primera en la lista puede ser basura
+             * (p. ej. id sin texto por aprendizaje viejo). Se elige el primer destino con cadena en cache o JMN. */
 #ifdef JASBOOT_LANG_INTEGRATION
             if (vm->mem_neuronal) {
                 uint32_t key_id = (uint32_t)vm_get_register(vm, inst.operand_b);
                 JMNBusquedaResultado res[32];
+                JMNNodo* key_node = jmn_obtener_nodo(vm->mem_neuronal, key_id);
+                if (!key_node) {
+                    char trymsg[512];
+                    const char* key_txt = vm_text_cache_get(vm, key_id);
+                    char buf_txt[256];
+                    if ((!key_txt || !key_txt[0]) &&
+                        jmn_obtener_texto(vm->mem_neuronal, key_id, buf_txt, sizeof(buf_txt)) >= 0 &&
+                        buf_txt[0]) {
+                        vm_text_cache_put(vm, key_id, buf_txt);
+                        key_txt = vm_text_cache_get(vm, key_id);
+                    }
+                    if (key_txt && key_txt[0]) {
+                        snprintf(trymsg, sizeof trymsg,
+                                 "buscar: clave inexistente `%s`.",
+                                 key_txt);
+                    } else {
+                        snprintf(trymsg, sizeof trymsg,
+                                 "buscar: clave inexistente (id %u).",
+                                 (unsigned)key_id);
+                    }
+                    if (vm_try_catch_or_abort(vm, trymsg)) return 0;
+                    if (vm->current_line > 0)
+                        fprintf(stderr, "Error de ejecucion (VM) en la linea %d: %s\n", vm->current_line, trymsg);
+                    else
+                        fprintf(stderr, "Error de ejecucion (VM): %s\n", trymsg);
+                    vm->running = 0;
+                    vm->exit_code = 1;
+                    return 0;
+                }
                 int n = jmn_buscar_asociaciones(vm->mem_neuronal, key_id, 1, 0.01f, 1, res, 32);
                 uint32_t chosen = key_id;
                 if (n > 0) {
@@ -4582,7 +7537,8 @@ int vm_step(VM* vm) {
     case OP_FS_EXISTE: {
         // A = dest_reg, B = path_reg
         uint64_t b_val = vm_get_register(vm, inst.operand_b);
-        const char* path = vm_text_cache_get(vm, (uint32_t)b_val);
+        const char* path = vm_resolve_path(vm, (uint32_t)b_val);
+        if (!path) path = vm_text_cache_get(vm, (uint32_t)b_val);
         if (path) {
             FILE* file = fopen(path, "r");
             vm_set_register(vm, inst.operand_a, file ? 1 : 0);
@@ -4590,6 +7546,20 @@ int vm_step(VM* vm) {
         } else {
             vm_set_register(vm, inst.operand_a, 0);
         }
+        vm->pc += IR_INSTRUCTION_SIZE;
+        break;
+    }
+
+    case OP_FS_LISTAR: {
+        uint32_t pat_id = (uint32_t)b_val;
+        const char* pat = vm_resolve_path(vm, pat_id);
+        if (!pat) pat = vm_text_cache_get(vm, pat_id);
+        char* listing = vm_fs_glob_list(pat ? pat : "");
+        if (!listing) listing = strdup("");
+        uint32_t hid = vm_hash_texto(listing);
+        vm_text_cache_put(vm, hid, listing);
+        free(listing);
+        vm_set_register(vm, inst.operand_a, (uint64_t)hid);
         vm->pc += IR_INSTRUCTION_SIZE;
         break;
     }
@@ -4814,13 +7784,11 @@ int vm_run_with_limit(VM* vm, uint64_t max_steps) {
     if (!vm || !vm->ir) return 1;
     vm->running = 1;
     vm->exit_code = 0;
-    
-    // printf("[VM DEBUG] Validating memory...\n");
-    IRValidationInfo info = ir_validate_memory(vm->ir);
-    if (info.result != IR_VALID_OK) {
-        fprintf(stderr, "Error de validación: %s\n", info.message);
+    if (!vm->ir_validated) {
+        if (vm_load(vm, vm->ir) != 0) {
         vm->exit_code = 1;
         return 1;
+        }
     }
     
     uint64_t steps = 0;
@@ -4844,14 +7812,28 @@ int vm_run_with_limit(VM* vm, uint64_t max_steps) {
         dispatch_table[OP_SUMAR] = &&op_sumar;
         dispatch_table[OP_RESTAR] = &&op_restar;
         dispatch_table[OP_MULTIPLICAR] = &&op_multiplicar;
+        dispatch_table[OP_DIVIDIR] = &&op_dividir;
+        dispatch_table[OP_MODULO] = &&op_modulo;
         dispatch_table[OP_CMP_EQ] = &&op_cmp_eq;
         dispatch_table[OP_CMP_LT] = &&op_cmp_lt;
+        dispatch_table[OP_CMP_GT] = &&op_cmp_gt;
+        dispatch_table[OP_CMP_LE] = &&op_cmp_le;
+        dispatch_table[OP_CMP_GE] = &&op_cmp_ge;
+        dispatch_table[OP_Y] = &&op_y;
+        dispatch_table[OP_O] = &&op_o;
+        dispatch_table[OP_XOR] = &&op_xor;
+        dispatch_table[OP_NO] = &&op_no;
+        dispatch_table[OP_BIT_SHL] = &&op_bit_shl;
+        dispatch_table[OP_BIT_SHR] = &&op_bit_shr;
         dispatch_table[OP_SI] = &&op_si;
         dispatch_table[OP_IR] = &&op_ir;
+        dispatch_table[OP_DEBUG_LINE] = &&op_debug_line;
+        dispatch_table[OP_MOVER_U24] = &&op_mover_u24;
+        dispatch_table[OP_GET_FP] = &&op_get_fp;
         jump_init = 1;
     }
     
-    #define DISPATCH() \
+    #define FETCH() \
         if (vm->pc >= code_size) { vm->running = 0; goto vm_end; } \
         code_ptr = code_base + vm->pc; \
         opcode = code_ptr[0]; flags = code_ptr[1]; op_a = code_ptr[2]; op_b = code_ptr[3]; op_c = code_ptr[4]; \
@@ -4860,38 +7842,138 @@ int vm_run_with_limit(VM* vm, uint64_t max_steps) {
             b_val = (flags & IR_INST_FLAG_B_IMMEDIATE) ? op_b : regs[op_b]; \
             c_val = (flags & IR_INST_FLAG_C_IMMEDIATE) ? op_c : regs[op_c]; \
         } \
-        goto *dispatch_table[opcode];
+        if (vm->profile_enabled) {
+            vm->opcode_hits[opcode]++;
+            if (vm->pc_hits && IR_INSTRUCTION_SIZE > 0) {
+                size_t idx = vm->pc / IR_INSTRUCTION_SIZE;
+                if (idx < vm->pc_hits_len) vm->pc_hits[idx]++;
+            }
+        }
+    #define STEP_AND_DISPATCH() \
+        do { \
+            steps++; \
+            if (max_steps > 0 && steps > max_steps) { \
+                fprintf(stderr, "Error: VM excedió el límite de pasos (%llu).\n", (unsigned long long)max_steps); \
+                vm->running = 0; \
+                vm->exit_code = 124; \
+                goto vm_end; \
+            } \
+            FETCH(); \
+            goto *dispatch_table[opcode]; \
+        } while (0)
         
     const uint8_t* code_ptr;
     uint8_t opcode, flags, op_a, op_b, op_c;
     uint64_t a_val, b_val, c_val;
     
-    DISPATCH();
+    FETCH();
+    goto *dispatch_table[opcode];
     
     op_sumar:
         regs[op_a] = b_val + c_val;
         vm->pc += IR_INSTRUCTION_SIZE;
-        DISPATCH();
+        STEP_AND_DISPATCH();
         
     op_restar:
         regs[op_a] = b_val - c_val;
         vm->pc += IR_INSTRUCTION_SIZE;
-        DISPATCH();
+        STEP_AND_DISPATCH();
         
     op_multiplicar:
         regs[op_a] = b_val * c_val;
         vm->pc += IR_INSTRUCTION_SIZE;
-        DISPATCH();
+        STEP_AND_DISPATCH();
+
+    op_dividir:
+        if (c_val == 0) {
+            char divmsg[160];
+            if (vm->current_line > 0)
+                snprintf(divmsg, sizeof divmsg, "Error de ejecucion (VM) en la linea %d: division por cero.", vm->current_line);
+            else
+                snprintf(divmsg, sizeof divmsg, "Error de ejecucion (VM): division por cero.");
+            if (vm_try_catch_or_abort(vm, divmsg))
+                STEP_AND_DISPATCH();
+            fprintf(stderr, "%s\n", divmsg);
+            vm->running = 0;
+            vm->exit_code = 1;
+            goto vm_end;
+        }
+        regs[op_a] = b_val / c_val;
+        vm->pc += IR_INSTRUCTION_SIZE;
+        STEP_AND_DISPATCH();
+
+    op_modulo:
+        if (c_val == 0) {
+            char modmsg[160];
+            if (vm->current_line > 0)
+                snprintf(modmsg, sizeof modmsg, "Error de ejecucion (VM) en la linea %d: modulo por cero.", vm->current_line);
+            else
+                snprintf(modmsg, sizeof modmsg, "Error de ejecucion (VM): modulo por cero.");
+            if (vm_try_catch_or_abort(vm, modmsg))
+                STEP_AND_DISPATCH();
+            fprintf(stderr, "%s\n", modmsg);
+            vm->running = 0;
+            vm->exit_code = 1;
+            goto vm_end;
+        }
+        regs[op_a] = b_val % c_val;
+        vm->pc += IR_INSTRUCTION_SIZE;
+        STEP_AND_DISPATCH();
 
     op_cmp_eq:
         regs[op_a] = (b_val == c_val) ? 1 : 0;
         vm->pc += IR_INSTRUCTION_SIZE;
-        DISPATCH();
+        STEP_AND_DISPATCH();
         
     op_cmp_lt:
         regs[op_a] = ((int64_t)b_val < (int64_t)c_val) ? 1 : 0;
         vm->pc += IR_INSTRUCTION_SIZE;
-        DISPATCH();
+        STEP_AND_DISPATCH();
+
+    op_cmp_gt:
+        regs[op_a] = ((int64_t)b_val > (int64_t)c_val) ? 1 : 0;
+        vm->pc += IR_INSTRUCTION_SIZE;
+        STEP_AND_DISPATCH();
+
+    op_cmp_le:
+        regs[op_a] = ((int64_t)b_val <= (int64_t)c_val) ? 1 : 0;
+        vm->pc += IR_INSTRUCTION_SIZE;
+        STEP_AND_DISPATCH();
+
+    op_cmp_ge:
+        regs[op_a] = ((int64_t)b_val >= (int64_t)c_val) ? 1 : 0;
+        vm->pc += IR_INSTRUCTION_SIZE;
+        STEP_AND_DISPATCH();
+
+    op_y:
+        regs[op_a] = b_val & c_val;
+        vm->pc += IR_INSTRUCTION_SIZE;
+        STEP_AND_DISPATCH();
+
+    op_o:
+        regs[op_a] = b_val | c_val;
+        vm->pc += IR_INSTRUCTION_SIZE;
+        STEP_AND_DISPATCH();
+
+    op_xor:
+        regs[op_a] = b_val ^ c_val;
+        vm->pc += IR_INSTRUCTION_SIZE;
+        STEP_AND_DISPATCH();
+
+    op_no:
+        regs[op_a] = ~b_val;
+        vm->pc += IR_INSTRUCTION_SIZE;
+        STEP_AND_DISPATCH();
+
+    op_bit_shl:
+        regs[op_a] = b_val << c_val;
+        vm->pc += IR_INSTRUCTION_SIZE;
+        STEP_AND_DISPATCH();
+
+    op_bit_shr:
+        regs[op_a] = b_val >> c_val;
+        vm->pc += IR_INSTRUCTION_SIZE;
+        STEP_AND_DISPATCH();
 
     op_si:
         if (a_val != 0) {
@@ -4901,7 +7983,7 @@ int vm_run_with_limit(VM* vm, uint64_t max_steps) {
         } else {
             vm->pc += IR_INSTRUCTION_SIZE;
         }
-        DISPATCH();
+        STEP_AND_DISPATCH();
 
     op_mover:
         {
@@ -4912,7 +7994,37 @@ int vm_run_with_limit(VM* vm, uint64_t max_steps) {
             regs[op_a] = val;
             vm->pc += IR_INSTRUCTION_SIZE;
         }
-        DISPATCH();
+        STEP_AND_DISPATCH();
+
+    op_mover_u24:
+        regs[op_a] = (uint32_t)op_b | ((uint32_t)op_c << 8) | ((uint32_t)flags << 16);
+        vm->pc += IR_INSTRUCTION_SIZE;
+        STEP_AND_DISPATCH();
+
+    op_leer:
+        {
+            uint64_t addr = (flags & IR_INST_FLAG_B_IMMEDIATE) ? (uint64_t)op_b : b_val;
+            if ((flags & IR_INST_FLAG_B_IMMEDIATE) && (flags & IR_INST_FLAG_C_IMMEDIATE)) addr |= ((uint64_t)op_c << 8);
+            if (flags & IR_INST_FLAG_RELATIVE) addr += vm->fp;
+            if (addr + sizeof(uint64_t) <= vm->memory_size) regs[op_a] = *(uint64_t*)(vm->memory + addr);
+            vm->pc += IR_INSTRUCTION_SIZE;
+        }
+        STEP_AND_DISPATCH();
+
+    op_get_fp:
+        regs[op_a] = (uint64_t)vm->fp;
+        vm->pc += IR_INSTRUCTION_SIZE;
+        STEP_AND_DISPATCH();
+
+    op_escribir:
+        {
+            uint64_t addr = (flags & IR_INST_FLAG_A_IMMEDIATE) ? (uint64_t)op_a : a_val;
+            if ((flags & IR_INST_FLAG_A_IMMEDIATE) && (flags & IR_INST_FLAG_C_IMMEDIATE)) addr |= ((uint64_t)op_c << 8);
+            if (flags & IR_INST_FLAG_RELATIVE) addr += vm->fp;
+            if (addr + sizeof(uint64_t) <= vm->memory_size) *(uint64_t*)(vm->memory + addr) = b_val;
+            vm->pc += IR_INSTRUCTION_SIZE;
+        }
+        STEP_AND_DISPATCH();
 
     op_ir:
         {
@@ -4921,28 +8033,31 @@ int vm_run_with_limit(VM* vm, uint64_t max_steps) {
             if (flags & IR_INST_FLAG_C_IMMEDIATE) addr |= ((uint64_t)op_c << 16);
             vm->pc = addr;
         }
-        DISPATCH();
+        STEP_AND_DISPATCH();
         
     op_debug_line:
-        // Ignorado en bucle optimizado por velocidad de ejecucion a menos que se re-habilite (vm->current_line)
+        vm->current_line = (int)(op_b | (op_c << 8));
         vm->pc += IR_INSTRUCTION_SIZE;
-        DISPATCH();
+        STEP_AND_DISPATCH();
 
     op_halt:
-    op_leer:
-    op_escribir:
-    op_mover_u24:
+        vm->running = 0;
+        vm->exit_code = 0;
+        goto vm_end;
+
     op_load_str_hash:
-    op_get_fp:
     op_default:
         if (vm_step(vm) != 0) {
             if (vm->exit_code == 0) vm->exit_code = 1;
             return vm->exit_code;
         }
-        DISPATCH();
+        if (!vm->running) goto vm_end;
+        STEP_AND_DISPATCH();
         
     vm_end:
         ; // End loop
+    #undef FETCH
+    #undef STEP_AND_DISPATCH
     #else
     while (vm->running) {
         if (vm->pc >= code_size) {
@@ -4957,24 +8072,36 @@ int vm_run_with_limit(VM* vm, uint64_t max_steps) {
         uint8_t op_b = code_ptr[3];
         uint8_t op_c = code_ptr[4];
 
-        uint64_t a_val, b_val, c_val;
+        uint64_t a_val = 0, b_val = 0, c_val = 0;
         if (opcode != OP_DEBUG_LINE) {
             a_val = (flags & IR_INST_FLAG_A_IMMEDIATE) ? op_a : regs[op_a];
             b_val = (flags & IR_INST_FLAG_B_IMMEDIATE) ? op_b : regs[op_b];
             c_val = (flags & IR_INST_FLAG_C_IMMEDIATE) ? op_c : regs[op_c];
         }
 
+        if (vm->profile_enabled) {
+            vm->opcode_hits[opcode]++;
+            if (vm->pc_hits && IR_INSTRUCTION_SIZE > 0) {
+                size_t idx = vm->pc / IR_INSTRUCTION_SIZE;
+                if (idx < vm->pc_hits_len) vm->pc_hits[idx]++;
+            }
+        }
+
+        #define STORE_REG_FAST(idx, value) do { if ((idx) != 0) regs[(idx)] = (value); } while (0)
         switch (opcode) {
+            case OP_HALT:
+                vm->running = 0;
+                break;
             case OP_SUMAR:
-                regs[op_a] = b_val + c_val;
+                STORE_REG_FAST(op_a, b_val + c_val);
                 vm->pc += IR_INSTRUCTION_SIZE;
                 break;
             case OP_RESTAR:
-                regs[op_a] = b_val - c_val;
+                STORE_REG_FAST(op_a, b_val - c_val);
                 vm->pc += IR_INSTRUCTION_SIZE;
                 break;
             case OP_MULTIPLICAR:
-                regs[op_a] = b_val * c_val;
+                STORE_REG_FAST(op_a, b_val * c_val);
                 vm->pc += IR_INSTRUCTION_SIZE;
                 break;
             case OP_DIVIDIR:
@@ -4992,7 +8119,7 @@ int vm_run_with_limit(VM* vm, uint64_t max_steps) {
                     vm->exit_code = 1;
                     return vm->exit_code;
                 }
-                regs[op_a] = b_val / c_val;
+                STORE_REG_FAST(op_a, b_val / c_val);
                 vm->pc += IR_INSTRUCTION_SIZE;
                 break;
             case OP_MODULO:
@@ -5010,15 +8137,51 @@ int vm_run_with_limit(VM* vm, uint64_t max_steps) {
                     vm->exit_code = 1;
                     return vm->exit_code;
                 }
-                regs[op_a] = b_val % c_val;
+                STORE_REG_FAST(op_a, b_val % c_val);
                 vm->pc += IR_INSTRUCTION_SIZE;
                 break;
             case OP_CMP_EQ:
-                regs[op_a] = (b_val == c_val) ? 1 : 0;
+                STORE_REG_FAST(op_a, (b_val == c_val) ? 1 : 0);
                 vm->pc += IR_INSTRUCTION_SIZE;
                 break;
             case OP_CMP_LT:
-                regs[op_a] = ((int64_t)b_val < (int64_t)c_val) ? 1 : 0;
+                STORE_REG_FAST(op_a, ((int64_t)b_val < (int64_t)c_val) ? 1 : 0);
+                vm->pc += IR_INSTRUCTION_SIZE;
+                break;
+            case OP_CMP_GT:
+                STORE_REG_FAST(op_a, ((int64_t)b_val > (int64_t)c_val) ? 1 : 0);
+                vm->pc += IR_INSTRUCTION_SIZE;
+                break;
+            case OP_CMP_LE:
+                STORE_REG_FAST(op_a, ((int64_t)b_val <= (int64_t)c_val) ? 1 : 0);
+                vm->pc += IR_INSTRUCTION_SIZE;
+                break;
+            case OP_CMP_GE:
+                STORE_REG_FAST(op_a, ((int64_t)b_val >= (int64_t)c_val) ? 1 : 0);
+                vm->pc += IR_INSTRUCTION_SIZE;
+                break;
+            case OP_Y:
+                STORE_REG_FAST(op_a, b_val & c_val);
+                vm->pc += IR_INSTRUCTION_SIZE;
+                break;
+            case OP_O:
+                STORE_REG_FAST(op_a, b_val | c_val);
+                vm->pc += IR_INSTRUCTION_SIZE;
+                break;
+            case OP_XOR:
+                STORE_REG_FAST(op_a, b_val ^ c_val);
+                vm->pc += IR_INSTRUCTION_SIZE;
+                break;
+            case OP_NO:
+                STORE_REG_FAST(op_a, ~b_val);
+                vm->pc += IR_INSTRUCTION_SIZE;
+                break;
+            case OP_BIT_SHL:
+                STORE_REG_FAST(op_a, b_val << c_val);
+                vm->pc += IR_INSTRUCTION_SIZE;
+                break;
+            case OP_BIT_SHR:
+                STORE_REG_FAST(op_a, b_val >> c_val);
                 vm->pc += IR_INSTRUCTION_SIZE;
                 break;
             case OP_SI:
@@ -5035,7 +8198,39 @@ int vm_run_with_limit(VM* vm, uint64_t max_steps) {
                 if ((flags & IR_INST_FLAG_B_IMMEDIATE) && (flags & IR_INST_FLAG_C_IMMEDIATE)) {
                      val |= (uint64_t)op_c << 8;
                 }
-                regs[op_a] = val;
+                STORE_REG_FAST(op_a, val);
+                vm->pc += IR_INSTRUCTION_SIZE;
+                break;
+            }
+            case OP_MOVER_U24:
+                STORE_REG_FAST(op_a, (uint32_t)op_b | ((uint32_t)op_c << 8) | ((uint32_t)flags << 16));
+                vm->pc += IR_INSTRUCTION_SIZE;
+                break;
+            case OP_LEER: {
+                uint64_t addr = (flags & IR_INST_FLAG_B_IMMEDIATE) ? (uint64_t)op_b : b_val;
+                if ((flags & IR_INST_FLAG_B_IMMEDIATE) && (flags & IR_INST_FLAG_C_IMMEDIATE)) {
+                    addr |= ((uint64_t)op_c << 8);
+                }
+                if (flags & IR_INST_FLAG_RELATIVE) addr += vm->fp;
+                if (addr + sizeof(uint64_t) <= vm->memory_size) {
+                    STORE_REG_FAST(op_a, *(uint64_t*)(vm->memory + addr));
+                }
+                vm->pc += IR_INSTRUCTION_SIZE;
+                break;
+            }
+            case OP_GET_FP:
+                STORE_REG_FAST(op_a, (uint64_t)vm->fp);
+                vm->pc += IR_INSTRUCTION_SIZE;
+                break;
+            case OP_ESCRIBIR: {
+                uint64_t addr = (flags & IR_INST_FLAG_A_IMMEDIATE) ? (uint64_t)op_a : a_val;
+                if ((flags & IR_INST_FLAG_A_IMMEDIATE) && (flags & IR_INST_FLAG_C_IMMEDIATE)) {
+                    addr |= ((uint64_t)op_c << 8);
+                }
+                if (flags & IR_INST_FLAG_RELATIVE) addr += vm->fp;
+                if (addr + sizeof(uint64_t) <= vm->memory_size) {
+                    *(uint64_t*)(vm->memory + addr) = b_val;
+                }
                 vm->pc += IR_INSTRUCTION_SIZE;
                 break;
             }
@@ -5047,7 +8242,7 @@ int vm_run_with_limit(VM* vm, uint64_t max_steps) {
                 break;
             }
             case OP_DEBUG_LINE:
-                // vm->current_line = (int)(b_val | (c_val << 8));
+                vm->current_line = (int)(op_b | (op_c << 8));
                 vm->pc += IR_INSTRUCTION_SIZE;
                 break;
             default:
@@ -5057,6 +8252,7 @@ int vm_run_with_limit(VM* vm, uint64_t max_steps) {
                 }
                 break;
         }
+        #undef STORE_REG_FAST
         steps++;
         if (max_steps > 0 && steps > max_steps) {
             fprintf(stderr, "Error: VM excedió el límite de pasos (%llu).\n", (unsigned long long)max_steps);
@@ -5066,7 +8262,8 @@ int vm_run_with_limit(VM* vm, uint64_t max_steps) {
         }
     }
     #endif
-    
+    vm_fallar_si_memoria_sigue_abierta(vm);
+    vm_print_profile_summary(vm);
     return vm->exit_code;
 }
 

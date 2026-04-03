@@ -229,6 +229,32 @@ typedef enum {
     OP_IO_PERCIBIR_TECLADO = 0x6C,   // A <- Leer stdin sin bloquear ("" si no hay; 7.2)
     OP_IO_ENTRADA_FLOTANTE = 0x8E,   // A <- float32: teclas 0-9, un '.', '-' solo al inicio, Retroceso, Enter termina
     OP_MEM_LISTA_LIBERAR = 0x8D,     // Liberar lista por id en reg A (JMN: slot al pool; sin colisión 0xB9=rastro)
+    OP_JSON_PARSE = 0x88,            // A <- parse JSON desde texto en B
+    OP_JSON_STRINGIFY = 0x89,        // A <- texto JSON desde handle en B; C inmediato = sangría 0-16 (compacto si 0) o registro C si sin C_IMMEDIATE
+    OP_JSON_OBJETO_OBTENER = 0x8A,   // A <- json_get(objeto B, clave texto C)
+    OP_JSON_LISTA_OBTENER = 0x8B,    // A <- json_index(lista B, índice C)
+    OP_JSON_LISTA_TAMANO = 0x8C,     // A <- tamaño de array JSON en B
+    OP_JSON_A_TEXTO = 0x72,          // A <- texto desde valor JSON en B
+    OP_JSON_A_ENTERO = 0x73,         // A <- entero desde valor JSON en B
+    OP_JSON_A_FLOTANTE = 0x74,       // A <- flotante(bits) desde valor JSON en B
+    OP_JSON_A_BOOL = 0x75,           // A <- bool(0/1) desde valor JSON en B
+    OP_JSON_TIPO = 0x76,             // A <- VMJsonKind desde valor JSON en B
+    OP_CLOSURE_CREAR = 0x77,         // A <- closure(fn=B, env_list=C)
+    OP_CLOSURE_CARGAR = 0x78,        // A <- env[idx=B] del closure actual
+    OP_BYTES_CREAR = 0x79,           // A <- bytes(len=B)
+    OP_BYTES_TAMANO = 0x7A,          // A <- bytes.len(B)
+    OP_BYTES_OBTENER = 0x7B,         // A <- bytes[B][C]
+    OP_BYTES_PONER = 0x7C,           // bytes[A][B] = C
+    OP_BYTES_ANEXAR = 0x7D,          // A <- append(bytes B, bytes/texto C)
+    OP_BYTES_PUNTERO = 0x27,         // A <- puntero crudo de bytes B
+    OP_PAUSA_MILISEGUNDOS = 0x28,    // Duerme el hilo del VM: B = ms (reg); A <- 1 (bloqueante; no multitarea)
+    OP_BYTES_SUBBYTES = 0x7F,        // A <- subbytes(B, C, reg(B+1)=len)
+    OP_BYTES_DESDE_TEXTO = 0x80,     // A <- bytes utf8(B)
+    OP_BYTES_A_TEXTO = 0x81,         // A <- texto desde bytes B
+    OP_DNS_RESOLVER = 0x82,          // A <- texto IP resuelta para host B
+    OP_TCP_CONECTAR = 0x83,          // A <- socket(host B, puerto C)
+    OP_TCP_ESCUCHAR = 0x84,          // A <- socket listener(host B, puerto C)
+    OP_TCP_ACEPTAR = 0x85,           // A <- socket accepted desde listener B
 
     OP_STR_EXTRAER_ANTES = 0xD0,     // Extraer texto antes de patrón
     OP_STR_EXTRAER_DESPUES = 0xD1,   // Extraer texto después de patrón
@@ -260,6 +286,15 @@ typedef enum {
     OP_MEM_ASOCIAR = 0xE8,           // Crear asociación entre dos conceptos
     OP_MEM_ECO = 0xFD,               // Eco de concepto (imitación)
     OP_MEM_PENALIZAR = 0xE3,         // Penalizar peso de asociación
+    OP_TCP_ENVIAR = 0x19,            // A <- enviar socket B, payload bytes/texto C
+    OP_TCP_RECIBIR = 0x1A,           // A <- bytes recibidos de socket B hasta max C
+    OP_TCP_CERRAR = 0x1B,            // Cerrar socket en A
+    OP_TLS_CLIENTE = 0x1C,           // A <- tls cliente desde socket B
+    OP_TLS_SERVIDOR = 0x1D,          // A <- tls servidor desde socket B
+    OP_TLS_ENVIAR = 0x1E,            // A <- enviar tls B, payload C
+    OP_TLS_RECIBIR = 0x1F,           // A <- bytes tls recibidos de B hasta max C
+    OP_TLS_CERRAR = 0x25,            // Cerrar handle tls en A
+    OP_IO_PAUSA = 0x26,              // Pausa interactiva: muestra aviso y espera una tecla
     OP_STR_REGISTRAR_LITERAL = 0xE4, // Registrar string literal desde data
     OP_MEM_APRENDER_PESO_REG = 0xE7, // Aprender peso dinámico
     OP_MEM_APRENDER_PESO = 0xE7,     // Alias compatible

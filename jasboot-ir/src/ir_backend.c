@@ -65,6 +65,41 @@ static void emitir_dividir_por_5(FILE* f, const char* reg_inout) {
     fprintf(f, "    mov %s, rax\n", reg_inout);
 }
 
+/* Subconjunto Tier-1 pensado para AOT/JIT inicial: aritmética, memoria local, saltos y control simple.
+ * Cualquier opcode fuera de este grupo debe seguir usando fallback al intérprete hasta tener semántica exacta.
+ */
+static int opcode_soportado_aot_tier1(uint8_t opcode) {
+    switch (opcode) {
+        case OP_MOVER:
+        case OP_LEER:
+        case OP_ESCRIBIR:
+        case OP_SUMAR:
+        case OP_RESTAR:
+        case OP_MULTIPLICAR:
+        case OP_DIVIDIR:
+        case OP_Y:
+        case OP_O:
+        case OP_XOR:
+        case OP_NO:
+        case OP_COMPARAR:
+        case OP_IR:
+        case OP_SI:
+        case OP_LLAMAR:
+        case OP_RETORNAR:
+        case OP_OBSERVAR:
+        case OP_IMPRIMIR_TEXTO:
+        case OP_MEM_RECORDAR_TEXTO:
+        case OP_MEM_BUSCAR_PESO:
+        case OP_MEM_APRENDER_PESO:
+        case OP_MEM_IMPRIMIR_CONCEPTO:
+        case OP_MARCAR_ESTADO:
+        case OP_NOP:
+            return 1;
+        default:
+            return 0;
+    }
+}
+
 static void emitir_instruccion(FILE* f, IRInstruction* inst, size_t idx, size_t inst_count, size_t data_size) {
     size_t next_idx = idx + 1;
     size_t curr_pc = idx * IR_INSTRUCTION_SIZE;
@@ -320,6 +355,9 @@ static void emitir_instruccion(FILE* f, IRInstruction* inst, size_t idx, size_t 
             emitir_jump_inmediato(f, next_idx, inst_count);
             break;
         default:
+            if (!opcode_soportado_aot_tier1(inst->opcode)) {
+                fprintf(f, "    ; opcode 0x%02X fuera del subset AOT Tier-1\n", inst->opcode);
+            }
             fprintf(f, "    jmp finish_error\n");
             break;
     }

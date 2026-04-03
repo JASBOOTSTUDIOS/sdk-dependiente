@@ -15,11 +15,22 @@ gcc -std=c11 -Wall %INC% %IROPT% -c src/codegen.c -o src/codegen.o
 gcc -std=c11 -Wall %INC% %IROPT% -c ../jasboot-ir/src/ir_format.c -o src/ir_format.o
 gcc -std=c11 -Wall %INC% %IROPT% -c ../jasboot-ir/src/optimizer_ir.c -o src/optimizer_ir.o
 gcc -std=c11 -Wall %INC% %IROPT% -c src/jbc_ir_opt.c -o src/jbc_ir_opt.o
+gcc -std=c11 -Wall -O2 -c src/win_spawn.c -o src/win_spawn.o
 gcc -std=c11 -Wall -DJBC_MINIMAL_MAIN %INC% %IROPT% -c src/main.c -o src/main.o
 if not exist "bin" mkdir "bin"
-gcc -o "bin\jbc.exe" src/diagnostic.o src/keywords.o src/sistema_llamadas.o src/token_vec.o src/lexer.o src/nodes.o src/parser.o src/symbol_table.o src/resolve.o src/codegen.o src/ir_format.o src/optimizer_ir.o src/jbc_ir_opt.o src/main.o
-if %errorlevel% neq 0 (echo Build FAILED & exit /b 1)
-echo Compilador: %cd%\bin\jbc.exe
+set "JBC_OBJS=src/diagnostic.o src/keywords.o src/sistema_llamadas.o src/token_vec.o src/lexer.o src/nodes.o src/parser.o src/symbol_table.o src/resolve.o src/codegen.o src/ir_format.o src/optimizer_ir.o src/jbc_ir_opt.o src/win_spawn.o src/main.o"
+gcc -o "bin\jbc.exe" %JBC_OBJS%
+if %errorlevel% neq 0 (
+  echo AVISO: no se pudo escribir bin\jbc.exe ^(posible bloqueo^). Enlazando bin\jbc-cursor.exe...
+  gcc -o "bin\jbc-cursor.exe" %JBC_OBJS%
+  if %errorlevel% neq 0 (echo Build FAILED & exit /b 1)
+  copy /Y "bin\jbc-cursor.exe" "bin\jbc-next.exe" >nul 2>&1
+  echo OK: %cd%\bin\jbc-cursor.exe ^(run-jasb.cjs prefiere el mas reciente entre jbc-cursor/jbc/jbc-next^)
+) else (
+  copy /Y "bin\jbc.exe" "bin\jbc-next.exe" >nul 2>&1
+  if errorlevel 1 echo AVISO: no se pudo refrescar bin\jbc-next.exe
+  echo Compilador: %cd%\bin\jbc.exe
+)
 
 REM Launcher opcional (monorepo jasboot). JASBOOT_MONOREPO_BIN con barra invertida final, p. ej. C:\jasboot\bin\
 if defined JASBOOT_MONOREPO_BIN (
@@ -35,8 +46,12 @@ if defined JASBOOT_MONOREPO_BIN (
 
 REM Copia al bin del repo sdk-dependiente (..\bin desde jas-compiler-c)
 if not exist "..\bin" mkdir "..\bin"
-copy /Y "bin\jbc.exe" "..\bin\jbc.exe" >nul 2>&1
-if errorlevel 1 echo AVISO: no se pudo copiar jbc.exe a ..\bin
+if exist "bin\jbc.exe" (
+  copy /Y "bin\jbc.exe" "..\bin\jbc.exe" >nul 2>&1
+) else if exist "bin\jbc-cursor.exe" (
+  copy /Y "bin\jbc-cursor.exe" "..\bin\jbc.exe" >nul 2>&1
+)
+if errorlevel 1 echo AVISO: no se pudo copiar compilador a ..\bin
 
 REM scripts\build-compiler.bat: JASBOOT_SDK_ROOT con barra final; copia jbc al bin del SDK.
 if defined JASBOOT_SDK_ROOT (

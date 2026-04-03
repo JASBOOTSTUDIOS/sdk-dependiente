@@ -1,0 +1,13 @@
+/* Prueba: clase, herencia (extiende) y campo puntero a funcion (polimorfismo manual). */
+clase Animal
+    entero id
+fin_clase
+
+clase Perro extiende Animal
+    texto nombre
+    funcion ladrar
+fin_clase
+
+principal
+    imprimir "clase_extiende_ok"
+fin_principal

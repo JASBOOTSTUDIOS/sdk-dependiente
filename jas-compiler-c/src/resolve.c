@@ -4,6 +4,7 @@
 #include "nodes.h"
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 static void resolve_block(ASTNode *node, SymbolTable *st);
 static void resolve_statement(ASTNode *node, SymbolTable *st);
@@ -13,7 +14,11 @@ static size_t type_size(SymbolTable *st, const char *type_name) {
     size_t s = sym_get_struct_size(st, type_name);
     if (s > 0) return s;
     if (strcmp(type_name, "u32") == 0 || strcmp(type_name, "u8") == 0 || strcmp(type_name, "byte") == 0) return 8;
-    if (strcmp(type_name, "texto") == 0 || strcmp(type_name, "lista") == 0 || strcmp(type_name, "mapa") == 0)
+    if (strcmp(type_name, "texto") == 0 || strcmp(type_name, "lista") == 0 || strcmp(type_name, "mapa") == 0 ||
+        strcmp(type_name, "objeto") == 0)
+        return 8;
+    if (strcmp(type_name, "bytes") == 0 || strcmp(type_name, "socket") == 0 || strcmp(type_name, "tls") == 0 ||
+        strcmp(type_name, "http_solicitud") == 0 || strcmp(type_name, "http_respuesta") == 0 || strcmp(type_name, "http_servidor") == 0)
         return 8;
     if (strcmp(type_name, "vec2") == 0) return 16;
     if (strcmp(type_name, "vec3") == 0) return 24;
@@ -23,8 +28,9 @@ static size_t type_size(SymbolTable *st, const char *type_name) {
     return 8;
 }
 
-void resolve_program(ASTNode *ast, SymbolTable *st) {
-    if (!ast || ast->type != NODE_PROGRAM) return;
+int resolve_program(ASTNode *ast, SymbolTable *st) {
+    int resolve_errs = 0;
+    if (!ast || ast->type != NODE_PROGRAM) return 0;
     ProgramNode *p = (ProgramNode *)ast;
 
     /* Structs predefinidos vec2, vec3, vec4; mat3 e0..e8, mat4 e0..e15 (row-major, coincide con VM) */
@@ -51,13 +57,27 @@ void resolve_program(ASTNode *ast, SymbolTable *st) {
         sym_register_struct(st, "mat4", m4_types, m4_fields, 16);
     }
 
-    /* Registrar structs (3.7) */
+    /* Registrar structs (3.7) y clases con extiende */
     for (size_t i = 0; i < p->n_globals; i++) {
         ASTNode *g = p->globals[i];
         if (g && g->type == NODE_STRUCT_DEF) {
             StructDefNode *sd = (StructDefNode *)g;
-            sym_register_struct(st, sd->name, (const char **)sd->field_types,
-                               (const char **)sd->field_names, sd->n_fields);
+            if (sd->extends_name && sd->extends_name[0]) {
+                int er = sym_register_struct_extends(st, sd->name, sd->extends_name,
+                    (const char **)sd->field_types, (const char **)sd->field_names, sd->n_fields);
+                if (er == -1) {
+                    fprintf(stderr, "Error semantico: la clase/registro '%s' extiende '%s', pero el tipo base no esta registrado (definalo antes en el archivo).\n",
+                            sd->name ? sd->name : "?", sd->extends_name);
+                    resolve_errs++;
+                } else if (er == -2) {
+                    fprintf(stderr, "Error semantico: la clase '%s' redefine el campo de '%s'.\n",
+                            sd->name ? sd->name : "?", sd->extends_name);
+                    resolve_errs++;
+                }
+            } else {
+                sym_register_struct(st, sd->name, (const char **)sd->field_types,
+                                   (const char **)sd->field_names, sd->n_fields);
+            }
         }
     }
 
@@ -91,6 +111,7 @@ void resolve_program(ASTNode *ast, SymbolTable *st) {
         int func_unused = sym_exit_scope(st);
         if (func_unused > 0) {}
     }
+    return resolve_errs;
 }
 
 static void resolve_block(ASTNode *node, SymbolTable *st) {

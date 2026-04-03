@@ -87,6 +87,77 @@ static int fold_to_literal(IRFile* ir, IRInstruction* inst, uint64_t value, uint
     return 0;
 }
 
+static void try_strength_reduce(IRInstruction* inst, uint64_t lhs, uint64_t rhs, int lhs_known, int rhs_known, IROptimizationStats* stats) {
+    (void)lhs_known;
+    (void)rhs_known;
+    switch (inst->opcode) {
+        case OP_SUMAR:
+            if (rhs_known && rhs == 0) {
+                inst->opcode = OP_MOVER;
+                inst->flags = (inst->flags & IR_INST_FLAG_B_IMMEDIATE) ? IR_INST_FLAG_B_IMMEDIATE : 0;
+                inst->operand_b = inst->operand_b;
+                inst->operand_c = 0;
+                if (stats) stats->saltos_simplificados++;
+            } else if (lhs_known && lhs == 0) {
+                inst->opcode = OP_MOVER;
+                inst->flags = (inst->flags & IR_INST_FLAG_C_IMMEDIATE) ? IR_INST_FLAG_B_IMMEDIATE : 0;
+                inst->operand_b = inst->operand_c;
+                inst->operand_c = 0;
+                if (stats) stats->saltos_simplificados++;
+            }
+            break;
+        case OP_RESTAR:
+            if (rhs_known && rhs == 0) {
+                inst->opcode = OP_MOVER;
+                inst->flags = (inst->flags & IR_INST_FLAG_B_IMMEDIATE) ? IR_INST_FLAG_B_IMMEDIATE : 0;
+                inst->operand_c = 0;
+                if (stats) stats->saltos_simplificados++;
+            }
+            break;
+        case OP_MULTIPLICAR:
+            if ((rhs_known && rhs == 0) || (lhs_known && lhs == 0)) {
+                inst->opcode = OP_MOVER;
+                inst->flags = IR_INST_FLAG_B_IMMEDIATE;
+                inst->operand_b = 0;
+                inst->operand_c = 0;
+                if (stats) stats->saltos_simplificados++;
+            } else if (rhs_known && rhs == 1) {
+                inst->opcode = OP_MOVER;
+                inst->flags = (inst->flags & IR_INST_FLAG_B_IMMEDIATE) ? IR_INST_FLAG_B_IMMEDIATE : 0;
+                inst->operand_c = 0;
+                if (stats) stats->saltos_simplificados++;
+            } else if (lhs_known && lhs == 1) {
+                inst->opcode = OP_MOVER;
+                inst->flags = (inst->flags & IR_INST_FLAG_C_IMMEDIATE) ? IR_INST_FLAG_B_IMMEDIATE : 0;
+                inst->operand_b = inst->operand_c;
+                inst->operand_c = 0;
+                if (stats) stats->saltos_simplificados++;
+            }
+            break;
+        case OP_DIVIDIR:
+            if (rhs_known && rhs == 1) {
+                inst->opcode = OP_MOVER;
+                inst->flags = (inst->flags & IR_INST_FLAG_B_IMMEDIATE) ? IR_INST_FLAG_B_IMMEDIATE : 0;
+                inst->operand_c = 0;
+                if (stats) stats->saltos_simplificados++;
+            }
+            break;
+        case OP_XOR:
+            if (!(inst->flags & IR_INST_FLAG_B_IMMEDIATE) &&
+                !(inst->flags & IR_INST_FLAG_C_IMMEDIATE) &&
+                inst->operand_b == inst->operand_c) {
+                inst->opcode = OP_MOVER;
+                inst->flags = IR_INST_FLAG_B_IMMEDIATE;
+                inst->operand_b = 0;
+                inst->operand_c = 0;
+                if (stats) stats->saltos_simplificados++;
+            }
+            break;
+        default:
+            break;
+    }
+}
+
 static int try_propagate_immediate(IRInstruction* inst, uint8_t operand, uint8_t flag, const ConstState* st, IROptimizationStats* stats) {
     if (inst->flags & flag) return 0;
     if (!st->known[operand]) return 0;
@@ -149,10 +220,16 @@ static void analyze_block(IRFile* ir, IRInstruction* insts, size_t start, size_t
             case OP_RESTAR:
             case OP_MULTIPLICAR:
             case OP_DIVIDIR:
+            case OP_MODULO:
             case OP_Y:
             case OP_O:
             case OP_XOR:
-            case OP_COMPARAR: {
+            case OP_COMPARAR:
+            case OP_CMP_EQ:
+            case OP_CMP_LT:
+            case OP_CMP_GT:
+            case OP_CMP_LE:
+            case OP_CMP_GE: {
                 uint64_t lhs = 0;
                 uint64_t rhs = 0;
                 int lhs_known = get_operand_value(inst, inst->operand_b, IR_INST_FLAG_B_IMMEDIATE, &st, &lhs);
@@ -178,6 +255,12 @@ static void analyze_block(IRFile* ir, IRInstruction* insts, size_t start, size_t
                             break;
                         }
                         result = lhs / rhs;
+                    } else if (inst->opcode == OP_MODULO) {
+                        if (rhs == 0) {
+                            st.known[inst->operand_a] = 0;
+                            break;
+                        }
+                        result = lhs % rhs;
                     } else if (inst->opcode == OP_Y) result = lhs & rhs;
                     else if (inst->opcode == OP_O) result = lhs | rhs;
                     else if (inst->opcode == OP_XOR) result = lhs ^ rhs;
@@ -185,7 +268,11 @@ static void analyze_block(IRFile* ir, IRInstruction* insts, size_t start, size_t
                         if (lhs < rhs) result = 2;
                         else if (lhs > rhs) result = 3;
                         else result = 0;
-                    }
+                    } else if (inst->opcode == OP_CMP_EQ) result = (lhs == rhs) ? 1 : 0;
+                    else if (inst->opcode == OP_CMP_LT) result = ((int64_t)lhs < (int64_t)rhs) ? 1 : 0;
+                    else if (inst->opcode == OP_CMP_GT) result = ((int64_t)lhs > (int64_t)rhs) ? 1 : 0;
+                    else if (inst->opcode == OP_CMP_LE) result = ((int64_t)lhs <= (int64_t)rhs) ? 1 : 0;
+                    else if (inst->opcode == OP_CMP_GE) result = ((int64_t)lhs >= (int64_t)rhs) ? 1 : 0;
                     
                     if (fold_to_literal(ir, inst, result, inst->operand_a, stats) == 0) {
                         st.known[inst->operand_a] = 1;
@@ -194,6 +281,7 @@ static void analyze_block(IRFile* ir, IRInstruction* insts, size_t start, size_t
                         st.known[inst->operand_a] = 0;
                     }
                 } else {
+                    try_strength_reduce(inst, lhs, rhs, lhs_known, rhs_known, stats);
                     st.known[inst->operand_a] = 0;
                 }
                 break;
@@ -277,11 +365,17 @@ static void analyze_block(IRFile* ir, IRInstruction* insts, size_t start, size_t
             case OP_RESTAR:
             case OP_MULTIPLICAR:
             case OP_DIVIDIR:
+            case OP_MODULO:
             case OP_Y:
             case OP_O:
             case OP_XOR:
             case OP_NO:
             case OP_COMPARAR:
+            case OP_CMP_EQ:
+            case OP_CMP_LT:
+            case OP_CMP_GT:
+            case OP_CMP_LE:
+            case OP_CMP_GE:
                 defines_reg = 1;
                 def_reg = inst->operand_a;
                 break;
@@ -309,8 +403,12 @@ static void analyze_block(IRFile* ir, IRInstruction* insts, size_t start, size_t
             if (!(inst->flags & IR_INST_FLAG_B_IMMEDIATE)) live[inst->operand_b] = 1;
         } else if (inst->opcode == OP_SUMAR || inst->opcode == OP_RESTAR ||
                    inst->opcode == OP_MULTIPLICAR || inst->opcode == OP_DIVIDIR ||
+                   inst->opcode == OP_MODULO ||
                    inst->opcode == OP_Y || inst->opcode == OP_O ||
-                   inst->opcode == OP_XOR || inst->opcode == OP_COMPARAR) {
+                   inst->opcode == OP_XOR || inst->opcode == OP_COMPARAR ||
+                   inst->opcode == OP_CMP_EQ || inst->opcode == OP_CMP_LT ||
+                   inst->opcode == OP_CMP_GT || inst->opcode == OP_CMP_LE ||
+                   inst->opcode == OP_CMP_GE) {
             if (!(inst->flags & IR_INST_FLAG_B_IMMEDIATE)) live[inst->operand_b] = 1;
             if (!(inst->flags & IR_INST_FLAG_C_IMMEDIATE)) live[inst->operand_c] = 1;
         } else if (inst->opcode == OP_NO) {
