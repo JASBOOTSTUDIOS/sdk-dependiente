@@ -111,6 +111,7 @@ typedef enum {
     // Comparación
     OP_COMPARAR = 0x30,    // A ← compare(B, C)
     OP_CMP_EQ = 0x31,      // A ← (B == C) ? 1 : 0
+    OP_CMP_NE = 0x29,      // A ← (B != C) ? 1 : 0
     OP_CMP_LT = 0x32,      // A ← (B <  C) ? 1 : 0
     OP_CMP_GT = 0x33,      // A ← (B >  C) ? 1 : 0
     OP_CMP_LE = 0x34,      // A ← (B <= C) ? 1 : 0

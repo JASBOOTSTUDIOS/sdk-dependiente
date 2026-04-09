@@ -38,6 +38,7 @@
 #define OP_MODULO         0x18
 
 #define OP_CMP_EQ         0x31
+#define OP_CMP_NE         0x29
 #define OP_CMP_LT         0x32
 #define OP_CMP_GT         0x33
 #define OP_CMP_LE         0x34

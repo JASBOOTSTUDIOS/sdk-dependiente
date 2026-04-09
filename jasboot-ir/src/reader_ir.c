@@ -194,7 +194,7 @@ IRValidationInfo ir_validate_memory(IRFile* ir) {
             inst.opcode != OP_CMP_LT_FLT && inst.opcode != OP_CMP_GT_FLT &&
             inst.opcode != OP_CMP_LE_FLT && inst.opcode != OP_CMP_GE_FLT && inst.opcode != OP_CMP_EQ_FLT &&
             inst.opcode != OP_Y && inst.opcode != OP_O && inst.opcode != OP_XOR && inst.opcode != OP_NO &&
-            inst.opcode != OP_COMPARAR && inst.opcode != OP_CMP_EQ && inst.opcode != OP_CMP_LT &&
+            inst.opcode != OP_COMPARAR && inst.opcode != OP_CMP_EQ && inst.opcode != OP_CMP_NE && inst.opcode != OP_CMP_LT &&
             inst.opcode != OP_CMP_GT && inst.opcode != OP_CMP_LE && inst.opcode != OP_CMP_GE &&
             inst.opcode != OP_CMP_LT_U && inst.opcode != OP_CMP_GT_U && inst.opcode != OP_CMP_LE_U && inst.opcode != OP_CMP_GE_U &&
             inst.opcode != OP_IR && inst.opcode != OP_SI && inst.opcode != OP_LLAMAR && inst.opcode != OP_RETORNAR &&

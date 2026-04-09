@@ -5158,10 +5158,7 @@ static int visit_expression(CodeGen *cg, ASTNode *node, int dest_reg) {
                             (rt && (strcmp(rt, "u32") == 0 || strcmp(rt, "u64") == 0));
                 emit(cg, use_u ? OP_CMP_LT_U : OP_CMP_LT, dest_reg, rL, rR_reg, 0);
             } else if (strcmp(op, "==") == 0) emit(cg, OP_CMP_EQ, dest_reg, rL, rR_reg, 0);
-            else if (strcmp(op, "!=") == 0) {
-                emit(cg, OP_CMP_EQ, dest_reg, rL, rR_reg, 0);
-                emit(cg, OP_CMP_EQ, dest_reg, dest_reg, 0, IR_INST_FLAG_C_IMMEDIATE);
-            }
+            else if (strcmp(op, "!=") == 0) emit(cg, OP_CMP_NE, dest_reg, rL, rR_reg, 0);
             else if (strcmp(op, "<=") == 0) {
                 int use_u = (lt && (strcmp(lt, "u32") == 0 || strcmp(lt, "u64") == 0)) ||
                             (rt && (strcmp(rt, "u32") == 0 || strcmp(rt, "u64") == 0));

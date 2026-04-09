@@ -1870,9 +1870,9 @@ int do_compile(const char *in_path, const char *out_path, char **err_msg) {
     fclose(of);
     free(bin);
 
-    if (verbose_flag)
+    if (verbose_flag > 1)
         printf("Compilado: %s\n", out_path);
-    else
+    else if (verbose_flag > 0)
         printf("Compilado: %s -> %s\n", in_path, out_path);
 
     warn_if_empty_program(in_path, ast);

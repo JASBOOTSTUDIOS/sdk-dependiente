@@ -4323,33 +4323,35 @@ static ASTNode *parse_function(Parser *p, int is_exported, int is_async, Visibil
             return NULL;
         }
     }
-    if (!match(p, TOK_KEYWORD, "retorna") && peek(p, 0) && peek(p, 0)->value.str && strcmp(peek(p, 0)->value.str, "retorna") == 0)
-        advance(p);  /* consumir "retorna" si match fallo (p.ej. lexed como ID) */
+    int found_retorna = 0;
+    if (match(p, TOK_KEYWORD, "retorna")) {
+        found_retorna = 1;
+    } else if (peek(p, 0) && peek(p, 0)->value.str && strcmp(peek(p, 0)->value.str, "retorna") == 0) {
+        advance(p);
+        found_retorna = 1;
+    }
+
     char *ret_type = strdup("entero");
     char *return_task_elem = NULL;
-    /* Solo consumir tipo de retorno si acabamos de ver "retorna" Y el siguiente token es un tipo válido */
-    const Token *rt = peek(p, 0);
-    if (rt && rt->value.str && strcmp(rt->value.str, "fin_funcion") != 0 &&
-        (strcmp(rt->value.str, "entero") == 0 || strcmp(rt->value.str, "texto") == 0 ||
-         strcmp(rt->value.str, "flotante") == 0 || strcmp(rt->value.str, "caracter") == 0 ||
-         strcmp(rt->value.str, "bool") == 0 || strcmp(rt->value.str, "lista") == 0 ||
-         strcmp(rt->value.str, "mapa") == 0 || strcmp(rt->value.str, "u32") == 0 ||
-         strcmp(rt->value.str, "u64") == 0 || strcmp(rt->value.str, "u8") == 0 ||
-         strcmp(rt->value.str, "byte") == 0 || strcmp(rt->value.str, "vec2") == 0 ||
-         strcmp(rt->value.str, "vec3") == 0 || strcmp(rt->value.str, "vec4") == 0 || strcmp(rt->value.str, "mat4") == 0 || strcmp(rt->value.str, "mat3") == 0 ||
-         strcmp(rt->value.str, "bytes") == 0 || strcmp(rt->value.str, "socket") == 0 || strcmp(rt->value.str, "tls") == 0 ||
-         strcmp(rt->value.str, "http_solicitud") == 0 || strcmp(rt->value.str, "http_respuesta") == 0 || strcmp(rt->value.str, "http_servidor") == 0 ||
-         strcmp(rt->value.str, "tarea") == 0)) {
-        free(ret_type);
-        ret_type = strdup_safe(rt->value.str);
-        advance(p);
-        if (ret_type && strcmp(ret_type, "tarea") == 0) {
-            if (!parse_optional_tarea_inner_type_after_tarea_keyword(p, &return_task_elem)) {
-                free(ret_type);
-                for (size_t k = 0; k < params.n; k++) ast_free((ASTNode*)params.arr[k]);
-                free(params.arr);
-                free(name);
-                return NULL;
+    
+    if (found_retorna) {
+        const Token *rt = peek(p, 0);
+        if (rt && rt->value.str && strcmp(rt->value.str, "fin_funcion") != 0 &&
+            (is_decl_type_token(rt) || 
+             (rt->type == TOK_IDENTIFIER && strcmp(rt->value.str, "este") != 0 && validate_user_defined_name_tok(p, rt)) ||
+             strcmp(rt->value.str, "http_solicitud") == 0 || strcmp(rt->value.str, "http_respuesta") == 0 || strcmp(rt->value.str, "http_servidor") == 0 ||
+             strcmp(rt->value.str, "tarea") == 0)) {
+            free(ret_type);
+            ret_type = strdup_safe(rt->value.str);
+            advance(p);
+            if (ret_type && strcmp(ret_type, "tarea") == 0) {
+                if (!parse_optional_tarea_inner_type_after_tarea_keyword(p, &return_task_elem)) {
+                    free(ret_type);
+                    for (size_t k = 0; k < params.n; k++) ast_free((ASTNode*)params.arr[k]);
+                    free(params.arr);
+                    free(name);
+                    return NULL;
+                }
             }
         }
     }

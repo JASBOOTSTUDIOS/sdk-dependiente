@@ -46,7 +46,7 @@ int resolve_program(ASTNode *ast, SymbolTable *st) {
     if (!ast || ast->type != NODE_PROGRAM) return 0;
     ProgramNode *p = (ProgramNode *)ast;
 
-    fprintf(stderr, "[resolve] inicio\n");
+    // fprintf(stderr, "[resolve] inicio\n");
 
     /* Structs predefinidos vec2, vec3, vec4; mat3 e0..e8, mat4 e0..e15 (row-major, coincide con VM) */
     {
@@ -104,7 +104,7 @@ int resolve_program(ASTNode *ast, SymbolTable *st) {
         }
     }
 
-    fprintf(stderr, "[resolve] despues de registrar structs\n");
+    // fprintf(stderr, "[resolve] despues de registrar structs\n");
 
     /* Variables globales (VarDecl en globals) */
     for (size_t i = 0; i < p->n_globals; i++) {
@@ -116,7 +116,7 @@ int resolve_program(ASTNode *ast, SymbolTable *st) {
         }
     }
 
-    fprintf(stderr, "[resolve] despues de globals\n");
+    // fprintf(stderr, "[resolve] despues de globals\n");
 
     /* Principal: enter_scope (función), resolver bloque */
     sym_enter_scope(st, 1);
@@ -139,7 +139,7 @@ int resolve_program(ASTNode *ast, SymbolTable *st) {
         if (func_unused > 0) {}
     }
 
-    fprintf(stderr, "[resolve] despues de funciones libres\n");
+    // fprintf(stderr, "[resolve] despues de funciones libres\n");
     for (size_t i = 0; i < p->n_globals; i++) {
         ASTNode *g = p->globals[i];
         if (!g || g->type != NODE_STRUCT_DEF) continue;
@@ -159,7 +159,7 @@ int resolve_program(ASTNode *ast, SymbolTable *st) {
         }
         st->current_class_name = NULL; // Reset current class context
     }
-    fprintf(stderr, "[resolve] fin ok\n");
+    // fprintf(stderr, "[resolve] fin ok\n");
     return resolve_errs;
 }
 

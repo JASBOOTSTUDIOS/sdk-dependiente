@@ -70,7 +70,7 @@ jasboot-ir/build_errors_ascii.txt
 
 # --- Node (extensión VS Code u otras herramientas bajo el árbol) ---
 **/node_modules/
-**/*.vsix
+
 
 # --- IDE y sistema ---
 **/.vs/

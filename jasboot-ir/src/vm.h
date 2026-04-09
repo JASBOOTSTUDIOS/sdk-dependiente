@@ -136,6 +136,7 @@ typedef struct {
     size_t text_cache_size;                 // Número de buckets
     size_t text_cache_count;                // Número de elementos ingresados
     uint32_t next_runtime_text_id;         // IDs unicos para textos construidos en runtime
+    uint32_t next_lista_id;                // IDs unicos para listas temporales de runtime (obtener_relacionados, etc.)
     VMListSizeCacheEntry** list_size_buckets; // Cache de tamaños de lista para evitar consultas JMN repetidas
     size_t list_size_cache_size;
     VMSubstringCacheEntry** substring_cache_buckets; // Memoización de extraer_subtexto(id,start,len)

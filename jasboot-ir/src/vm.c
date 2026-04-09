@@ -1237,6 +1237,7 @@ VM* vm_create(void) {
     vm->text_cache_buckets = (VMTextCacheEntry**)calloc(vm->text_cache_size, sizeof(VMTextCacheEntry*));
     vm->text_cache_count = 0;
     vm->next_runtime_text_id = 0x80000000u;
+    vm->next_lista_id = 0x70000000u;
     vm->list_size_cache_size = 2048;
     vm->list_size_buckets = (VMListSizeCacheEntry**)calloc(vm->list_size_cache_size, sizeof(VMListSizeCacheEntry*));
     vm->substring_cache_size = 4096;
@@ -3228,6 +3229,12 @@ int vm_step(VM* vm) {
 
         case OP_CMP_EQ: {
             uint64_t res = (b_val == c_val) ? 1 : 0;
+            vm_set_register(vm, inst.operand_a, res);
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+        case OP_CMP_NE: {
+            uint64_t res = (b_val != c_val) ? 1 : 0;
             vm_set_register(vm, inst.operand_a, res);
             vm->pc += IR_INSTRUCTION_SIZE;
             break;
@@ -6680,18 +6687,25 @@ int vm_step(VM* vm) {
                     uint32_t count = 0;
                     JMNConexion* conns = jmn_obtener_conexiones(mem, nodo, &count);
                     
-                    // Usar un ID de lista temporal diferente al ID del concepto
-                    lista_id = concepto_id ^ 0xF0F0F0F0; 
-                    jmn_crear_lista(mem, lista_id);
+                    // printf("[VM DEBUG] OBTENER_RELACIONADOS: id=%u count=%u\n", concepto_id, count);
                     
-                    for (uint32_t i = 0; i < count; i++) {
-                        if (conns[i].fuerza.f > 0.01f || conns[i].key_id == 0) {
-                            JMNValor v_d; v_d.u = conns[i].destino_id;
-                            jmn_lista_agregar(mem, lista_id, v_d);
+                    // Usar la memoria de colecciones (RAM) para la lista de resultados
+                    ensure_jmn_col(vm);
+                    if (vm->mem_colecciones) {
+                        lista_id = vm->next_lista_id++; 
+                        jmn_crear_lista(vm->mem_colecciones, lista_id);
+                        
+                        for (uint32_t i = 0; i < count; i++) {
+                            if (conns[i].fuerza.f > 0.01f || conns[i].key_id == 0) {
+                                JMNValor v_d; v_d.u = conns[i].destino_id;
+                                jmn_lista_agregar(vm->mem_colecciones, lista_id, v_d);
+                            }
                         }
                     }
-                    }
+                } else {
+                    // printf("[VM DEBUG] OBTENER_RELACIONADOS: nodo NULL para id=%u\n", concepto_id);
                 }
+            }
 #endif
             vm_set_register(vm, inst.operand_a, (uint64_t)lista_id);
             vm->pc += IR_INSTRUCTION_SIZE;

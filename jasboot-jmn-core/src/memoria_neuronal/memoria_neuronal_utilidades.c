@@ -97,6 +97,7 @@ void jmn_lista_agregar(JMNMemoria* mem, uint32_t id, JMNValor val) {
     }
     if (mem->listas[slot].count < mem->listas[slot].cap) {
         mem->listas[slot].items[mem->listas[slot].count++] = val;
+        // printf("[JMN DEBUG] lista_agregar: id=%u new_count=%u val=%u\n", id, mem->listas[slot].count, val.u);
     }
 }
 
@@ -123,6 +124,7 @@ uint32_t jmn_lista_tamano(JMNMemoria* mem, uint32_t id) {
     if (!mem) return 0;
     uint32_t slot = find_lista_slot(mem, id);
     if (slot == 0xFFFFFFFF) return 0;
+    // printf("[JMN DEBUG] lista_tamano: id=%u count=%u\n", id, mem->listas[slot].count);
     return mem->listas[slot].items ? mem->listas[slot].count : 0;
 }
 
