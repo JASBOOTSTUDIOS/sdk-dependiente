@@ -1,0 +1,17 @@
+/* Test trigonometría: sin, cos, tan, atan2 (radianes) */
+principal
+    flotante s = sin(0.0)
+    flotante c = cos(0.0)
+    flotante t = tan(0.0)
+    flotante a = atan2(1.0, 1.0)
+    imprimir("sin(0)=")
+    imprimir_flotante(s)
+    imprimir(" cos(0)=")
+    imprimir_flotante(c)
+    imprimir(" tan(0)=")
+    imprimir_flotante(t)
+    imprimir(" atan2(1,1)=")
+    imprimir_flotante(a)
+    imprimir("\n")
+    imprimir("TRIG OK\n")
+fin_principal

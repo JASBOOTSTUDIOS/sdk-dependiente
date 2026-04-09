@@ -1,0 +1,13 @@
+# Complemento para clon parcial.
+*.o
+*.obj
+*.a
+*.lib
+*.dll
+*.exe
+build/
+obj/
+.vs/
+.idea/
+.DS_Store
+Thumbs.db

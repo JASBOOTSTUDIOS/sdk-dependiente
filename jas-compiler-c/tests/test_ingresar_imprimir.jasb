@@ -1,0 +1,6 @@
+/* Test: ingresar_texto + imprimir debe mostrar el texto, no el numero */
+principal
+    imprimir "Escribe algo:"
+    ingresar_texto Entrada
+    imprimir "Entrada: " + Entrada
+fin_principal

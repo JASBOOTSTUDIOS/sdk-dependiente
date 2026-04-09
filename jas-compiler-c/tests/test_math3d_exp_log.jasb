@@ -1,0 +1,14 @@
+/* Test exp, log, log10 */
+principal
+    flotante e = exp(0.0)
+    flotante l1 = log(1.0)
+    flotante l10 = log10(10.0)
+    imprimir("exp(0)=")
+    imprimir_flotante(e)
+    imprimir(" log(1)=")
+    imprimir_flotante(l1)
+    imprimir(" log10(10)=")
+    imprimir_flotante(l10)
+    imprimir("\n")
+    imprimir("EXP_LOG OK\n")
+fin_principal

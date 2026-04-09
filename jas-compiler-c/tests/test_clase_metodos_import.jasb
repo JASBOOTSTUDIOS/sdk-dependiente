@@ -1,0 +1,10 @@
+usar { Persona } de "test_clase_metodos_modulo.jasb"
+
+principal
+    Persona persona
+    persona.nombre = "Ada"
+    persona.edad = 37
+    imprimir persona.nombre
+    imprimir persona.edad
+    imprimir persona.saludar()
+fin_principal

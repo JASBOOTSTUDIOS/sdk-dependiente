@@ -1,0 +1,90 @@
+# =============================================================================
+# sdk-dependiente — qué NO subir a GitHub
+# Artefactos de compilación, binarios, logs, cachés de IDE y paquetes locales.
+# =============================================================================
+
+# --- Ejecutables y enlazado (Windows / cruzado) ---
+**/*.exe
+**/*.dll
+**/*.pdb
+**/*.ilk
+**/*.exp
+**/*.lib
+**/*.a
+**/*.so
+**/*.dylib
+**/*.out
+
+# --- Objetos y precompilado ---
+**/*.o
+**/*.obj
+
+# --- Salida del compilador Jasboot ---
+**/*.jbo
+
+# --- Memoria JMN de ejemplo (main.jmn supera el limite de 100 MB de GitHub; generar o copiar en local) ---
+jasboot-ir/main.jmn
+
+# --- Carpetas de build y cachés ---
+**/build/
+**/obj/
+**/dist/
+**/.cache/
+**/cmake-build-*/
+**/CMakeFiles/
+**/CMakeCache.txt
+**/compile_commands.json
+
+# --- Bins de salida por paquete (solo versionar scripts .cmd/.bat en sdk/bin/) ---
+jasboot-ir/bin/
+jas-compiler-c/bin/
+# Raíz del SDK: permitir bin\*.cmd / bin\*.bat; los .exe aquí siguen ignorados por **/*.exe
+
+# --- Logs y volcados de depuración ---
+**/*.log
+jasboot-ir/vm_debug.log
+jasboot-ir/build_output.txt
+jasboot-ir/build_log.txt
+jasboot-ir/build_out.txt
+jasboot-ir/build_errors.txt
+jasboot-ir/build_errors_ascii.txt
+
+# --- Copias de seguridad y temporales ---
+**/*.bak
+**/*.tmp
+**/*.orig
+**/*~
+
+# --- Cobertura / perfiles ---
+**/*.gcda
+**/*.gcno
+**/*.profdata
+
+# --- Python (p. ej. jasboot-ir/dump_ir.py) ---
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/.Python
+**/venv/
+**/.venv/
+
+# --- Node (extensión VS Code u otras herramientas bajo el árbol) ---
+**/node_modules/
+**/*.vsix
+
+# --- IDE y sistema ---
+**/.vs/
+**/.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+*.swp
+*.swo
+
+# --- Git / merge ---
+*.BACKUP.*
+*.BASE.*
+*.LOCAL.*
+*.REMOTE.*

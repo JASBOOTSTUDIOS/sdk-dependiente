@@ -1,0 +1,12 @@
+/* Test mat3: mul_vec3, mul (matriz sin inicializar = ceros en VM) */
+principal
+    mat3 A
+    mat3 B
+    mat3 C
+    vec3 v = vec3(1.0, 0.0, 0.0)
+    vec3 w = vec3(0.0, 0.0, 0.0)
+
+    mat3_mul_vec3(w, A, v)
+    mat3_mul(C, A, B)
+    imprimir("MAT3 OK\n")
+fin_principal

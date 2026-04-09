@@ -1,0 +1,43 @@
+/* Fase E: elegir candidato en una lista por fuerza JMN respecto a un contexto.
+
+   Puntuación = max(fuerza(ctx→cand), fuerza(cand→ctx)). Desempate: mayor score (ε 1e-6),
+   luego clave léxica (id del candidato, o id^seed si semilla≠0), luego índice menor.
+
+   IDs = hash DJB2 del literal (sin tolower), igual que LOAD_STR_HASH.
+   Esperado: idx=0 id=4122730103 (c_alto gana sobre c_bajo). */
+
+principal
+
+    crear_memoria("build/test_elegir_por_peso.jmn")
+
+    flotante w_alto = 0.92
+
+    flotante w_bajo = 0.1
+
+    mem_asociar("ctx", "c_alto", w_alto)
+
+    mem_asociar("ctx", "c_bajo", w_bajo)
+
+    entero L = mem_lista_crear()
+
+    mem_lista_agregar(L, "c_alto")
+
+    mem_lista_agregar(L, "c_bajo")
+
+    entero idx = elegir_por_peso(L, "ctx")
+
+    entero id = elegir_por_peso_id(L, "ctx")
+
+    imprimir("idx=")
+
+    imprimir(idx)
+
+    imprimir(" id=")
+
+    imprimir(id)
+
+    imprimir("\n")
+
+    cerrar_memoria()
+
+fin_principal

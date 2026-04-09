@@ -1,0 +1,20 @@
+# Complemento si se clona solo este directorio (la raíz sdk-dependiente/.gitignore cubre el monorepo).
+*.o
+*.obj
+*.a
+*.lib
+*.dll
+*.exe
+*.pdb
+*.ilk
+*.exp
+*.jbo
+bin/
+build/
+obj/
+.vs/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*~

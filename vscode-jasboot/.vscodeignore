@@ -1,0 +1,6 @@
+node_modules/**
+.git/**
+*.vsix
+.vscode/**
+**/.DS_Store
+scripts/**

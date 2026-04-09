@@ -1,0 +1,8 @@
+principal
+    imprimir "Prueba parser"
+    entero x = 10
+    mientras x > 0 hacer
+        imprimir x
+        x = x - 1
+    fin_mientras
+fin_principal

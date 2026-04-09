@@ -1,0 +1,20 @@
+/* Refuerzo / penalización por concepto (JMN): mem_asociar + reforzar/penalizar + mem_obtener_fuerza.
+   Usar variable flotante para el peso en mem_asociar (literal 0.5 en arg puede dar 0 en VM). */
+principal
+    crear_memoria("build/test_rf_pen.jmn")
+    flotante peso_ini = 0.5
+    mem_asociar("alpha", "beta", peso_ini)
+    flotante f0 = mem_obtener_fuerza("alpha", "beta")
+    reforzar("alpha", 20)
+    flotante f1 = mem_obtener_fuerza("alpha", "beta")
+    penalizar("alpha", 10)
+    flotante f2 = mem_obtener_fuerza("alpha", "beta")
+    imprimir("f0=")
+    imprimir_flotante(f0)
+    imprimir(" f1=")
+    imprimir_flotante(f1)
+    imprimir(" f2=")
+    imprimir_flotante(f2)
+    imprimir("\n")
+    cerrar_memoria()
+fin_principal

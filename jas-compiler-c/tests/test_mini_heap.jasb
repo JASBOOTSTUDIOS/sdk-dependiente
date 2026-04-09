@@ -1,0 +1,4 @@
+principal
+    entero ptr = reservar(8)
+    liberar(ptr)
+fin_principal

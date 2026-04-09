@@ -1,0 +1,12 @@
+clase Persona
+    texto nombre
+    entero edad
+
+    funcion saludar() retorna texto
+        retornar concatenar("Hola ", este.nombre)
+    fin_funcion
+fin_clase
+
+principal
+
+fin_principal

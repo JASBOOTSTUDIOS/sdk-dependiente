@@ -1,0 +1,54 @@
+/* Fase D: rastro de activación tras propagar_activacion (BFS).
+
+   Grafo trace_a→trace_b→trace_c (peso 1.0). IDs = hash DJB2 del literal (sin tolower), igual que LOAD_STR_HASH.
+
+   Esperado: n=3, id0=4129458484, id1=4129458485, id2=4129458486; best=4129458485 (trace_b, mayor activación entre destinos). */
+
+principal
+
+    crear_memoria("build/test_rastro_act.jmn")
+
+    flotante uno = 1.0
+
+    mem_asociar("trace_a", "trace_b", uno)
+
+    mem_asociar("trace_b", "trace_c", uno)
+
+    ventana_rastro_activacion(64)
+
+    entero best = propagar_activacion("trace_a")
+
+    entero n = rastro_activacion_tamano()
+
+    entero id0 = rastro_activacion_obtener(0)
+
+    entero id1 = rastro_activacion_obtener(1)
+
+    entero id2 = rastro_activacion_obtener(2)
+
+    imprimir("n=")
+
+    imprimir(n)
+
+    imprimir(" id0=")
+
+    imprimir(id0)
+
+    imprimir(" id1=")
+
+    imprimir(id1)
+
+    imprimir(" id2=")
+
+    imprimir(id2)
+
+    imprimir(" best=")
+
+    imprimir(best)
+
+    imprimir("\n")
+
+    cerrar_memoria()
+
+fin_principal
+
