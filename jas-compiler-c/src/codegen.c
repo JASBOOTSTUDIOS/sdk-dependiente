@@ -2671,6 +2671,21 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         emit(cg, OP_STR_MINUSCULAS, dest_reg, dest_reg, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
         return 1;
     }
+    if (strcmp(name, "str_mayusculas") == 0 || strcmp(name, "mayusculas") == 0) {
+        if (cn->n_args != 1) {
+            int es_sm = (strcmp(name, "str_mayusculas") == 0);
+            const char *ej = es_sm ? "str_mayusculas(\"abc\")" : "mayusculas(\"hola\")";
+            const char *cons = (cn->n_args == 0)
+                ? (es_sm ? "(`mayusculas` es sinonimo.)" : "(`str_mayusculas` es sinonimo.)")
+                : "(Solo un argumento: el texto a pasar a mayusculas. No anada mas tras la coma.)";
+            codegen_error_sistema_incorporada_arity(cg, cn, 1,
+                "un solo texto (salida en mayusculas)", ej, cons);
+            return 1;
+        }
+        visit_expression(cg, ARG0, dest_reg);
+        emit(cg, OP_STR_MAYUSCULAS, dest_reg, dest_reg, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+        return 1;
+    }
     if (strcmp(name, "str_extraer_caracter") == 0) {
         if (cn->n_args < 2) return 0;
         visit_expression(cg, ARG0, dest_reg);
@@ -5390,6 +5405,14 @@ static int visit_expression(CodeGen *cg, ASTNode *node, int dest_reg) {
             emit(cg, OP_MOVER, dest_reg, 1, 0, IR_INST_FLAG_B_REGISTER);
         } else {
             /* Errores de aridad o funcion no encontrada */
+            if (cn->name) {
+                StructInfo *si = sym_get_struct_info(&cg->sym, cn->name);
+                if (si) {
+                    /* Constructor por defecto: reservar memoria */
+                    emit(cg, OP_HEAP_RESERVAR, (uint8_t)dest_reg, (uint8_t)(si->total_size & 0xFF), (uint8_t)((si->total_size >> 8) & 0xFF), IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
+                    return dest_reg;
+                }
+            }
             if (codegen_error_vec_constructor_arity(cg, cn)) return dest_reg;
             if (cn->name && codegen_error_if_bad_arity_buscar_contiene_termina(cg, cn)) return dest_reg;
             if (cn->name && codegen_error_if_bad_arity_pensar_procesar_texto(cg, cn)) return dest_reg;
@@ -5654,6 +5677,15 @@ static void visit_statement(CodeGen *cg, ASTNode *node) {
                         emit(cg, OP_ESCRIBIR, a & 0xFF, reg, (a >> 8) & 0xFF, fl);
                     }
                     return;
+                }
+                /* Caso constructor de clase general */
+                if (cn->name) {
+                    StructInfo *si = sym_get_struct_info(&cg->sym, cn->name);
+                    if (si) {
+                    emit(cg, OP_HEAP_RESERVAR, 1, (uint8_t)(si->total_size & 0xFF), (uint8_t)((si->total_size >> 8) & 0xFF), IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
+                    emit_escribir_u24(cg, 1, r.addr, r.is_relative);
+                    return;
+                }
                 }
             }
             /* vec binary op en declaracion: vec3 v = a + b */

@@ -260,6 +260,14 @@ void ast_free(ASTNode *node) {
             if (n->body) ast_free(n->body);
             break;
         }
+        case NODE_EXPORT_DIRECTIVE: {
+            ExportDirectiveNode *n = (ExportDirectiveNode*)node;
+            for (size_t i = 0; i < n->n_names; i++) {
+                free(n->names[i]);
+            }
+            free(n->names);
+            break;
+        }
         case NODE_BREAK:
         case NODE_CONTINUE:
         case NODE_CERRAR_MEMORIA:

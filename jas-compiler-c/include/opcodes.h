@@ -198,6 +198,7 @@
 #define OP_STR_A_ENTERO        0xBD
 #define OP_STR_A_FLOTANTE      0xBE
 #define OP_STR_MINUSCULAS      0x50
+#define OP_STR_MAYUSCULAS      0x4F
 #define OP_MEM_LISTA_LIMPIAR   0xB6
 #define OP_MEM_LISTA_LIBERAR   0x8D
 #define OP_TCP_ENVIAR          0x19

@@ -14,6 +14,7 @@ typedef enum {
     TOK_CONCEPT,
     TOK_NUMBER,
     TOK_OPERATOR,
+    TOK_NULL,
     TOK_EOF,
     TOK_NEWLINE
 } TokenType;

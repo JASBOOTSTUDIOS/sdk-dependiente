@@ -233,6 +233,13 @@ static void resolve_statement(ASTNode *node, SymbolTable *st) {
             }
             break;
         }
+        case NODE_EXPORT_DIRECTIVE: {
+            ExportDirectiveNode *en = (ExportDirectiveNode *)node;
+            for (size_t i = 0; i < en->n_names; i++) {
+                sym_set_exported(st, en->names[i]);
+            }
+            break;
+        }
         default:
             break;
     }

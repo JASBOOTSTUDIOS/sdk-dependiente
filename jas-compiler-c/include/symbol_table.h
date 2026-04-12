@@ -30,6 +30,7 @@ typedef struct SymbolEntry {
     int is_const;
     void *macro_ast; /* ASTNode* si es un macro (lambda) */
     int used;        /* 1 si la variable ha sido usada o referenciada */
+    int is_exported; /* 1 si la variable ha sido marcada con enviar */
     struct SymbolEntry *next;
 } SymbolEntry;
 
@@ -116,4 +117,8 @@ int sym_struct_field_by_index(SymbolTable *st, const char *struct_name, size_t i
 void sym_init(SymbolTable *st);
 void sym_free(SymbolTable *st);
 
+void sym_set_exported(SymbolTable *st, const char *name);
+int sym_is_exported(SymbolTable *st, const char *name);
+
+StructInfo *sym_get_struct_info(SymbolTable *st, const char *name);
 #endif /* SYMBOL_TABLE_H */

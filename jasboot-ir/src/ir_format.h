@@ -319,6 +319,7 @@ typedef enum {
     
     // Nuevos opcodes Fase 0
     OP_STR_MINUSCULAS = 0x50,        // A <- Convertir a minúsculas
+    OP_STR_MAYUSCULAS = 0x4F,        // A <- Convertir a mayúsculas
     OP_STR_COPIAR = 0x51,            // Copiar string
     OP_FS_ABRIR = 0x52,              // A <- Abrir archivo
     OP_FS_ESCRIBIR = 0x53,            // Escribir en archivo actual

@@ -265,6 +265,7 @@ IRValidationInfo ir_validate_memory(IRFile* ir) {
             inst.opcode != OP_MEM_MAPA_OBTENER &&
             inst.opcode != OP_MEM_MAPA_TAMANO &&
             inst.opcode != OP_STR_MINUSCULAS &&
+            inst.opcode != OP_STR_MAYUSCULAS &&
             inst.opcode != OP_STR_COPIAR &&
             inst.opcode != OP_FS_ABRIR &&
             inst.opcode != OP_FS_ESCRIBIR &&

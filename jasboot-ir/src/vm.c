@@ -7345,6 +7345,31 @@ int vm_step(VM* vm) {
             vm->pc += IR_INSTRUCTION_SIZE;
             break;
         }
+
+        case OP_STR_MAYUSCULAS: {
+            // A = dest, B = string_reg
+            uint64_t b_val = vm_get_register(vm, inst.operand_b);
+            const char* str = vm_text_cache_get(vm, (uint32_t)b_val);
+            if (str) {
+                char* upper = strdup(str);
+                for (char* p = upper; *p; p++) {
+                    *p = toupper(*p);
+                }
+                uint32_t hash = vm_hash_texto(upper);
+                vm_text_cache_put(vm, hash, upper);
+#ifdef JASBOOT_LANG_INTEGRATION
+                if (vm->mem_neuronal) {
+                    jmn_guardar_texto(vm->mem_neuronal, hash, upper);
+                }
+#endif
+                vm_set_register(vm, inst.operand_a, (uint64_t)hash);
+                free(upper);
+            } else {
+                vm_set_register(vm, inst.operand_a, 5381);
+            }
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
         
         case OP_FS_ABRIR: {
             // A = file_handle, B = path_reg, C = mode_reg (hash o offset en data)
