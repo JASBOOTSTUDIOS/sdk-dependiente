@@ -8161,7 +8161,7 @@ int vm_run_with_limit(VM* vm, uint64_t max_steps) {
                 vm->pc += IR_INSTRUCTION_SIZE;
                 break;
             case OP_NO:
-                STORE_REG_FAST(op_a, ~b_val);
+                STORE_REG_FAST(op_a, (b_val == 0) ? 1 : 0);
                 vm->pc += IR_INSTRUCTION_SIZE;
                 break;
             case OP_BIT_SHL:

@@ -2486,10 +2486,31 @@ static ASTNode *parse_logical_and(Parser *p) {
 static ASTNode *parse_logical_or(Parser *p) {
     ASTNode *left = parse_logical_and(p);
     if (!left) return NULL;
+    
+    // Limitar el número de operadores 'o' para evitar bucles infinitos
+    int max_o_ops = 100;
+    int o_count = 0;
+    
     while (match(p, TOK_KEYWORD, "o")) {
+        if (++o_count > max_o_ops) {
+            set_error_here(p, peek(p, 0), "Demasiados operadores 'o' anidados - posible bucle infinito");
+            ast_free(left);
+            return NULL;
+        }
+        
         ASTNode *right = parse_logical_and(p);
-        if (!right) { ast_free(left); return NULL; }
+        if (!right) { 
+            ast_free(left); 
+            return NULL; 
+        }
+        
         BinaryOpNode *b = calloc(1, sizeof(BinaryOpNode));
+        if (!b) {
+            ast_free(left);
+            ast_free(right);
+            return NULL;
+        }
+        
         b->base.type = NODE_BINARY_OP;
         b->left = left;
         b->operator = strdup("o");

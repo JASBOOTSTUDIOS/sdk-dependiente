@@ -4876,7 +4876,7 @@ static int visit_expression(CodeGen *cg, ASTNode *node, int dest_reg) {
             return r;
         }
         if (strcmp(un->operator, "no") == 0) {
-            emit(cg, OP_CMP_EQ, dest_reg, r, 0, IR_INST_FLAG_C_IMMEDIATE);
+            emit(cg, OP_NO, dest_reg, r, 0, 0);
         } else if (strcmp(un->operator, "-") == 0) {
             const char *t = get_expression_type(cg, un->expression);
             if (t && strcmp(t, "flotante") == 0) {
@@ -4943,32 +4943,8 @@ static int visit_expression(CodeGen *cg, ASTNode *node, int dest_reg) {
             rL = visit_expression(cg, bn->left, dest_reg);
             if (cg->has_error) return dest_reg;
             
+            // Para 'y': si la izquierda es falsa (igual a 0), saltar al final
             emit(cg, OP_CMP_EQ, dest_reg, rL, 0, IR_INST_FLAG_C_IMMEDIATE);
-            emit(cg, OP_CMP_EQ, dest_reg, dest_reg, 0, IR_INST_FLAG_C_IMMEDIATE);
-            
-            int tmp = dest_reg == 1 ? 2 : 1;
-            emit(cg, OP_CMP_EQ, tmp, dest_reg, 0, IR_INST_FLAG_C_IMMEDIATE);
-            emit(cg, OP_SI, tmp, 0, 0, IR_INST_FLAG_A_REGISTER);
-            add_patch(cg, end_label, PATCH_SI);
-            
-            int rR = visit_expression(cg, bn->right, dest_reg);
-            if (cg->has_error) return dest_reg;
-            
-            if (rR != dest_reg) {
-                emit(cg, OP_MOVER, dest_reg, rR, 0, IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE);
-            }
-            emit(cg, OP_CMP_EQ, dest_reg, dest_reg, 0, IR_INST_FLAG_C_IMMEDIATE);
-            emit(cg, OP_CMP_EQ, dest_reg, dest_reg, 0, IR_INST_FLAG_C_IMMEDIATE);
-            
-            mark_label(cg, end_label);
-            return dest_reg;
-        } else if (strcmp(op, "o") == 0) {
-            int end_label = new_label(cg);
-            rL = visit_expression(cg, bn->left, dest_reg);
-            if (cg->has_error) return dest_reg;
-            
-            emit(cg, OP_CMP_EQ, dest_reg, rL, 0, IR_INST_FLAG_C_IMMEDIATE);
-            emit(cg, OP_CMP_EQ, dest_reg, dest_reg, 0, IR_INST_FLAG_C_IMMEDIATE);
             
             emit(cg, OP_SI, dest_reg, 0, 0, IR_INST_FLAG_A_REGISTER);
             add_patch(cg, end_label, PATCH_SI);
@@ -4979,10 +4955,24 @@ static int visit_expression(CodeGen *cg, ASTNode *node, int dest_reg) {
             if (rR != dest_reg) {
                 emit(cg, OP_MOVER, dest_reg, rR, 0, IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE);
             }
+            // Convertir resultado a booleano (0 o 1)
             emit(cg, OP_CMP_EQ, dest_reg, dest_reg, 0, IR_INST_FLAG_C_IMMEDIATE);
-            emit(cg, OP_CMP_EQ, dest_reg, dest_reg, 0, IR_INST_FLAG_C_IMMEDIATE);
+            emit(cg, OP_NO, dest_reg, dest_reg, 0, 0);  // Negar para obtener 0/1
             
             mark_label(cg, end_label);
+            return dest_reg;
+        } else if (strcmp(op, "o") == 0) {
+            // Implementación simple como operador bit a bit para evitar problemas de precedencia
+            // Esto funcionará para valores 0 y 1 (booleanos)
+            int rL = visit_expression(cg, bn->left, dest_reg);
+            if (cg->has_error) return dest_reg;
+            
+            int rR_reg = (dest_reg == 1) ? 2 : ((dest_reg == 2) ? 1 : 2);
+            int rR = visit_expression(cg, bn->right, rR_reg);
+            if (cg->has_error) return dest_reg;
+            
+            // OR bit a bit funciona para booleanos (0 y 1)
+            emit(cg, OP_O, dest_reg, rL, rR, 0);
             return dest_reg;
         } else {
             int left_has_call = expr_has_call(bn->left);
