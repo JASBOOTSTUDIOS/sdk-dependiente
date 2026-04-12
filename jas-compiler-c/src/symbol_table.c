@@ -47,6 +47,11 @@ void sym_free(SymbolTable *st) {
             free(si->fields[j].type_name);
         }
         free(si->fields);
+        for (size_t j = 0; j < si->n_methods; j++) {
+            free(si->methods[j].name);
+            /* method_ast no se libera aqui, es parte del AST */
+        }
+        if (si->methods) free(si->methods);
     }
     free(st->structs);
     st->structs = NULL;
@@ -231,7 +236,12 @@ static size_t get_field_size(SymbolTable *st, const char *type_name) {
 }
 
 void sym_register_struct(SymbolTable *st, const char *name, const char **field_types, const char **field_names, size_t n_fields) {
-    if (!name || !field_types || !field_names) return;
+    sym_register_class(st, name, field_types, field_names, NULL, n_fields, NULL, NULL, NULL, 0, 0);
+}
+
+void sym_register_class(SymbolTable *st, const char *name, const char **field_types, const char **field_names, const int *field_vis, size_t n_fields,
+                        void **method_asts, const char **method_names, const int *method_vis, size_t n_methods, int is_exported) {
+    if (!name || (n_fields > 0 && (!field_types || !field_names))) return;
     if (st->n_structs >= st->structs_cap) {
         size_t new_cap = st->structs_cap ? st->structs_cap * 2 : 8;
         StructInfo *p = realloc(st->structs, new_cap * sizeof(StructInfo));
@@ -241,25 +251,39 @@ void sym_register_struct(SymbolTable *st, const char *name, const char **field_t
     }
     StructInfo *si = &st->structs[st->n_structs];
     si->name = strdup(name);
-    si->fields = calloc(n_fields, sizeof(StructFieldInfo));
-    if (!si->fields) return;
+    si->fields = n_fields ? calloc(n_fields, sizeof(StructFieldInfo)) : NULL;
     si->n_fields = n_fields;
+    si->is_exported = is_exported;
+    
     size_t offset = 0;
     for (size_t i = 0; i < n_fields; i++) {
         si->fields[i].name = strdup_safe(field_names[i]);
         si->fields[i].type_name = strdup_safe(field_types[i]);
+        si->fields[i].size = get_field_size(st, si->fields[i].type_name);
         si->fields[i].offset = offset;
-        size_t fsize = get_field_size(st, field_types[i]);
-        si->fields[i].size = fsize;
-        offset += fsize;
+        si->fields[i].is_private = field_vis ? field_vis[i] : 0;
+        offset += si->fields[i].size;
     }
     si->total_size = offset;
+    
+    si->methods = n_methods ? calloc(n_methods, sizeof(StructMethodInfo)) : NULL;
+    si->n_methods = n_methods;
+    for (size_t i = 0; i < n_methods; i++) {
+        si->methods[i].name = strdup_safe(method_names[i]);
+        si->methods[i].method_ast = method_asts[i];
+        si->methods[i].is_private = method_vis ? method_vis[i] : 0;
+    }
     st->n_structs++;
 }
 
 int sym_register_struct_extends(SymbolTable *st, const char *name, const char *base_name,
                                 const char **field_types, const char **field_names, size_t n_fields) {
-    if (!st || !name || !base_name) return -1;
+    return sym_register_class_extends(st, name, base_name, field_types, field_names, NULL, n_fields, NULL, NULL, NULL, 0, 0);
+}
+
+int sym_register_class_extends(SymbolTable *st, const char *name, const char *base_name,
+                               const char **field_types, const char **field_names, const int *field_vis, size_t n_fields,
+                               void **method_asts, const char **method_names, const int *method_vis, size_t n_methods, int is_exported) {
     StructInfo *base_si = NULL;
     for (size_t i = 0; i < st->n_structs; i++) {
         if (strcmp(st->structs[i].name, base_name) == 0) {
@@ -269,52 +293,61 @@ int sym_register_struct_extends(SymbolTable *st, const char *name, const char *b
     }
     if (!base_si) return -1;
 
+    size_t total_f = base_si->n_fields + n_fields;
+    const char **tf = malloc(total_f * sizeof(char*));
+    const char **nf = malloc(total_f * sizeof(char*));
+    int *vf = malloc(total_f * sizeof(int));
+
+    for (size_t i = 0; i < base_si->n_fields; i++) {
+        tf[i] = base_si->fields[i].type_name;
+        nf[i] = base_si->fields[i].name;
+        vf[i] = base_si->fields[i].is_private;
+    }
     for (size_t i = 0; i < n_fields; i++) {
-        if (!field_names[i]) continue;
         for (size_t j = 0; j < base_si->n_fields; j++) {
-            if (base_si->fields[j].name && strcmp(field_names[i], base_si->fields[j].name) == 0)
+            if (strcmp(field_names[i], base_si->fields[j].name) == 0) {
+                free(tf); free(nf); free(vf);
                 return -2;
+            }
         }
+        tf[base_si->n_fields + i] = field_types[i];
+        nf[base_si->n_fields + i] = field_names[i];
+        vf[base_si->n_fields + i] = field_vis ? field_vis[i] : 0;
     }
 
-    if (st->n_structs >= st->structs_cap) {
-        size_t new_cap = st->structs_cap ? st->structs_cap * 2 : 8;
-        StructInfo *p = realloc(st->structs, new_cap * sizeof(StructInfo));
-        if (!p) return -1;
-        st->structs = p;
-        st->structs_cap = new_cap;
+    size_t total_m = base_si->n_methods + n_methods;
+    void **tm = malloc(total_m * sizeof(void*));
+    const char **nm = malloc(total_m * sizeof(char*));
+    int *vm = malloc(total_m * sizeof(int));
+
+    for (size_t i = 0; i < base_si->n_methods; i++) {
+        tm[i] = base_si->methods[i].method_ast;
+        nm[i] = base_si->methods[i].name;
+        vm[i] = base_si->methods[i].is_private;
     }
-    StructInfo *si = &st->structs[st->n_structs];
-    memset(si, 0, sizeof(*si));
-    si->name = strdup(name);
-    if (!si->name) return -1;
-    size_t n_total = base_si->n_fields + n_fields;
-    si->fields = calloc(n_total, sizeof(StructFieldInfo));
-    if (!si->fields) {
-        free(si->name);
-        return -1;
+    for (size_t i = 0; i < n_methods; i++) {
+        int overriden = -1;
+        for (size_t j = 0; j < base_si->n_methods; j++) {
+            if (strcmp(method_names[i], base_si->methods[j].name) == 0) {
+                overriden = (int)j;
+                break;
+            }
+        }
+        if (overriden >= 0) {
+            tm[overriden] = method_asts[i];
+            nm[overriden] = method_names[i];
+            vm[overriden] = method_vis ? method_vis[i] : 0;
+        } else {
+            tm[base_si->n_methods + i] = method_asts[i];
+            nm[base_si->n_methods + i] = method_names[i];
+            vm[base_si->n_methods + i] = method_vis ? method_vis[i] : 0;
+        }
     }
-    si->n_fields = n_total;
-    size_t offset = 0;
-    for (size_t j = 0; j < base_si->n_fields; j++) {
-        StructFieldInfo *f = &si->fields[j];
-        f->name = strdup_safe(base_si->fields[j].name);
-        f->type_name = strdup_safe(base_si->fields[j].type_name);
-        f->offset = offset;
-        f->size = base_si->fields[j].size;
-        offset += f->size;
-    }
-    for (size_t i = 0; i < n_fields; i++) {
-        StructFieldInfo *f = &si->fields[base_si->n_fields + i];
-        f->name = strdup_safe(field_names[i]);
-        f->type_name = strdup_safe(field_types[i]);
-        f->offset = offset;
-        size_t fsize = get_field_size(st, field_types[i]);
-        f->size = fsize;
-        offset += fsize;
-    }
-    si->total_size = offset;
-    st->n_structs++;
+    /* Si hubo overriden, total_m podria ser menor. Para simplificar usamos total_m maximo. */
+    sym_register_class(st, name, tf, nf, vf, total_f, tm, nm, vm, total_m, is_exported);
+
+    free(tf); free(nf); free(vf);
+    free(tm); free(nm); free(vm);
     return 0;
 }
 
@@ -334,6 +367,64 @@ int sym_get_struct_field(SymbolTable *st, const char *struct_name, const char *f
         return 0;
     }
     return 0;
+}
+
+int sym_get_struct_field_visibility(SymbolTable *st, const char *struct_name, const char *field_name, int *out_is_private) {
+    if (!struct_name || !field_name) return 0;
+    for (size_t i = 0; i < st->n_structs; i++) {
+        StructInfo *si = &st->structs[i];
+        if (strcmp(si->name, struct_name) != 0) continue;
+        for (size_t j = 0; j < si->n_fields; j++) {
+            if (strcmp(si->fields[j].name, field_name) == 0) {
+                if (out_is_private) *out_is_private = si->fields[j].is_private;
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
+int sym_get_struct_method_visibility(SymbolTable *st, const char *struct_name, const char *method_name, int *out_is_private) {
+    if (!struct_name || !method_name) return 0;
+    for (size_t i = 0; i < st->n_structs; i++) {
+        StructInfo *si = &st->structs[i];
+        if (strcmp(si->name, struct_name) != 0) continue;
+        for (size_t j = 0; j < si->n_methods; j++) {
+            if (strcmp(si->methods[j].name, method_name) == 0) {
+                if (out_is_private) *out_is_private = si->methods[j].is_private;
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
+const char *sym_get_struct_lista_elem_type(SymbolTable *st, const char *struct_name, const char *field_name) {
+    if (!struct_name || !field_name) return NULL;
+    for (size_t i = 0; i < st->n_structs; i++) {
+        StructInfo *si = &st->structs[i];
+        if (strcmp(si->name, struct_name) != 0) continue;
+        for (size_t j = 0; j < si->n_fields; j++) {
+            if (strcmp(si->fields[j].name, field_name) == 0) {
+                const char *type = si->fields[j].type_name;
+                if (type && strncmp(type, "lista<", 6) == 0) {
+                    static char elem[64];
+                    const char *start = type + 6;
+                    const char *end = strchr(start, '>');
+                    if (end) {
+                        size_t len = (size_t)(end - start);
+                        if (len < sizeof(elem)) {
+                            memcpy(elem, start, len);
+                            elem[len] = '\0';
+                            return elem;
+                        }
+                    }
+                }
+                return NULL;
+            }
+        }
+    }
+    return NULL;
 }
 
 size_t sym_get_struct_size(SymbolTable *st, const char *struct_name) {

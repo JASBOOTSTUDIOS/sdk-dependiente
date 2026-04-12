@@ -35,6 +35,7 @@
 #define IR_INST_FLAG_KERNEL_ONLY (1 << 5)
 #define IR_INST_FLAG_A_REGISTER (1 << 6)
 #define IR_INST_FLAG_B_REGISTER (1 << 7)
+#define IR_INST_FLAG_C_REGISTER 0x00 // No hay bits libres, pero se usa para legibilidad en el compilador
 
 // IA metadata (estructura extendida)
 #define IR_IA_MAGIC_0 'I'

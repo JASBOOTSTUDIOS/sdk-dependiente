@@ -4351,7 +4351,9 @@ static ASTNode *parse_function(Parser *p, int is_exported, int is_async) {
         free(ret_type);
         ret_type = strdup_safe(rts_rt);
         advance(p);
-        if (ret_type && strcmp(ret_type, "tarea") == 0) {
+        if (ret_type && strcmp(ret_type, "lista") == 0) {
+            return_task_elem = parse_optional_lista_element_type(p);
+        } else if (ret_type && strcmp(ret_type, "tarea") == 0) {
             if (!parse_optional_tarea_inner_type_after_tarea_keyword(p, &return_task_elem)) {
                 free(ret_type);
                 for (size_t k = 0; k < params.n; k++) ast_free((ASTNode*)params.arr[k]);
@@ -4408,7 +4410,7 @@ static int struct_kw_is_closer(const char *kw, int is_clase) {
 }
 
 /* Tras consumir `registro` o `clase` desde el nivel superior. */
-static ASTNode *parse_struct_body(Parser *p, int is_clase) {
+static ASTNode *parse_struct_body(Parser *p, int is_clase, int is_exported) {
     const Token *nt = peek(p, 0);
     if (!validate_user_defined_name_tok(p, nt)) return NULL;
     advance(p);
@@ -4426,103 +4428,94 @@ static ASTNode *parse_struct_body(Parser *p, int is_clase) {
         advance(p);
     }
     char **ft = NULL, **fn = NULL;
-    size_t nf = 0, cap = 0;
+    int *fv = NULL;
+    size_t nf = 0, fcap = 0;
+    
+    ASTNode **methods = NULL;
+    int *mv = NULL;
+    size_t nm = 0, mcap = 0;
+
     while (peek(p, 0)) {
         const Token *phead = peek(p, 0);
         const char *kws = token_union_str(phead);
         if (!kws || struct_kw_is_closer(kws, is_clase)) break;
+        
+        int visibility = 0; /* 0 = publico, 1 = privado */
+        if (phead->type == TOK_KEYWORD && strcmp(phead->value.str, "privado") == 0) {
+            visibility = 1;
+            advance(p);
+            phead = peek(p, 0);
+        }
+
         const Token *tblk = peek(p, 0);
         if (tblk && tblk->type == TOK_KEYWORD && tblk->value.str) {
             const char *kw = tblk->value.str;
             if (strcmp(kw, "funcion") == 0) {
-                const Token *p1 = peek(p, 1);
-                const Token *p2 = peek(p, 2);
-                if (p1 && p1->type == TOK_IDENTIFIER && p2 && p2->type == TOK_OPERATOR &&
-                    p2->value.str && strcmp(p2->value.str, "(") == 0) {
-                    if (p->source_path && p->source_path[0])
-                        set_error_at(p, tblk->line, tblk->column,
-                            "Archivo %s, linea %d, columna %d: dentro de %s '%s' no se pueden declarar funciones anidadas; use un campo `funcion nombre` para puntero a metodo.",
-                            p->source_path, tblk->line, tblk->column, is_clase ? "clase" : "registro", name ? name : "?");
-                    else
-                        set_error_at(p, tblk->line, tblk->column,
-                            "linea %d, columna %d: no se permiten funciones anidadas en %s; use campo tipo funcion.",
-                            tblk->line, tblk->column, is_clase ? "clase" : "registro");
+                if (!is_clase) {
+                    set_error_at(p, tblk->line, tblk->column, "No se permiten funciones en registros; use una clase.");
                     goto parse_struct_body_fail;
                 }
+                ASTNode *method = parse_function(p, 0, 0);
+                if (!method) goto parse_struct_body_fail;
+                
+                if (nm >= mcap) {
+                    mcap = mcap ? mcap * 2 : 4;
+                    methods = realloc(methods, mcap * sizeof(ASTNode*));
+                    mv = realloc(mv, mcap * sizeof(int));
+                }
+                methods[nm] = method;
+                mv[nm] = visibility;
+                nm++;
+                continue;
             }
             if (is_clase && strcmp(kw, "fin_registro") == 0) {
-                if (p->source_path && p->source_path[0])
-                    set_error_at(p, tblk->line, tblk->column,
-                        "Archivo %s, linea %d, columna %d: cierre de `clase '%s'` debe ser `fin_clase`, no `fin_registro`.",
-                        p->source_path, tblk->line, tblk->column, name ? name : "?");
-                else
-                    set_error_at(p, tblk->line, tblk->column,
-                        "linea %d, columna %d: use `fin_clase` para cerrar la clase '%s'.",
-                        tblk->line, tblk->column, name ? name : "?");
+                set_error_at(p, tblk->line, tblk->column, "Cierre de clase '%s' debe ser `fin_clase`.", name);
                 goto parse_struct_body_fail;
             }
             if (!is_clase && strcmp(kw, "fin_clase") == 0) {
-                if (p->source_path && p->source_path[0])
-                    set_error_at(p, tblk->line, tblk->column,
-                        "Archivo %s, linea %d, columna %d: cierre de `registro '%s'` debe ser `fin_registro`, no `fin_clase`.",
-                        p->source_path, tblk->line, tblk->column, name ? name : "?");
-                else
-                    set_error_at(p, tblk->line, tblk->column,
-                        "linea %d, columna %d: use `fin_registro` para cerrar el registro '%s'.",
-                        tblk->line, tblk->column, name ? name : "?");
+                set_error_at(p, tblk->line, tblk->column, "Cierre de registro '%s' debe ser `fin_registro`.", name);
                 goto parse_struct_body_fail;
             }
             if (strcmp(kw, "principal") == 0 || strcmp(kw, "asincrono") == 0 ||
                 strcmp(kw, "registro") == 0 || strcmp(kw, "clase") == 0 ||
                 strcmp(kw, "extiende") == 0 ||
                 strcmp(kw, "activar_modulo") == 0 || strcmp(kw, "usar") == 0 || strcmp(kw, "fin_principal") == 0) {
-                const char *finw = is_clase ? "fin_clase" : "fin_registro";
-                if (p->source_path && p->source_path[0])
-                    set_error_at(p, tblk->line, tblk->column,
-                        "Archivo %s, linea %d, columna %d: el %s '%s' no esta cerrado: aparece `%s` antes de `%s`.",
-                        p->source_path, tblk->line, tblk->column, is_clase ? "clase" : "registro", name ? name : "?", kw, finw);
-                else
-                    set_error_at(p, tblk->line, tblk->column,
-                        "linea %d, columna %d: %s '%s' sin cerrar; anada `%s` tras los campos.",
-                        tblk->line, tblk->column, is_clase ? "clase" : "registro", name ? name : "?", finw);
                 goto parse_struct_body_fail;
             }
         }
+        
         const Token *ty = advance(p);
         const Token *fld = peek(p, 0);
         if (!ty || !fld) break;
-        if (!validate_user_defined_name_tok(p, fld)) {
-            for (size_t i = 0; i < nf; i++) {
-                free(ft[i]);
-                free(fn[i]);
-            }
-            free(ft);
-            free(fn);
-            free(name);
-            free(extends_name);
-            return NULL;
-        }
+        if (!validate_user_defined_name_tok(p, fld)) goto parse_struct_body_fail;
         advance(p);
-        if (nf >= cap) {
-            cap = cap ? cap * 2 : 4;
-            char **pft = realloc(ft, cap * sizeof(char*));
-            char **pfn = realloc(fn, cap * sizeof(char*));
-            if (!pft || !pfn) break;
-            ft = pft;
-            fn = pfn;
+        
+        if (nf >= fcap) {
+            fcap = fcap ? fcap * 2 : 4;
+            ft = realloc(ft, fcap * sizeof(char*));
+            fn = realloc(fn, fcap * sizeof(char*));
+            fv = realloc(fv, fcap * sizeof(int));
         }
         ft[nf] = ty->value.str ? strdup(ty->value.str) : NULL;
+        if (ft[nf] && strcmp(ft[nf], "lista") == 0) {
+            char *elem_type = parse_optional_lista_element_type(p);
+            if (elem_type) {
+                char *new_type = malloc(strlen(ft[nf]) + strlen(elem_type) + 3);
+                sprintf(new_type, "%s<%s>", ft[nf], elem_type);
+                free(ft[nf]);
+                ft[nf] = new_type;
+                free(elem_type);
+            }
+        }
         fn[nf] = fld->value.str ? strdup(fld->value.str) : NULL;
+        fv[nf] = visibility;
         nf++;
     }
-    {
-        char finmsg[320];
-        snprintf(finmsg, sizeof finmsg, "se esperaba `%s` para cerrar %s '%s'",
-                 is_clase ? "fin_clase" : "fin_registro", is_clase ? "clase" : "registro", name ? name : "?");
-        const char *fkw = is_clase ? "fin_clase" : "fin_registro";
-        if (!expect(p, TOK_KEYWORD, fkw, finmsg))
-            goto parse_struct_body_fail;
-    }
+    
+    const char *fkw = is_clase ? "fin_clase" : "fin_registro";
+    if (!expect(p, TOK_KEYWORD, fkw, "Cierre de clase/registro esperado"))
+        goto parse_struct_body_fail;
+
     StructDefNode *sn = calloc(1, sizeof(StructDefNode));
     sn->base.type = NODE_STRUCT_DEF;
     sn->base.line = nt ? nt->line : 0;
@@ -4531,17 +4524,20 @@ static ASTNode *parse_struct_body(Parser *p, int is_clase) {
     sn->extends_name = extends_name;
     sn->field_types = ft;
     sn->field_names = fn;
+    sn->field_visibilities = fv;
     sn->n_fields = nf;
+    sn->methods = methods;
+    sn->method_visibilities = mv;
+    sn->n_methods = nm;
+    sn->is_exported = is_exported;
     return (ASTNode*)sn;
+
 parse_struct_body_fail:
-    for (size_t i = 0; i < nf; i++) {
-        free(ft[i]);
-        free(fn[i]);
-    }
-    free(ft);
-    free(fn);
-    free(name);
-    free(extends_name);
+    for (size_t i = 0; i < nf; i++) { free(ft[i]); free(fn[i]); }
+    free(ft); free(fn); free(fv);
+    for (size_t i = 0; i < nm; i++) ast_free(methods[i]);
+    free(methods); free(mv);
+    free(name); free(extends_name);
     return NULL;
 }
 
@@ -4785,20 +4781,48 @@ ASTNode *parser_parse(Parser *p) {
             if (strcmp(t->value.str, "enviar") == 0) {
                 advance(p);
                 const Token *nx = peek(p, 0);
-                if (nx && nx->type == TOK_KEYWORD && nx->value.str && strcmp(nx->value.str, "funcion") == 0) {
-                    ASTNode *fn = parse_function(p, 1, 0);
-                    if (!fn) {
-                        if (p->last_error) {
+                if (nx && nx->type == TOK_KEYWORD && nx->value.str) {
+                    if (strcmp(nx->value.str, "funcion") == 0) {
+                        ASTNode *fn = parse_function(p, 1, 0);
+                        if (!fn) {
+                            if (p->last_error) {
+                                parser_accumulate_error(p, p->last_error);
+                                free(p->last_error);
+                                p->last_error = NULL;
+                                parser_synchronize(p);
+                                continue;
+                            }
+                            break;
+                        }
+                        node_vec_push(&funcs, fn);
+                        continue;
+                    }
+                    if (strcmp(nx->value.str, "clase") == 0) {
+                        advance(p);
+                        ASTNode *sd = parse_struct_body(p, 1, 1);
+                        if (sd) {
+                            node_vec_push(&globals, sd);
+                        } else if (p->last_error) {
                             parser_accumulate_error(p, p->last_error);
                             free(p->last_error);
                             p->last_error = NULL;
                             parser_synchronize(p);
-                            continue;
                         }
-                        break;
+                        continue;
                     }
-                    node_vec_push(&funcs, fn);
-                    continue;
+                    if (strcmp(nx->value.str, "registro") == 0) {
+                        advance(p);
+                        ASTNode *sd = parse_struct_body(p, 0, 1);
+                        if (sd) {
+                            node_vec_push(&globals, sd);
+                        } else if (p->last_error) {
+                            parser_accumulate_error(p, p->last_error);
+                            free(p->last_error);
+                            p->last_error = NULL;
+                            parser_synchronize(p);
+                        }
+                        continue;
+                    }
                 }
                 ASTNode *s = parse_statement(p);
                 if (!s) {
@@ -4884,7 +4908,7 @@ ASTNode *parser_parse(Parser *p) {
             }
             if (strcmp(t->value.str, "registro") == 0) {
                 advance(p);
-                ASTNode *sd = parse_struct_body(p, 0);
+                ASTNode *sd = parse_struct_body(p, 0, 0);
                 if (sd) {
                     node_vec_push(&globals, sd);
                 } else if (p->last_error) {
@@ -4899,7 +4923,7 @@ ASTNode *parser_parse(Parser *p) {
             }
             if (strcmp(t->value.str, "clase") == 0) {
                 advance(p);
-                ASTNode *sd = parse_struct_body(p, 1);
+                ASTNode *sd = parse_struct_body(p, 1, 0);
                 if (sd) {
                     node_vec_push(&globals, sd);
                 } else if (p->last_error) {

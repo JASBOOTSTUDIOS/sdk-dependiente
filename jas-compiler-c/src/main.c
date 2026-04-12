@@ -372,7 +372,24 @@ static int should_merge_global_var(const VarDeclNode *vd, const ProgramNode *mp,
     if (!vd || !spec) return 0;
     if (!vd->is_exported) return 0;
     if (spec->import_kind == USAR_IMPORT_TODO) return 1;
-    if (spec->import_kind == USAR_IMPORT_NAMES) return 1;
+    if (spec->import_kind == USAR_IMPORT_NAMES) {
+        for (size_t i = 0; i < spec->n_import_names; i++) {
+            if (strcmp(spec->import_names[i], vd->name) == 0) return 1;
+        }
+    }
+    return 0;
+}
+
+static int should_merge_struct(const ASTNode *g, const ActivarModuloNode *spec) {
+    if (!g || g->type != NODE_STRUCT_DEF || !spec) return 0;
+    StructDefNode *sd = (StructDefNode*)g;
+    if (!sd->is_exported) return 0;
+    if (spec->import_kind == USAR_IMPORT_TODO) return 1;
+    if (spec->import_kind == USAR_IMPORT_NAMES) {
+        for (size_t i = 0; i < spec->n_import_names; i++) {
+            if (strcmp(spec->import_names[i], sd->name) == 0) return 1;
+        }
+    }
     return 0;
 }
 
@@ -620,14 +637,22 @@ static int process_usar_module_recursive(ProgramNode *main_p, const char *full_o
 
     for (size_t gi = 0; gi < mp->n_globals; gi++) {
         ASTNode *g = mp->globals[gi];
-        if (!g || g->type != NODE_VAR_DECL) continue;
-        VarDeclNode *vd = (VarDeclNode *)g;
-        if (!should_merge_global_var(vd, mp, import_spec)) continue;
+        if (!g) continue;
+        
+        int should_merge = 0;
+        if (g->type == NODE_VAR_DECL) {
+            should_merge = should_merge_global_var((VarDeclNode *)g, mp, import_spec);
+        } else if (g->type == NODE_STRUCT_DEF) {
+            should_merge = should_merge_struct(g, import_spec);
+        }
+        
+        if (!should_merge) continue;
+
         size_t new_n = main_p->n_globals + 1;
         ASTNode **ng = realloc(main_p->globals, new_n * sizeof(ASTNode *));
         if (!ng) {
-        ast_free(mast);
-        free(mbuf);
+            ast_free(mast);
+            free(mbuf);
             usar_stack_pop(stack);
             return 1;
         }

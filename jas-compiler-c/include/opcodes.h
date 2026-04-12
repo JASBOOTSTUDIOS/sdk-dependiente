@@ -21,6 +21,7 @@
 #define IR_INST_FLAG_RELATIVE    (1 << 3)
 #define IR_INST_FLAG_A_REGISTER  (1 << 6)
 #define IR_INST_FLAG_B_REGISTER  (1 << 7)
+#define IR_INST_FLAG_C_REGISTER  0x00
 
 #define OP_HALT           0x00
 #define OP_MOVER          0x01

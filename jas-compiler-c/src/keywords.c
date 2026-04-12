@@ -35,7 +35,7 @@ const char *const KEYWORDS[] = {
     "bit_shl", "bit_shr", "sistema_ejecutar",
     "fs_escribir_byte", "mapa_crear", "mapa_poner", "mapa_obtener",
     "str_a_entero", "str_a_flotante", "entrada_flotante",
-    "registro", "fin_registro", "clase", "fin_clase", "extiende", "lista", "mapa", "bool", "hacer", "fin_hacer", "usar", "enviar", "todo", "todas",
+    "registro", "fin_registro", "clase", "fin_clase", "extiende", "lista", "mapa", "bool", "hacer", "fin_hacer", "usar", "enviar", "todo", "todas", "privado",
     "seleccionar", "caso", "defecto", "fin_seleccionar",
     "intentar", "atrapar", "final", "fin_intentar", "lanzar", "macro", "llamar",
     "fs_abrir", "fs_cerrar", "fs_escribir", "fs_leer_linea",

@@ -111,6 +111,11 @@ typedef struct {
     char **field_types;
     char **field_names;
     size_t n_fields;
+    ASTNode **methods;        /* FunctionNode */
+    size_t n_methods;
+    int *field_visibilities;  /* 0=publico, 1=privado */
+    int *method_visibilities; /* 0=publico, 1=privado */
+    int is_exported;
 } StructDefNode;
 
 /* 2.3 Expresiones */
