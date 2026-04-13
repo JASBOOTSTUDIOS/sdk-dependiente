@@ -14,9 +14,10 @@ principal
     
     // Probar bucle
     imprimir "Contando:"
-    mientrasi = 1 
+    mientras i < 3 hacer
         imprimir "  " + i
-    fin_para
+        i = i + 1
+    fin_mientras
     
     imprimir "=== PRUEBA COMPLETADA ==="
 fin_principal
