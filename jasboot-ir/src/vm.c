@@ -3764,6 +3764,24 @@ int vm_step(VM* vm) {
             break;
         }
 
+        case OP_ID_A_TEXTO: {
+            uint32_t id = (uint32_t)vm_get_register(vm, inst.operand_b);
+            if (vm->mem_neuronal) {
+                char buf[1024];
+                if (jmn_obtener_texto(vm->mem_neuronal, id, buf, sizeof(buf)) >= 0 && buf[0]) {
+                    uint32_t tid = vm_alloc_runtime_text_id(vm);
+                    vm_text_cache_put_owned(vm, tid, strdup(buf), strlen(buf));
+                    vm_set_register(vm, inst.operand_a, (uint64_t)tid);
+                } else {
+                    vm_set_register(vm, inst.operand_a, (uint64_t)id);
+                }
+            } else {
+                vm_set_register(vm, inst.operand_a, (uint64_t)id);
+            }
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
         case OP_CONV_I2F: {
             union { uint64_t u64; float f32; } cast = {0};
             cast.f32 = (float)((int64_t)b_val);

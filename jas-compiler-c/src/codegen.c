@@ -3433,13 +3433,16 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
     if (strcmp(name, "buscar_asociados_lista") == 0 || strcmp(name, "asociados_lista_de") == 0) {
         if (cn->n_args < 2) return 0;
         /* Regs 10–15: no pisar dest_reg (suele ser 1) ni args en 2–4 */
-        visit_expression(cg, ARG0, 10);
-        visit_expression(cg, ARG1, 11);
-        if (cn->n_args >= 3 && ARG2) visit_expression(cg, ARG2, 12);
-        else emit(cg, OP_MOVER, 12, 16, 0, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
+        visit_expression(cg, ARG0, 10); /* origen */
+        visit_expression(cg, ARG1, 11); /* K */
+        if (cn->n_args >= 3 && ARG2) visit_expression(cg, ARG2, 12); /* tipo */
+        else emit(cg, OP_MOVER, 12, 0, 0, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE); /* tipo 0 = cualquiera */
+        
+        /* Empaquetar: (K << 8) | tipo */
         emit(cg, OP_MOVER, 13, 8, 0, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
-        emit(cg, OP_BIT_SHL, 14, 12, 13, 0);
-        emit(cg, OP_SUMAR, 15, 11, 14, 0);
+        emit(cg, OP_BIT_SHL, 14, 11, 13, 0); /* 14 = K << 8 */
+        emit(cg, OP_SUMAR, 15, 14, 12, 0);   /* 15 = (K << 8) | tipo */
+        
         emit(cg, OP_MEM_BUSCAR_ASOCIADOS_LISTA, (uint8_t)dest_reg, 10, 15, 0);
         return 1;
     }
@@ -4203,8 +4206,18 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         if (cn->n_args < 3) return 0;
         visit_expression(cg, ARG0, 1);
         visit_expression(cg, ARG1, 2);
-        visit_expression(cg, ARG2, 3);
-        emit(cg, OP_MEM_ASOCIAR_CONCEPTOS, 1, 2, 3, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+        
+        if (is_node(ARG2, NODE_LITERAL) && !((LiteralNode*)ARG2)->is_float &&
+            ((LiteralNode*)ARG2)->type_name && strcmp(((LiteralNode*)ARG2)->type_name, "entero") == 0) {
+            int64_t v = ((LiteralNode*)ARG2)->value.i;
+            if (v < 1) v = 1;
+            if (v > 100) v = 100;
+            emit(cg, OP_MEM_ASOCIAR_CONCEPTOS, 1, 2, (uint8_t)v,
+                 IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE);
+        } else {
+            visit_expression(cg, ARG2, 3);
+            emit(cg, OP_MEM_ASOCIAR_CONCEPTOS, 1, 2, 3, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+        }
         return 1;
     }
     if (strcmp(name, "tiene_asociacion") == 0 || strcmp(name, "mem_obtener_fuerza") == 0) {
@@ -4337,6 +4350,15 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         }
         visit_expression(cg, ARG0, 1);
         emit(cg, OP_MEM_IMPRIMIR_ID, 1, 0, 0, IR_INST_FLAG_A_REGISTER);
+        return 1;
+    }
+    if (strcmp(name, "obtener_nombre_concepto") == 0) {
+        if (!ARG0) {
+            sistema_error_sin_argumentos(cg, name, "identificador de concepto (u32)", cn->base.line, cn->base.col);
+            return 1;
+        }
+        visit_expression(cg, ARG0, 1);
+        emit(cg, OP_ID_A_TEXTO, (uint8_t)dest_reg, 1, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
         return 1;
     }
     if (strcmp(name, "imprimir_flotante") == 0) {

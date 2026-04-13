@@ -140,6 +140,7 @@
 #define OP_RESERVAR_PILA  0x44
 #define OP_HEAP_RESERVAR  0x45      /* A <- reservar(B bytes) */
 #define OP_HEAP_LIBERAR   0x46      /* liberar(A) */
+#define OP_ID_A_TEXTO     0x48      /* A <- Texto del ID B */
 
 #define OP_IMPRIMIR_TEXTO 0x5B
 #define OP_STR_REGISTRAR_LITERAL 0xE4

@@ -135,6 +135,7 @@ typedef enum {
     OP_HEAP_RESERVAR = 0x45, // A <- reservar(B bytes) - heap
     OP_HEAP_LIBERAR = 0x46,  // liberar(A)
     OP_IR_ESCRIBIR = 0x47,   // Escribir IR actual a archivo (ruta: reg A = id concepto)
+    OP_ID_A_TEXTO = 0x48,    // A <- Texto del ID B
 
     // Conversión
     OP_CONV_I2F = 0x90,    // Conversión entero -> flotante
