@@ -131,6 +131,7 @@
 #define OP_MEM_MAPA_CREAR    0x61
 #define OP_MEM_MAPA_PONER    0x62
 #define OP_MEM_MAPA_OBTENER  0x63
+#define OP_MEM_MAPA_BORRAR   0xE3 /* A: map_id, B: key_id (penalizar se usa para borrar en mapas) */
 #define OP_MEM_MAPA_TAMANO   0x7E /* A <- numero de entradas (B: map_id reg) */
 
 #define OP_IR             0x40

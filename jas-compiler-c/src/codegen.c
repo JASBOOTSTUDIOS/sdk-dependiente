@@ -1752,6 +1752,9 @@ static const char *get_expression_type(CodeGen *cg, ASTNode *node) {
         if (cn->name && (strcmp(cn->name, "atan2") == 0 || strcmp(cn->name, "arcotangente2") == 0))
             return "flotante";
 
+        if (cn->name && (strcmp(cn->name, "mapa_obtener") == 0))
+            return NULL;
+
         SymResult r_fn = sym_lookup(&cg->sym, cn->name);
         if (r_fn.found && r_fn.macro_ast) {
             LambdaDeclNode *ld = (LambdaDeclNode*)r_fn.macro_ast;
@@ -2227,8 +2230,10 @@ static MemberAddrResult get_member_address(CodeGen *cg, ASTNode *node, int dest_
         size_t off = 0;
         const char *ft = NULL;
         size_t fsz = 0;
-        if (!sym_get_struct_field(&cg->sym, base_type, man->member, &off, &ft, &fsz))
+        if (!sym_get_struct_field(&cg->sym, base_type, man->member, &off, &ft, &fsz)) {
+            codegen_error_struct_member_access(cg, man, "acceso");
             return r;
+        }
             
         int is_priv = 0;
         if (sym_get_struct_field_visibility(&cg->sym, base_type, man->member, &is_priv)) {
@@ -4160,7 +4165,7 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
     if (strcmp(name, "mapa_poner") == 0) {
         if (cn->n_args < 3) {
             codegen_error_sistema_lista_arity(cg, cn, name, cn->n_args, 3,
-                "mapa, clave (entero) y valor (entero o funcion)",
+                "mapa, clave y valor",
                 "mapa_poner(m, clave, valor)");
             return 1;
         }
@@ -4169,22 +4174,62 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         {
             int prev = cg->expr_allow_func_literal;
             cg->expr_allow_func_literal = 1;
-            visit_expression(cg, ARG2, dest_reg + 2);
+            const char *vt = get_expression_type(cg, ARG2);
+            int v_reg = visit_expression(cg, ARG2, dest_reg + 2);
+            if (vt && strcmp(vt, "flotante") == 0) {
+                // Si el valor es flotante, convertir sus bits a entero para mapa_poner
+                // El mapa neuronal guarda uint64_t internamente.
+                // En JASBOOT, visit_expression para flotante ya pone los bits en el registro.
+            }
+            (void)v_reg; // Evitar advertencia de variable no usada
             cg->expr_allow_func_literal = prev;
         }
-        emit(cg, OP_MEM_MAPA_PONER, dest_reg, dest_reg + 1, dest_reg + 2, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+        emit(cg, OP_MEM_MAPA_PONER, (uint8_t)dest_reg, (uint8_t)(dest_reg + 1), (uint8_t)(dest_reg + 2), 
+             IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
         return 1;
     }
     if (strcmp(name, "mapa_obtener") == 0) {
         if (cn->n_args < 2) {
             codegen_error_sistema_lista_arity(cg, cn, name, cn->n_args, 2,
-                "mapa y clave (enteros)",
+                "mapa y clave (entero, texto o flotante)",
                 "mapa_obtener(m, clave)");
             return 1;
         }
         visit_expression(cg, ARG0, dest_reg + 1);
         visit_expression(cg, ARG1, dest_reg + 2);
-        emit(cg, OP_MEM_MAPA_OBTENER, dest_reg, dest_reg + 1, dest_reg + 2, 0);
+        emit(cg, OP_MEM_MAPA_OBTENER, (uint8_t)dest_reg, (uint8_t)(dest_reg + 1), (uint8_t)(dest_reg + 2), 
+             IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
+        return 1;
+    }
+    if (strcmp(name, "mapa_eliminar") == 0) {
+        if (cn->n_args < 2) {
+            codegen_error_sistema_lista_arity(cg, cn, name, cn->n_args, 2,
+                "mapa y clave",
+                "mapa_eliminar(m, clave)");
+            return 1;
+        }
+        visit_expression(cg, ARG0, 1);
+        visit_expression(cg, ARG1, 2);
+        emit(cg, OP_MEM_MAPA_BORRAR, 1, 2, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+        return 1;
+    }
+    if (strcmp(name, "mapa_tamano") == 0) {
+        if (cn->n_args < 1) return 0;
+        visit_expression(cg, ARG0, 1);
+        emit(cg, OP_MEM_MAPA_TAMANO, (uint8_t)dest_reg, 1, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+        return 1;
+    }
+    if (strcmp(name, "mapa_contiene") == 0) {
+        if (cn->n_args < 2) {
+            codegen_error_sistema_lista_arity(cg, cn, name, cn->n_args, 2,
+                "mapa y clave",
+                "mapa_contiene(m, clave)");
+            return 1;
+        }
+        visit_expression(cg, ARG0, 1);
+        visit_expression(cg, ARG1, 2);
+        emit(cg, OP_MEM_OBTENER_FUERZA, (uint8_t)dest_reg, 1, 2, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+        emit(cg, OP_CMP_GT_FLT, (uint8_t)dest_reg, (uint8_t)dest_reg, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE);
         return 1;
     }
 
@@ -4772,18 +4817,16 @@ static int visit_expression(CodeGen *cg, ASTNode *node, int dest_reg) {
             cg->err_col = lln->base.col;
             return dest_reg;
         }
-        const int list_reg = 2;
-        const int el_reg = 4;
+        int list_reg = dest_reg;
+        int el_reg = dest_reg + 1;
         int id = ++cg->literal_counter;
-        emit(cg, OP_MOVER, list_reg, id & 0xFF, (id >> 8) & 0xFF,
+        emit(cg, OP_MOVER, (uint8_t)list_reg, id & 0xFF, (id >> 8) & 0xFF,
              IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
-        emit(cg, OP_MEM_LISTA_CREAR, list_reg, list_reg, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+        emit(cg, OP_MEM_LISTA_CREAR, (uint8_t)list_reg, (uint8_t)list_reg, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
         for (size_t i = 0; i < lln->n; i++) {
             visit_expression(cg, lln->elements[i], el_reg);
-            emit(cg, OP_MEM_LISTA_AGREGAR, list_reg, el_reg, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+            emit(cg, OP_MEM_LISTA_AGREGAR, (uint8_t)list_reg, (uint8_t)el_reg, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
         }
-        if (list_reg != dest_reg)
-            emit(cg, OP_MOVER, dest_reg, list_reg, 0, IR_INST_FLAG_B_REGISTER);
         return dest_reg;
     }
     if (is_node(node, NODE_LITERAL)) {
@@ -5327,6 +5370,18 @@ static int visit_expression(CodeGen *cg, ASTNode *node, int dest_reg) {
                     add_patch(cg, label_id, PATCH_JUMP);
                     emit(cg, OP_MOVER, dest_reg, 1, 0, IR_INST_FLAG_B_REGISTER);
                     return dest_reg;
+                } else {
+                    /* No es un metodo estatico de clase. ¿Es un campo que pueda contener una funcion? */
+                    size_t off = 0; const char *ft = NULL; size_t fsz = 0;
+                    if (!sym_get_struct_field(&cg->sym, obj_type, ma->member, &off, &ft, &fsz)) {
+                        snprintf(cg->last_error, CODEGEN_ERROR_MAX,
+                                 "Error: el tipo '%s' no tiene un metodo o campo llamado '%s'.",
+                                 obj_type, ma->member);
+                        cg->has_error = 1;
+                        cg->err_line = ma->base.line;
+                        cg->err_col = ma->base.col;
+                        return dest_reg;
+                    }
                 }
             }
         }
@@ -5511,11 +5566,12 @@ static int visit_expression(CodeGen *cg, ASTNode *node, int dest_reg) {
     }
     if (is_node(node, NODE_MAP_LITERAL)) {
         MapLiteralNode *mln = (MapLiteralNode*)node;
-        emit(cg, OP_MEM_MAPA_CREAR, dest_reg, 0, 0, IR_INST_FLAG_A_REGISTER);
+        emit(cg, OP_MEM_MAPA_CREAR, (uint8_t)dest_reg, 0, 0, IR_INST_FLAG_A_REGISTER);
         for (size_t i = 0; i < mln->n; i++) {
-            int k_reg = visit_expression(cg, mln->keys[i], dest_reg == 1 ? 2 : 1);
-            int v_reg = visit_expression(cg, mln->values[i], dest_reg == 1 ? 3 : (dest_reg == 2 ? 3 : 2));
-            emit(cg, OP_MEM_MAPA_PONER, dest_reg, k_reg, v_reg, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+            visit_expression(cg, mln->keys[i], dest_reg + 1);
+            visit_expression(cg, mln->values[i], dest_reg + 2);
+            emit(cg, OP_MEM_MAPA_PONER, (uint8_t)dest_reg, (uint8_t)(dest_reg + 1), (uint8_t)(dest_reg + 2), 
+                 IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
         }
         return dest_reg;
     }
@@ -6133,18 +6189,25 @@ static void visit_statement(CodeGen *cg, ASTNode *node) {
 
         if (has_catch) {
             mark_label(cg, catch_id);
-            if (tn->catch_var && tn->catch_var[0]) {
-                SymResult rcv = sym_lookup(&cg->sym, tn->catch_var);
-                if (!rcv.found) rcv = sym_declare(&cg->sym, tn->catch_var, "texto", 8, 0, 0, NULL);
-                uint8_t flw = IR_INST_FLAG_A_IMMEDIATE | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE;
-                if (rcv.is_relative) flw |= IR_INST_FLAG_RELATIVE;
-                emit(cg, OP_ESCRIBIR, rcv.addr & 0xFF, 1, (rcv.addr >> 8) & 0xFF, flw);
-            }
             sym_enter_scope(&cg->sym, 0);
+            if (tn->catch_var && tn->catch_var[0]) {
+                const char *cvt = "texto";
+                SymResult r = sym_declare(&cg->sym, tn->catch_var, cvt, 8, 0, 0, NULL);
+                if (r.found) {
+                    uint8_t fl = IR_INST_FLAG_A_IMMEDIATE | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE;
+                    if (r.is_relative) fl |= IR_INST_FLAG_RELATIVE;
+                    emit(cg, OP_ESCRIBIR, r.addr & 0xFF, 1, (r.addr >> 8) & 0xFF, fl);
+                }
+            }
             visit_block(cg, tn->catch_body);
             sym_exit_scope(&cg->sym);
-            emit(cg, OP_IR, 0, 0, 0, 0);
-            add_patch(cg, has_final ? final_id : end_id, PATCH_JUMP);
+            if (has_final) {
+                emit(cg, OP_IR, 0, 0, 0, 0);
+                add_patch(cg, final_id, PATCH_JUMP);
+            } else {
+                emit(cg, OP_IR, 0, 0, 0, 0);
+                add_patch(cg, end_id, PATCH_JUMP);
+            }
         }
 
         if (has_final) {

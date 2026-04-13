@@ -107,6 +107,7 @@ int sym_register_class_extends(SymbolTable *st, const char *name, const char *ba
                                void **method_asts, const char **method_names, const int *method_vis, size_t n_methods, int is_exported);
 int sym_get_struct_field(SymbolTable *st, const char *struct_name, const char *field_name, size_t *out_offset, const char **out_type, size_t *out_size);
 int sym_get_struct_field_visibility(SymbolTable *st, const char *struct_name, const char *field_name, int *out_is_private);
+int sym_get_struct_method(SymbolTable *st, const char *struct_name, const char *method_name, void **out_method_ast);
 int sym_get_struct_method_visibility(SymbolTable *st, const char *struct_name, const char *method_name, int *out_is_private);
 const char *sym_get_struct_lista_elem_type(SymbolTable *st, const char *struct_name, const char *field_name);
 size_t sym_get_struct_size(SymbolTable *st, const char *struct_name);

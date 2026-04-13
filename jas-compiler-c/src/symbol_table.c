@@ -356,6 +356,21 @@ int sym_get_struct_field_visibility(SymbolTable *st, const char *struct_name, co
     return 0;
 }
 
+int sym_get_struct_method(SymbolTable *st, const char *struct_name, const char *method_name, void **out_method_ast) {
+    if (!struct_name || !method_name) return 0;
+    for (size_t i = 0; i < st->n_structs; i++) {
+        StructInfo *si = &st->structs[i];
+        if (strcmp(si->name, struct_name) != 0) continue;
+        for (size_t j = 0; j < si->n_methods; j++) {
+            if (strcmp(si->methods[j].name, method_name) == 0) {
+                if (out_method_ast) *out_method_ast = si->methods[j].method_ast;
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
 int sym_get_struct_method_visibility(SymbolTable *st, const char *struct_name, const char *method_name, int *out_is_private) {
     if (!struct_name || !method_name) return 0;
     for (size_t i = 0; i < st->n_structs; i++) {
