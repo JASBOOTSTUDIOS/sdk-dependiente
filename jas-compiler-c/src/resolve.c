@@ -182,55 +182,33 @@ static void resolve_statement(ASTNode *node, SymbolTable *st) {
             break;
         }
         case NODE_WHILE: {
-            sym_enter_scope(st, 0);
-            resolve_block(((WhileNode *)node)->body, st);
-            sym_exit_scope(st);
+            WhileNode *wn = (WhileNode *)node;
+            resolve_block(wn->body, st);
             break;
         }
         case NODE_DO_WHILE: {
-            sym_enter_scope(st, 0);
-            resolve_block(((DoWhileNode *)node)->body, st);
-            sym_exit_scope(st);
+            DoWhileNode *dn = (DoWhileNode *)node;
+            resolve_block(dn->body, st);
             break;
         }
         case NODE_IF: {
-            sym_enter_scope(st, 0);
-            resolve_block(((IfNode *)node)->body, st);
-            if (((IfNode *)node)->else_body)
-                resolve_block(((IfNode *)node)->else_body, st);
-            sym_exit_scope(st);
+            IfNode *in = (IfNode *)node;
+            resolve_block(in->body, st);
+            if (in->else_body) resolve_block(in->else_body, st);
             break;
         }
         case NODE_SELECT: {
-            SelectNode *sn = (SelectNode*)node;
-            for (size_t i = 0; i < sn->n_cases; i++) {
-                sym_enter_scope(st, 0);
+            SelectNode *sn = (SelectNode *)node;
+            for (size_t i = 0; i < sn->n_cases; i++)
                 resolve_block(sn->cases[i].body, st);
-                sym_exit_scope(st);
-            }
-            if (sn->default_body) {
-                sym_enter_scope(st, 0);
-                resolve_block(sn->default_body, st);
-                sym_exit_scope(st);
-            }
+            if (sn->default_body) resolve_block(sn->default_body, st);
             break;
         }
         case NODE_TRY: {
-            TryNode *tn = (TryNode*)node;
-            sym_enter_scope(st, 0);
+            TryNode *tn = (TryNode *)node;
             resolve_block(tn->try_body, st);
-            sym_exit_scope(st);
-            if (tn->catch_body) {
-                sym_enter_scope(st, 0);
-                if (tn->catch_var) sym_declare(st, tn->catch_var, "texto", 8, 0, 0, NULL);
-                resolve_block(tn->catch_body, st);
-                sym_exit_scope(st);
-            }
-            if (tn->final_body) {
-                sym_enter_scope(st, 0);
-                resolve_block(tn->final_body, st);
-                sym_exit_scope(st);
-            }
+            if (tn->catch_body) resolve_block(tn->catch_body, st);
+            if (tn->final_body) resolve_block(tn->final_body, st);
             break;
         }
         case NODE_EXPORT_DIRECTIVE: {
