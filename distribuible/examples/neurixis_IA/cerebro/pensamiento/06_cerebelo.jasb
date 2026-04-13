@@ -1,0 +1,89 @@
+# =============================================================================
+# CEREBELO - APRENDIZAJE PROCEDURAL
+# =============================================================================
+# Propósito: Aprendizaje procedural y motor
+# Dependencia: Normalizador
+# =============================================================================
+
+usar {Normalizador} de "./01_normalizador.jasb"
+
+enviar {Cerebelo}
+
+clase Cerebelo
+    
+    # =============================================================================
+    # 1. inicializar_sistema_motor
+    # =============================================================================
+    # Propósito: Inicializar el sistema motor y procedural
+    # Retorna:
+    #   - texto: Estado de inicialización del sistema motor
+    # =============================================================================
+    
+    # =============================================================================
+    # 2. aprender_procedimiento
+    # =============================================================================
+    # Propósito: Aprender un nuevo procedimiento motor
+    # Parámetros:
+    #   - nombre_procedimiento (texto): Nombre del procedimiento
+    #   - pasos (lista<texto>): Lista de pasos del procedimiento
+    #   - complejidad (entero): Nivel de complejidad (1-10)
+    # Retorna:
+    #   - texto: Estado del aprendizaje del procedimiento
+    # =============================================================================
+    
+    # =============================================================================
+    # 3. practicar_procedimiento
+    # =============================================================================
+    # Propósito: Practicar un procedimiento para mejorar dominio
+    # Parámetros:
+    #   - nombre_procedimiento (texto): Nombre del procedimiento
+    #   - repeticiones (entero): Número de repeticiones
+    # Retorna:
+    #   - mapa: Resultado de la práctica con estadísticas
+    # =============================================================================
+    
+    # =============================================================================
+    # 4. ejecutar_procedimiento
+    # =============================================================================
+    # Propósito: Ejecutar un procedimiento aprendido
+    # Parámetros:
+    #   - nombre_procedimiento (texto): Nombre del procedimiento
+    #   - contexto (mapa): Contexto de ejecución
+    # Retorna:
+    #   - mapa: Resultado de la ejecución
+    # =============================================================================
+    
+    # =============================================================================
+    # 5. automatizar_movimiento
+    # =============================================================================
+    # Propósito: Automatizar un movimiento o acción
+    # Parámetros:
+    #   - movimiento (texto): Descripción del movimiento
+    #   - umbral_automatizacion (flotante): Umbral para automatización (0.0 - 1.0)
+    # Retorna:
+    #   - texto: Estado de automatización
+    # =============================================================================
+    
+    # =============================================================================
+    # 6. coordinar_movimientos
+    # =============================================================================
+    # Propósito: Coordinar múltiples movimientos complejos
+    # Parámetros:
+    #   - movimientos (lista<texto>): Lista de movimientos a coordinar
+    #   - sincronizacion (flotante): Nivel de sincronización requerido (0.0 - 1.0)
+    # Retorna:
+    #   - mapa: Resultado de la coordinación
+    # =============================================================================
+    
+    # =============================================================================
+    # 7. mejorar_precision
+    # =============================================================================
+    # Propósito: Mejorar la precisión de un movimiento
+    # Parámetros:
+    #   - movimiento (texto): Movimiento a mejorar
+    #   - objetivo_precision (flotante): Objetivo de precisión (0.0 - 1.0)
+    # Retorna:
+    #   - texto: Estado de mejora de precisión
+    # =============================================================================
+
+fin_clase

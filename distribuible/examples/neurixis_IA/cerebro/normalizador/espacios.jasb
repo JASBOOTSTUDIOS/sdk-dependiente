@@ -1,0 +1,318 @@
+# =============================================================================
+# MÓDULO DE NORMALIZACIÓN DE ESPACIOS Y BLANCOS
+# =============================================================================
+# Este módulo proporciona funciones avanzadas para normalizar espacios,
+# tabulaciones, saltos de línea y otros caracteres de blancos en textos.
+# Optimizado para procesamiento de entradas de usuario y contenido textual.
+# Autor: Sistema Jasboot IA
+# Versión: 1.0
+# =============================================================================
+
+enviar clase NormalizadorEspacios
+
+    # =============================================================================
+    # FUNCIÓN: normalizar_espacios_completos
+    # =============================================================================
+    # Propósito: Normaliza completamente todos los tipos de espacios en el texto
+    # Convierte tabs, múltiples espacios, saltos de línea y otros blancos a espacios simples
+    # Parámetros:
+    #   - texto (texto): Texto a normalizar
+    # Retorna:
+    #   - texto: Texto con espacios completamente normalizados
+    # =============================================================================
+    funcion normalizar_espacios_completos(texto _texto) retorna texto
+        texto resultado = ""
+        bool ultimo_fue_blanco = falso
+        entero i = 0
+        entero tam = longitud_texto(_texto)
+        
+        mientras i < tam hacer
+            texto char = extraer_subtexto(_texto, i, 1)
+            entero codigo = codigo_caracter(char)
+            
+            # Definir qué caracteres son considerados "blancos"
+            bool es_blanco = (codigo == 32) o    # espacio regular
+                           (codigo == 9) o     # tabulación
+                           (codigo == 10) o    # salto de línea (LF)
+                           (codigo == 13) o    # retorno de carro (CR)
+                           (codigo == 160) o   # espacio no separable (NBSP)
+                           (codigo == 8239)    # espacio de punto estrecho
+            
+            si es_blanco entonces
+                # Si encontramos un blanco y el anterior no fue blanco, agregamos un espacio
+                si no ultimo_fue_blanco entonces
+                    resultado = resultado + " "
+                    ultimo_fue_blanco = verdadero
+                fin_si
+            sino
+                # Si no es blanco, agregamos el carácter
+                resultado = resultado + char
+                ultimo_fue_blanco = falso
+            fin_si
+            
+            i = i + 1
+        fin_mientras
+        
+        # Eliminar espacio al final si existe
+        si longitud_texto(resultado) > 0 entonces
+            texto ultimo_char = extraer_subtexto(resultado, longitud_texto(resultado) - 1, 1)
+            si ultimo_char == " " entonces
+                resultado = extraer_subtexto(resultado, 0, longitud_texto(resultado) - 1)
+            fin_si
+        fin_si
+        
+        retornar resultado
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: trim_completo
+    # =============================================================================
+    # Propósito: Elimina todos los espacios y blancos al inicio y final del texto
+    # Soporta múltiples tipos de espacios, tabs y saltos de línea
+    # Parámetros:
+    #   - texto (texto): Texto a limpiar
+    # Retorna:
+    #   - texto: Texto sin espacios al inicio y final
+    # =============================================================================
+    funcion trim_completo(texto texto) retorna texto
+        entero inicio = 0
+        entero fin = longitud_texto(texto) - 1
+        entero tam = longitud_texto(texto)
+        
+        # Encontrar el primer carácter que no es blanco
+        mientras inicio < tam hacer
+            texto char = extraer_subtexto(texto, inicio, 1)
+            entero codigo = codigo_caracter(char)
+            
+            bool es_blanco = (codigo == 32) o    # espacio
+                           (codigo == 9) o     # tab
+                           (codigo == 10) o    # LF
+                           (codigo == 13) o    # CR
+                           (codigo == 160) o   # NBSP
+                           (codigo == 8239)    # espacio de punto estrecho
+            
+            si no es_blanco entonces
+                romper
+            fin_si
+            inicio = inicio + 1
+        fin_mientras
+        
+        # Encontrar el último carácter que no es blanco
+        mientras fin >= inicio hacer
+            texto char = extraer_subtexto(texto, fin, 1)
+            entero codigo = codigo_caracter(char)
+            
+            bool es_blanco = (codigo == 32) o    # espacio
+                           (codigo == 9) o     # tab
+                           (codigo == 10) o    # LF
+                           (codigo == 13) o    # CR
+                           (codigo == 160) o   # NBSP
+                           (codigo == 8239)    # espacio de punto estrecho
+            
+            si no es_blanco entonces
+                romper
+            fin_si
+            fin = fin - 1
+        fin_mientras
+        
+        # Extraer el substring sin los blancos de los extremos
+        si inicio > fin entonces
+            retornar ""  # Todo el texto son blancos
+        sino
+            retornar extraer_subtexto(texto, inicio, fin - inicio + 1)
+        fin_si
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: normalizar_lineas
+    # =============================================================================
+    # Propósito: Convierte saltos de línea y múltiples líneas a espacios simples
+    # Útil para convertir texto multilínea a una sola línea
+    # Parámetros:
+    #   - texto (texto): Texto con posibles saltos de línea
+    # Retorna:
+    #   - texto: Texto en una sola línea con espacios normalizados
+    # =============================================================================
+    funcion normalizar_lineas(texto texto) retorna texto
+        texto resultado = ""
+        bool ultimo_fue_blanco = falso
+        entero i = 0
+        entero tam = longitud_texto(texto)
+        
+        mientras i < tam hacer
+            texto char = extraer_subtexto(texto, i, 1)
+            entero codigo = codigo_caracter(char)
+            
+            # Tratar saltos de línea (CR, LF, CRLF) como espacios
+            si codigo == 10 o codigo == 13 entonces
+                # Si es CR seguido de LF (Windows), saltar el LF
+                si codigo == 13 y i + 1 < tam entonces
+                    texto siguiente = extraer_subtexto(texto, i + 1, 1)
+                    entero codigo_siguiente = codigo_caracter(siguiente)
+                    si codigo_siguiente == 10 entonces
+                        i = i + 1  # Saltar el LF
+                    fin_si
+                fin_si
+                
+                # Convertir salto de línea a espacio si el anterior no fue blanco
+                si no ultimo_fue_blanco entonces
+                    resultado = resultado + " "
+                    ultimo_fue_blanco = verdadero
+                fin_si
+            sino si codigo == 32 o codigo == 9 o codigo == 160 o codigo == 8239 entonces
+                # Otros tipos de blancos (espacio, tab, NBSP, etc.)
+                si no ultimo_fue_blanco entonces
+                    resultado = resultado + " "
+                    ultimo_fue_blanco = verdadero
+                fin_si
+            sino
+                # Carácter normal, agregarlo
+                resultado = resultado + char
+                ultimo_fue_blanco = falso
+            fin_si
+            
+            i = i + 1
+        fin_mientras
+        
+        # Limpiar espacio al final
+        si longitud_texto(resultado) > 0 entonces
+            texto ultimo_char = extraer_subtexto(resultado, longitud_texto(resultado) - 1, 1)
+            si ultimo_char == " " entonces
+                resultado = extraer_subtexto(resultado, 0, longitud_texto(resultado) - 1)
+            fin_si
+        fin_si
+        
+        retornar resultado
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: normalizar_tabs_a_espacios
+    # =============================================================================
+    # Propósito: Convierte todas las tabulaciones a espacios con un ancho específico
+    # Parámetros:
+    #   - texto (texto): Texto con tabulaciones
+    #   - ancho_tab (entero): Número de espacios por tabulación (default: 4)
+    # Retorna:
+    #   - texto: Texto con tabulaciones convertidas a espacios
+    # =============================================================================
+    funcion normalizar_tabs_a_espacios(texto texto, entero ancho_tab) retorna texto
+        texto resultado = ""
+        entero i = 0
+        entero tam = longitud_texto(texto)
+        entero columna_actual = 0
+        
+        mientras i < tam hacer
+            texto char = extraer_subtexto(texto, i, 1)
+            entero codigo = codigo_caracter(char)
+            
+            si codigo == 9 entonces  # Tabulación
+                # Calcular cuántos espacios necesitamos para llegar al próximo tab stop
+                entero espacios_necesarios = ancho_tab - (columna_actual % ancho_tab)
+                entero j = 0
+                
+                mientras j < espacios_necesarios hacer
+                    resultado = resultado + " "
+                    columna_actual = columna_actual + 1
+                    j = j + 1
+                fin_mientras
+            sino si codigo == 10 entonces  # Salto de línea
+                resultado = resultado + char
+                columna_actual = 0  # Reiniciar columna al inicio de línea
+            sino
+                resultado = resultado + char
+                columna_actual = columna_actual + 1
+            fin_si
+            
+            i = i + 1
+        fin_mientras
+        
+        retornar resultado
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: remover_espacios_duplicados
+    # =============================================================================
+    # Propósito: Elimina espacios duplicados manteniendo otros blancos intactos
+    # Solo elimina espacios regulares (ASCII 32) duplicados
+    # Parámetros:
+    #   - texto (texto): Texto con posibles espacios duplicados
+    # Retorna:
+    #   - texto: Texto sin espacios duplicados
+    # =============================================================================
+    funcion remover_espacios_duplicados(texto texto) retorna texto
+        texto resultado = ""
+        bool ultimo_fue_espacio = falso
+        entero i = 0
+        entero tam = longitud_texto(texto)
+        
+        mientras i < tam hacer
+            texto char = extraer_subtexto(texto, i, 1)
+            
+            si char == " " entonces
+                si no ultimo_fue_espacio entonces
+                    resultado = resultado + char
+                    ultimo_fue_espacio = verdadero
+                fin_si
+            sino
+                resultado = resultado + char
+                ultimo_fue_espacio = falso
+            fin_si
+            
+            i = i + 1
+        fin_mientras
+        
+        retornar resultado
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: contar_palabras_con_espacios
+    # =============================================================================
+    # Propósito: Cuenta palabras en un texto considerando múltiples tipos de separadores
+    # Parámetros:
+    #   - texto (texto): Texto a analizar
+    # Retorna:
+    #   - entero: Número de palabras encontradas
+    # =============================================================================
+    funcion contar_palabras_con_espacios(texto texto) retorna entero
+        entero contador = 0
+        bool en_palabra = falso
+        entero i = 0
+        entero tam = longitud_texto(texto)
+        
+        mientras i < tam hacer
+            texto char = extraer_subtexto(texto, i, 1)
+            entero codigo = codigo_caracter(char)
+            
+            # Definir separadores
+            bool es_separador = (codigo == 32) o    # espacio
+                              (codigo == 9) o     # tab
+                              (codigo == 10) o    # LF
+                              (codigo == 13) o    # CR
+                              (codigo == 160) o   # NBSP
+                              (codigo == 8239) o  # espacio de punto estrecho
+                              (codigo == 44) o    # coma
+                              (codigo == 46) o    # punto
+                              (codigo == 59) o    # punto y coma
+                              (codigo == 58)      # dos puntos
+            
+            si es_separador entonces
+                si en_palabra entonces
+                    contador = contador + 1
+                    en_palabra = falso
+                fin_si
+            sino
+                en_palabra = verdadero
+            fin_si
+            
+            i = i + 1
+        fin_mientras
+        
+        # Contar la última palabra si el texto no termina con separador
+        si en_palabra entonces
+            contador = contador + 1
+        fin_si
+        
+        retornar contador
+    fin_funcion
+
+fin_clase

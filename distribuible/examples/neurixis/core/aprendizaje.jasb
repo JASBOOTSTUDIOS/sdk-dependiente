@@ -1,0 +1,33 @@
+# core/aprendizaje.jasb - Mecanismos de aprendizaje para Neurixis
+
+clase MotorAprendizaje
+    
+    # Aprendizaje básico: registrar un concepto con un peso
+    funcion aprender_concepto(texto nombre, entero pesos)
+        aprender nombre con peso pesos
+    fin_funcion
+    
+    # Reforzar el peso de un concepto (afecta sus conexiones)
+    funcion reforzar_concepto(texto id_concepto, entero incremento)
+        reforzar(id_concepto, incremento)
+    fin_funcion
+    
+    # Penalizar el peso de un concepto (afecta sus conexiones)
+    funcion penalizar_concepto(texto id_concepto, entero decremento)
+        penalizar(id_concepto, decremento)
+    fin_funcion
+    
+    # Consolidar lo aprendido en la memoria persistente
+    funcion consolidar_experiencia()
+        consolidar_memoria()
+        consolidar()
+    fin_funcion
+    
+    # Ajustar el peso de un concepto específico
+    funcion ajustar_importancia(texto id_concepto, entero nuevo_peso)
+        aprender_peso(id_concepto, nuevo_peso)
+    fin_funcion
+    
+fin_clase
+
+enviar {MotorAprendizaje}

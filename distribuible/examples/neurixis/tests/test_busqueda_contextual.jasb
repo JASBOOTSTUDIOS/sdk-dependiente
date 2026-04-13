@@ -1,0 +1,74 @@
+# apps/neurixis/tests/test_busqueda_contextual.jasb
+
+usar {Neurona} de "../core/neurona.jasb"
+usar {InterfazConceptos} de "../core/interfaz.jasb"
+
+principal
+    InterfazConceptos interfaz
+    Neurona casa
+    Neurona puerta
+    Neurona ventana
+    Neurona tejado
+    entero id_rel
+    
+    imprimir "=== TEST: SISTEMA DE BUSQUEDA CONTEXTUAL ==="
+    
+    # Abrir memoria neuronal
+    crear_memoria("tests/memoria_busqueda.jmn")
+    
+    interfaz.inicializar_neurona(casa, "casa", "lugar donde se vive")
+    interfaz.inicializar_neurona(puerta, "puerta", "entrada a la casa")
+    interfaz.inicializar_neurona(ventana, "ventana", "abertura en la pared")
+    interfaz.inicializar_neurona(tejado, "tejado", "cubierta de la casa")
+    
+    # 2. Establecer asociaciones
+    imprimir "2. Estableciendo asociaciones..."
+    interfaz.asociar_conceptos(casa, puerta, 100)
+    interfaz.asociar_conceptos(casa, ventana, 80)
+    interfaz.asociar_conceptos(casa, tejado, 90)
+    
+    # Verificar asociación inmediata
+    si casa.esta_asociado_con(puerta) entonces
+        imprimir "Verificacion de asociacion (casa->puerta): OK"
+    sino
+        imprimir "Verificacion de asociacion (casa->puerta): ERROR"
+    fin_si
+    
+    # 3. Probar búsqueda contextual desde Interfaz
+    imprimir "3. Probando busqueda contextual desde Interfaz..."
+    lista relacionados = interfaz.buscar_contextual("casa")
+    entero n = lista_tamano(relacionados)
+    
+    imprimir "Relacionados con 'casa': " + n
+    
+    si n > 0 entonces
+        imprimir "Busqueda contextual Interfaz: OK"
+        
+        # Listar algunos relacionados
+        entero i = 0
+        mientras i < n y i < 3 hacer
+            entero id_rel = lista_obtener(relacionados, i)
+            # Imprimir el nombre del concepto usando el ID
+            imprimir_sin_salto " - Relacionado [" + i + "]: "
+            imprimir_id id_rel
+            i = i + 1
+        fin_mientras
+    sino
+        imprimir "Busqueda contextual Interfaz: ERROR - No se encontraron relaciones"
+    fin_si
+    
+    # 4. Probar búsqueda desde Neurona
+    imprimir "4. Probando busqueda desde la clase Neurona..."
+    lista rel_casa = casa.obtener_asociados()
+    entero n2 = lista_tamano(rel_casa)
+    
+    si n2 == n entonces
+        imprimir "Busqueda desde Neurona: OK"
+    sino
+        imprimir "Busqueda desde Neurona: ERROR"
+    fin_si
+    
+    # Limpiar y cerrar
+    cerrar_memoria()
+    imprimir "=== TEST FINALIZADO ==="
+fin_principal

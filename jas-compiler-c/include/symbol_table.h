@@ -30,6 +30,7 @@ typedef struct SymbolEntry {
     int is_const;
     void *macro_ast; /* ASTNode* si es un macro (lambda) */
     int used;        /* 1 si la variable ha sido usada o referenciada */
+    int is_exported; /* 1 si la variable ha sido marcada con enviar */
     struct SymbolEntry *next;
 } SymbolEntry;
 
@@ -39,7 +40,15 @@ typedef struct StructFieldInfo {
     char *type_name;
     size_t offset;
     size_t size;
+    int is_private;
 } StructFieldInfo;
+
+/* Registro de método de clase */
+typedef struct StructMethodInfo {
+    char *name;
+    void *method_ast; /* FunctionNode* */
+    int is_private;
+} StructMethodInfo;
 
 /* Definición de struct registrada (3.7) */
 typedef struct StructInfo {
@@ -47,6 +56,9 @@ typedef struct StructInfo {
     StructFieldInfo *fields;
     size_t n_fields;
     size_t total_size;
+    StructMethodInfo *methods;
+    size_t n_methods;
+    int is_exported;
 } StructInfo;
 
 /* Tabla de símbolos */
@@ -82,11 +94,22 @@ SymResult sym_get_or_create(SymbolTable *st, const char *name, const char *type_
 
 /* 3.7 Estructuras */
 void sym_register_struct(SymbolTable *st, const char *name, const char **field_types, const char **field_names, size_t n_fields);
+/* Versión extendida para clases con métodos y visibilidad */
+void sym_register_class(SymbolTable *st, const char *name, const char **field_types, const char **field_names, const int *field_vis, size_t n_fields,
+                        void **method_asts, const char **method_names, const int *method_vis, size_t n_methods, int is_exported);
 /* Herencia de datos: campos de base_name primero, luego los propios. base_name debe estar ya registrado.
  * Devuelve 0 si ok; -1 base inexistente; -2 campo duplicado con la base. */
 int sym_register_struct_extends(SymbolTable *st, const char *name, const char *base_name,
                                 const char **field_types, const char **field_names, size_t n_fields);
+/* Versión extendida para herencia de clases */
+int sym_register_class_extends(SymbolTable *st, const char *name, const char *base_name,
+                               const char **field_types, const char **field_names, const int *field_vis, size_t n_fields,
+                               void **method_asts, const char **method_names, const int *method_vis, size_t n_methods, int is_exported);
 int sym_get_struct_field(SymbolTable *st, const char *struct_name, const char *field_name, size_t *out_offset, const char **out_type, size_t *out_size);
+int sym_get_struct_field_visibility(SymbolTable *st, const char *struct_name, const char *field_name, int *out_is_private);
+int sym_get_struct_method(SymbolTable *st, const char *struct_name, const char *method_name, void **out_method_ast);
+int sym_get_struct_method_visibility(SymbolTable *st, const char *struct_name, const char *method_name, int *out_is_private);
+const char *sym_get_struct_lista_elem_type(SymbolTable *st, const char *struct_name, const char *field_name);
 size_t sym_get_struct_size(SymbolTable *st, const char *struct_name);
 size_t sym_struct_n_fields(SymbolTable *st, const char *struct_name);
 int sym_struct_field_by_index(SymbolTable *st, const char *struct_name, size_t idx,
@@ -95,4 +118,8 @@ int sym_struct_field_by_index(SymbolTable *st, const char *struct_name, size_t i
 void sym_init(SymbolTable *st);
 void sym_free(SymbolTable *st);
 
+void sym_set_exported(SymbolTable *st, const char *name);
+int sym_is_exported(SymbolTable *st, const char *name);
+
+StructInfo *sym_get_struct_info(SymbolTable *st, const char *name);
 #endif /* SYMBOL_TABLE_H */

@@ -1,0 +1,561 @@
+# =============================================================================
+# NORMALIZADOR PRINCIPAL - ORQUESTADOR COMPLETO
+# =============================================================================
+# Este módulo es el orquestador principal que integra todos los módulos de
+# normalización. Proporciona una interfaz unificada para procesar entradas
+# de usuario con todas las validaciones y normalizaciones necesarias.
+# 
+# Arquitectura modular:
+# - validacion.jasb: Validación y saneamiento básico
+# - espacios.jasb: Normalización de espacios y blancos
+# - formatos.jasb: Validación de formatos específicos
+# - caracteres_especiales.jasb: Normalización de caracteres avanzados
+# - seguridad.jasb: Filtrado de contenido peligroso
+# - normalizador.jasb: Funciones básicas de normalización
+# 
+# Autor: Sistema Jasboot IA
+# Versión: 1.0
+# =============================================================================
+
+# Importar todos los módulos necesarios
+usar {ValidadorEntradas} de "validacion.jasb"
+usar {NormalizadorEspacios} de "espacios.jasb"
+usar {ValidadorFormatos} de "formatos.jasb"
+usar {NormalizadorCaracteresEspeciales} de "caracteres_especiales.jasb"
+usar {FiltroSeguridad} de "seguridad.jasb"
+usar {Normalizador} de "normalizador.jasb"
+
+clase NormalizadorPrincipal
+
+    # =============================================================================
+    # VARIABLES DE INSTANCIA - COMPONENTES MODULARES
+    # =============================================================================
+    ValidadorEntradas validador
+    NormalizadorEspacios normalizador_espacios
+    ValidadorFormatos validador_formatos
+    NormalizadorCaracteresEspeciales normalizador_caracteres
+    FiltroSeguridad filtro_seguridad
+    Normalizador normalizador_base
+
+    # =============================================================================
+    # CONSTRUCTOR - INICIALIZAR COMPONENTES
+    # =============================================================================
+    funcion NormalizadorPrincipal()
+        # Inicializar todos los componentes
+        validador = ValidadorEntradas()
+        normalizador_espacios = NormalizadorEspacios()
+        validador_formatos = ValidadorFormatos()
+        normalizador_caracteres = NormalizadorCaracteresEspeciales()
+        filtro_seguridad = FiltroSeguridad()
+        normalizador_base = Normalizador()
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: normalizar_entrada_completa
+    # =============================================================================
+    # Propósito: Aplica el proceso completo de normalización a una entrada de usuario
+    # Esta es la función principal que orquesta todo el pipeline de normalización
+    # 
+    # Pipeline de procesamiento:
+    # 1. Validación básica de seguridad
+    # 2. Detección de contenido malicioso
+    # 3. Saneamiento y limpieza
+    # 4. Normalización de espacios
+    # 5. Normalización de caracteres especiales
+    # 6. Normalización de texto básica (acentos, puntuación)
+    # 7. Validación de formato específico (si aplica)
+    # 8. Enmascaramiento de datos sensibles
+    # 
+    # Parámetros:
+    #   - entrada (texto): Texto de entrada del usuario
+    #   - opciones (mapa?): Opciones de configuración (opcional)
+    # Retorna:
+    #   - mapa: Resultado con texto normalizado y metadatos
+    # =============================================================================
+    funcion normalizar_entrada_completa(texto texto_entrada, mapa? opciones_param) retorna mapa
+        # Crear mapa de resultados
+        mapa _resultado = mapa_crear()
+        
+        # Metadatos del procesamiento
+        mapa_poner(_resultado, "entrada_original", texto_entrada)
+        mapa_poner(_resultado, "longitud_original", longitud_texto(texto_entrada))
+        mapa_poner(_resultado, "timestamp", obtener_timestamp())
+        
+        # Bandera de éxito
+        bool exito = verdadero
+        texto mensaje_estado = "Procesamiento exitoso"
+        lista<texto> advertencias = crear_lista()
+        
+        # =============================================================================
+        # PASO 1: VALIDACIÓN BÁSICA DE SEGURIDAD
+        # =============================================================================
+        si no este.validador.validar_entrada(texto_entrada) entonces
+            exito = falso
+            mensaje_estado = "Entrada inválida: contiene caracteres no permitidos"
+            mapa_poner(_resultado, "exito", exito)
+            mapa_poner(_resultado, "mensaje_estado", mensaje_estado)
+            mapa_poner(_resultado, "texto_normalizado", "")
+            retornar _resultado
+        fin_si
+        
+        # =============================================================================
+        # PASO 2: DETECCIÓN DE CONTENIDO MALICIOSO
+        # =============================================================================
+        si este.filtro_seguridad.detectar_contenido_malicioso(texto_entrada) entonces
+            exito = falso
+            mensaje_estado = "Entrada rechazada: contenido potencialmente malicioso detectado"
+            mapa_poner(_resultado, "exito", exito)
+            mapa_poner(_resultado, "mensaje_estado", mensaje_estado)
+            mapa_poner(_resultado, "texto_normalizado", "")
+            retornar _resultado
+        fin_si
+        
+        # =============================================================================
+        # PASO 3: SANEAMIENTO BÁSICO
+        # =============================================================================
+        texto texto_procesado = este.validador.sanitizar_entrada(texto_entrada)
+        texto_procesado = este.filtro_seguridad.remover_scripting(texto_procesado)
+        
+        # =============================================================================
+        # PASO 4: NORMALIZACIÓN DE ESPACIOS
+        # =============================================================================
+        texto_procesado = este.normalizador_espacios.trim_completo(texto_procesado)
+        texto_procesado = este.normalizador_espacios.normalizar_espacios_completos(texto_procesado)
+        
+        # =============================================================================
+        # PASO 5: NORMALIZACIÓN DE CARACTERES ESPECIALES
+        # =============================================================================
+        texto_procesado = este.normalizador_caracteres.normalizar_completo(texto_procesado)
+        
+        # =============================================================================
+        # PASO 6: NORMALIZACIÓN DE TEXTO BÁSICA
+        # =============================================================================
+        texto_procesado = este.normalizador_base.limpiar_puntuacion(texto_procesado)
+        texto_procesado = este.normalizador_base.normalizar_acentos(texto_procesado)
+        texto_procesado = este.normalizador_base.remover_caracteres_especiales(texto_procesado)
+        texto_procesado = este.normalizador_base.quitar_espacios_extra(texto_procesado)
+        
+        # =============================================================================
+        # PASO 7: VALIDACIÓN DE FORMATO ESPECÍFICO (OPCIONAL)
+        texto tipo_formato = ""
+        si opciones_param != nulo entonces
+            tipo_formato = mapa_obtener(opciones_param, "validar_formato", "")
+        fin_si
+        
+        si tipo_formato == "email" entonces
+            si no este.validador_formatos.es_email_valido(texto_procesado) entonces
+                lista_agregar(advertencias, "Formato de email inválido")
+            fin_si
+            texto_procesado = este.validador_formatos.normalizar_email(texto_procesado)
+        sino si tipo_formato == "telefono" entonces
+            si no este.validador_formatos.es_telefono_valido(texto_procesado) == "válido" entonces
+                lista_agregar(advertencias, "Formato de teléfono inválido")
+            fin_si
+        fin_si
+        
+        # =============================================================================
+        # PASO 8: ENMASCARAMIENTO DE DATOS SENSIBLES
+        # =============================================================================
+        bool enmascarar = falso
+        si opciones_param != nulo entonces
+            enmascarar = mapa_obtener(opciones_param, "enmascarar_datos", falso)
+        fin_si
+        
+        si enmascarar entonces
+            texto_procesado = este.filtro_seguridad.enmascarar_datos_sensibles(texto_procesado)
+        fin_si
+        
+        # Ensamblar resultado final
+        mapa_poner(_resultado, "exito", exito)
+        mapa_poner(_resultado, "mensaje_estado", mensaje_estado)
+        mapa_poner(_resultado, "texto_normalizado", texto_procesado)
+        mapa_poner(_resultado, "advertencias", advertencias)
+        mapa_poner(_resultado, "longitud_final", longitud_texto(texto_procesado))
+        
+        # Obtener estadísticas adicionales
+        mapa estadisticas = este.obtener_estadisticas_procesamiento(texto_entrada, texto_procesado)
+        # Combinar mapas (simulado agregando campos)
+        mapa_poner(_resultado, "numero_palabras", mapa_obtener(estadisticas, "palabras_procesadas"))
+        mapa_poner(_resultado, "reduccion_caracteres", mapa_obtener(estadisticas, "reduccion_caracteres"))
+        mapa_poner(_resultado, "caracteres_especiales_detectados", mapa_obtener(estadisticas, "caracteres_especiales"))
+        
+        retornar _resultado
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: normalizar_rapido
+    # =============================================================================
+    # Propósito: Versión simplificada y rápida de normalización
+    # 
+    # Parámetros:
+    #   - entrada (texto): Texto a procesar
+    # Retorna:
+    #   - texto: Texto normalizado
+    # =============================================================================
+    funcion normalizar_rapido(texto texto_entrada) retorna texto
+        texto resultado = este.validador.sanitizar_entrada(texto_entrada)
+        resultado = este.normalizador_espacios.trim_completo(resultado)
+        resultado = este.normalizador_espacios.normalizar_espacios_completos(resultado)
+        resultado = este.normalizador_base.quitar_espacios_extra(resultado)
+        retornar resultado
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: validar_entrada_usuario
+    # =============================================================================
+    # Propósito: Valida una entrada según criterios específicos
+    # 
+    # Parámetros:
+    #   - entrada (texto): Texto a validar
+    #   - criterios (mapa): Criterios de validación
+    # Retorna:
+    #   - mapa: Resultado de validación con detalles
+    # =============================================================================
+    funcion validar_entrada_usuario(texto texto_entrada, mapa? criterios_param) retorna mapa
+        mapa _resultado = mapa_crear()
+        lista<texto> errores = crear_lista()
+        lista<texto> advertencias = crear_lista()
+        bool es_valida = verdadero
+        
+        # Validación de longitud
+        entero min_longitud = mapa_obtener(criterios_param, "min_longitud", 0)
+        entero max_longitud = mapa_obtener(criterios_param, "max_longitud", 1000)
+        
+        si no este.validador.validar_longitud(texto_entrada, min_longitud, max_longitud) entonces
+            lista_agregar(errores, "Longitud inválida: debe estar entre " + str_desde_numero(min_longitud) + " y " + str_desde_numero(max_longitud))
+            es_valida = falso
+        fin_si
+        
+        # Validación de caracteres permitidos
+        texto caracteres_permitidos = mapa_obtener(criterios_param, "caracteres_permitidos", "")
+        si longitud_texto(caracteres_permitidos) > 0 entonces
+            si no este.validador.validar_caracteres_permitidos(texto_entrada, caracteres_permitidos) entonces
+                lista_agregar(errores, "Contiene caracteres no permitidos")
+                es_valida = falso
+            fin_si
+        fin_si
+        
+        # Validación de formato específico
+        texto tipo_formato = ""
+        si criterios_param != nulo entonces
+            tipo_formato = mapa_obtener(criterios_param, "formato", "")
+        fin_si
+        
+        si tipo_formato == "email" entonces
+            si no este.validador_formatos.es_email_valido(texto_entrada) entonces
+                lista_agregar(errores, "Formato de email inválido")
+                es_valida = falso
+            fin_si
+        sino si tipo_formato == "telefono" entonces
+            texto validacion = este.validador_formatos.es_telefono_valido(texto_entrada)
+            si validacion != "válido" entonces
+                lista_agregar(errores, "Formato de teléfono inválido: " + validacion)
+                es_valida = falso
+            fin_si
+        sino si tipo_formato == "url" entonces
+            si no este.validador_formatos.es_url_valida(texto_entrada) entonces
+                lista_agregar(errores, "Formato de URL inválido")
+                es_valida = falso
+            fin_si
+        fin_si
+        
+        # Detección de inyección SQL
+        si este.validador.detectar_inyeccion_sql(texto_entrada) entonces
+            lista_agregar(errores, "Posible inyección SQL detectada")
+            es_valida = falso
+        fin_si
+        
+        # Detección de spam (como advertencia)
+        si este.filtro_seguridad.detectar_spam(texto_entrada) entonces
+            lista_agregar(advertencias, "Contenido detectado como posible spam")
+        fin_si
+        
+        # Ensamblar resultado
+        mapa_poner(_resultado, "es_valida", es_valida)
+        mapa_poner(_resultado, "errores", errores)
+        mapa_poner(_resultado, "advertencias", advertencias)
+        mapa_poner(_resultado, "longitud", longitud_texto(texto_entrada))
+        
+        retornar _resultado
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: obtener_estadisticas_procesamiento
+    # =============================================================================
+    # Propósito: Proporciona estadísticas detalladas del procesamiento
+    # 
+    # Parámetros:
+    #   - entrada_original (texto): Texto original
+    #   - entrada_procesada (texto): Texto procesado
+    # Retorna:
+    #   - mapa: Estadísticas detalladas
+    # =============================================================================
+    funcion obtener_estadisticas_procesamiento(texto texto_original, texto texto_procesado) retorna mapa
+        mapa estadisticas = mapa_crear()
+        
+        # Estadísticas básicas
+        mapa_poner(estadisticas, "longitud_original", longitud_texto(texto_original))
+        mapa_poner(estadisticas, "longitud_procesada", longitud_texto(texto_procesado))
+        mapa_poner(estadisticas, "reduccion_caracteres", longitud_texto(texto_original) - longitud_texto(texto_procesado))
+        mapa_poner(estadisticas, "porcentaje_reduccion", (longitud_texto(texto_original) - longitud_texto(texto_procesado)) * 100.0 / longitud_texto(texto_original))
+        
+        # Estadísticas de palabras
+        mapa_poner(estadisticas, "palabras_original", este.normalizador_espacios.contar_palabras_con_espacios(texto_original))
+        mapa_poner(estadisticas, "palabras_procesadas", este.normalizador_espacios.contar_palabras_con_espacios(texto_procesado))
+        
+        # Caracteres especiales detectados
+        mapa_poner(estadisticas, "caracteres_especiales", este.normalizador_caracteres.detectar_caracteres_especiales(texto_original))
+        mapa_poner(estadisticas, "total_caracteres_especiales", lista_tamano(mapa_obtener(estadisticas, "caracteres_especiales")))
+        
+        # Análisis de contenido
+        mapa_poner(estadisticas, "tiene_urls", este.contar_urls(texto_original) > 0)
+        mapa_poner(estadisticas, "tiene_emails", este.contar_emails(texto_original) > 0)
+        mapa_poner(estadisticas, "tiene_telefonos", este.contar_telefonos(texto_original) > 0)
+        
+        # Calidad del texto
+        flotante proporcion_mayusculas = este.filtro_seguridad.calcular_proporcion_mayusculas(texto_original)
+        mapa_poner(estadisticas, "proporcion_mayusculas", proporcion_mayusculas)
+        mapa_poner(estadisticas, "calidad_texto", este.evaluar_calidad_texto(proporcion_mayusculas, texto_original))
+        
+        retornar estadisticas
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: procesar_lote_entradas
+    # =============================================================================
+    # Propósito: Procesa múltiples entradas en lote para optimizar rendimiento
+    # 
+    # Parámetros:
+    #   - entradas (lista<texto>): Lista de textos a procesar
+    #   - opciones (mapa): Opciones de procesamiento (comunes para todas)
+    # Retorna:
+    #   - lista<mapa>: Lista de resultados para cada entrada
+    # =============================================================================
+    funcion procesar_lote_entradas(lista<texto> entradas_param, mapa opciones_param) retorna lista<mapa>
+        lista resultados = crear_lista()
+        entero i = 0
+        entero tam = lista_tamano(entradas_param)
+        
+        mientras i < tam hacer
+            texto texto_entrada = lista_obtener(entradas_param, i)
+            mapa _resultado = normalizar_entrada_completa(texto_entrada, opciones_param)
+            lista_agregar(resultados, _resultado)
+            i = i + 1
+        fin_mientras
+        
+        retornar resultados
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: crear_reporte_procesamiento
+    # =============================================================================
+    # Propósito: Genera un reporte legible del procesamiento realizado
+    # 
+    # Parámetros:
+    #   - resultado (mapa): Resultado del procesamiento
+    # Retorna:
+    #   - texto: Reporte formateado
+    # =============================================================================
+    funcion crear_reporte_procesamiento(mapa resultado_param) retorna texto
+        texto reporte = "=== REPORTE DE NORMALIZACIÓN ===\n\n"
+        
+        # Información básica
+        reporte = reporte + "Estado: " + (mapa_obtener(resultado_param, "exito") ? "EXITOSO" : "FALLIDO") + "\n"
+        reporte = reporte + "Mensaje: " + mapa_obtener(resultado_param, "mensaje_estado") + "\n\n"
+        
+        # Estadísticas
+        reporte = reporte + "ESTADÍSTICAS:\n"
+        reporte = reporte + "- Longitud original: " + str_desde_numero(mapa_obtener(resultado_param, "longitud_original")) + " caracteres\n"
+        reporte = reporte + "- Longitud final: " + str_desde_numero(mapa_obtener(resultado_param, "longitud_final")) + " caracteres\n"
+        reporte = reporte + "- Reducción: " + str_desde_numero(mapa_obtener(resultado_param, "reduccion_caracteres")) + " caracteres\n"
+        reporte = reporte + "- Palabras finales: " + str_desde_numero(mapa_obtener(resultado_param, "numero_palabras")) + "\n\n"
+        
+        # Advertencias
+        lista<texto> advertencias = mapa_obtener(resultado_param, "advertencias")
+        si lista_tamano(advertencias) > 0 entonces
+            reporte = reporte + "ADVERTENCIAS:\n"
+            entero i = 0
+            entero tam = lista_tamano(advertencias)
+            
+            mientras i < tam hacer
+                texto advertencia = lista_obtener(advertencias, i)
+                reporte = reporte + "- " + advertencia + "\n"
+                i = i + 1
+            fin_mientras
+            reporte = reporte + "\n"
+        fin_si
+        
+        # Caracteres especiales detectados
+        lista<texto> caracteres_especiales = mapa_obtener(resultado_param, "caracteres_especiales_detectados")
+        si lista_tamano(caracteres_especiales) > 0 entonces
+            reporte = reporte + "CARACTERES ESPECIALES DETECTADOS:\n"
+            entero i = 0
+            entero tam = lista_tamano(caracteres_especiales)
+            
+            mientras i < tam hacer
+                texto _caracter = lista_obtener(caracteres_especiales, i)
+                reporte = reporte + "- '" + _caracter + "' (código: " + str_desde_numero(codigo_caracter(_caracter)) + ")\n"
+                i = i + 1
+            fin_mientras
+            reporte = reporte + "\n"
+        fin_si
+        
+        # Texto procesado
+        reporte = reporte + "TEXTO PROCESADO:\n"
+        reporte = reporte + mapa_obtener(resultado_param, "texto_normalizado") + "\n\n"
+        
+        reporte = reporte + "=== FIN DEL REPORTE ===\n"
+        
+        retornar reporte
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIONES AUXILIARES PRIVADAS
+    # =============================================================================
+
+    # =============================================================================
+    # FUNCIÓN: evaluar_calidad_texto (privada)
+    # =============================================================================
+    funcion evaluar_calidad_texto(flotante proporcion_mayusculas, texto texto_param) retorna texto
+        entero longitud = longitud_texto(texto_param)
+        
+        # Criterios de calidad
+        si longitud < 5 entonces
+            retornar "MUY BAJO"
+        sino si proporcion_mayusculas > 0.7 entonces
+            retornar "BAJO (demasiadas mayúsculas)"
+        sino si proporcion_mayusculas > 0.4 entonces
+            retornar "MEDIO"
+        sino si longitud > 100 entonces
+            retornar "ALTO"
+        sino
+            retornar "BUENO"
+        fin_si
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: contar_urls (privada)
+    # =============================================================================
+    funcion contar_urls(texto _texto) retorna entero
+        texto texto_lower = str_minusculas(_texto)
+        entero contador = 0
+        
+        lista<texto> prefijos = crear_lista()
+        lista_agregar(prefijos, "http://")
+        lista_agregar(prefijos, "https://")
+        lista_agregar(prefijos, "www.")
+        
+        entero i = 0
+        entero tam = lista_tamano(prefijos)
+        
+        mientras i < tam hacer
+            texto prefijo = lista_obtener(prefijos, i)
+            si contiene_texto(texto_lower, prefijo) entonces
+                contador = contador + 1
+            fin_si
+            i = i + 1
+        fin_mientras
+        
+        retornar contador
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: contar_emails (privada)
+    # =============================================================================
+    funcion contar_emails(texto _texto) retorna entero
+        entero contador = 0
+        entero i = 0
+        entero tam = longitud_texto(_texto)
+        
+        mientras i < tam hacer
+            texto char = extraer_subtexto(_texto, i, 1)
+            si char == "@" y i > 0 y i < tam - 1 entonces
+                contador = contador + 1
+            fin_si
+            i = i + 1
+        fin_mientras
+        
+        retornar contador
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: contar_telefonos (privada)
+    # =============================================================================
+    funcion contar_telefonos(texto _texto) retorna entero
+        entero contador = 0
+        entero digitos_consecutivos = 0
+        entero i = 0
+        entero tam = longitud_texto(_texto)
+        
+        mientras i < tam hacer
+            texto char = extraer_subtexto(_texto, i, 1)
+            entero codigo = codigo_caracter(char)
+            
+            si codigo >= 48 y codigo <= 57 entonces
+                digitos_consecutivos = digitos_consecutivos + 1
+                si digitos_consecutivos >= 7 entonces
+                    contador = contador + 1
+                    digitos_consecutivos = 0
+                fin_si
+            sino
+                digitos_consecutivos = 0
+            fin_si
+            
+            i = i + 1
+        fin_mientras
+        
+        retornar contador
+    fin_funcion
+
+fin_clase
+
+# =============================================================================
+# FUNCIÓN DE DEMOSTRACIÓN PRINCIPAL
+# =============================================================================
+# Esta función demuestra el uso completo del sistema de normalización
+principal
+    imprimir "=== SISTEMA COMPLETO DE NORMALIZACIÓN JASBOOT ===\n"
+    
+    # Crear instancia del normalizador principal
+    NormalizadorPrincipal normalizador = NormalizadorPrincipal()
+    
+    # Texto de ejemplo complejo para demostración
+    texto entrada_ejemplo = "¡Hola!  Este es un   texto de   prueba con  caracteres especiales: \"áéíóú\", comillas \"tipográficas\", y guiones largos.  Email: usuario@ejemplo.com  Teléfono: 555-123-4567  URL: https://www.ejemplo.com"
+    
+    imprimir "ENTRADA ORIGINAL:"
+    imprimir entrada_ejemplo
+    imprimir "\n" + "-".repetir(50) + "\n"
+    
+    # Opciones de procesamiento
+    mapa opciones = mapa_crear()
+    mapa_poner(opciones, "validar_formato", "")
+    mapa_poner(opciones, "enmascarar_datos", verdadero)
+    
+    # Procesar entrada completa
+    mapa _resultado = normalizador.normalizar_entrada_completa(entrada_ejemplo, opciones)
+    
+    # Mostrar reporte
+    texto reporte = normalizador.crear_reporte_procesamiento(_resultado)
+    imprimir reporte
+    
+    # Demostrar validación específica
+    imprimir "\n" + "=".repetir(50) + "\n"
+    imprimir "DEMO DE VALIDACIÓN ESPECÍFICA:\n"
+    
+    mapa criterios_email = mapa_crear()
+    mapa_poner(criterios_email, "formato", "email")
+    mapa_poner(criterios_email, "min_longitud", 5)
+    mapa_poner(criterios_email, "max_longitud", 100)
+    
+    mapa validacion_email = normalizador.validar_entrada_usuario("usuario@ejemplo.com", criterios_email)
+    imprimir "Email 'usuario@ejemplo.com': " + (mapa_obtener(validacion_email, "es_valida") ? "VÁLIDO" : "INVÁLIDO")
+    
+    # Demostrar procesamiento rápido
+    imprimir "\n" + "=".repetir(50) + "\n"
+    imprimir "DEMO DE PROCESAMIENTO RÁPIDO:\n"
+    
+    texto rapido_resultado = normalizador.normalizar_rapido(entrada_ejemplo)
+    imprimir "Resultado rápido: " + rapido_resultado
+    
+    imprimir "\n=== SISTEMA DE NORMALIZACIÓN COMPLETO FUNCIONANDO ==="
+fin_principal

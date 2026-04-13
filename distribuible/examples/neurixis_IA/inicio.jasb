@@ -1,0 +1,141 @@
+usar {Entradas} de "./cerebro/entrada.jasb"
+usar {GeneradorLenguaje} de "./cerebro/generador.jasb"
+usar {CargadorInformacionBase} de "./memorias/cargar_informacion_base.jasb"
+
+principal 
+    Entradas entradas
+    GeneradorLenguaje generador
+    CargadorInformacionBase cargador
+    bool control = verdadero
+    
+    // Inicializar cargador de información base
+    cargador.inicializar_cargador("C:\\src\\jasboot\\apps\\neurixis_IA\\memorias\\", "neurixis_base.jmn")
+    
+    limpiar_consola
+    imprimir "\cian=================================================="
+    imprimir "|              Neurixis IA iniciada              |"
+    imprimir "==================================================\norm"
+
+    mientras control hacer
+        texto _entrada = entradas.entrada_por_la_terminal()
+        
+        // Comando especial para cargar información
+        si _entrada == "cargar informacion" entonces
+            imprimir "\n[Neurixis IA] Verificando estado de la información base..."
+            
+            booleano ya_cargada = falso
+            entero total_sinonimos = 0
+            
+            intentar
+                mapa estado = cargador.verificar_estado_carga()
+                
+                # Verificar primero si las claves existen antes de obtener
+                si mapa_contiene(estado, "sinonimos_cargados") entonces
+                    ya_cargada = mapa_obtener(estado, "sinonimos_cargados")
+                sino
+                    ya_cargada = falso
+                fin_si
+                
+                si mapa_contiene(estado, "total_sinonimos") entonces
+                    total_sinonimos = mapa_obtener(estado, "total_sinonimos")
+                sino
+                    total_sinonimos = 0
+                fin_si
+            atrapar error
+                ya_cargada = falso
+                total_sinonimos = 0
+            fin_intentar
+            
+            si ya_cargada entonces
+                imprimir "[Neurixis IA] Información base ya está cargada"
+                imprimir "[Neurixis IA] Sinónimos disponibles: " + str_desde_numero(total_sinonimos)
+                imprimir "[Neurixis IA] El sistema está listo para operar"
+            sino
+                imprimir "[Neurixis IA] Cargando información base..."
+                mapa resultado = cargador.cargar_sinonimos_base(falso)
+                
+                si mapa_contiene(resultado, "cargado") entonces
+                    si mapa_obtener(resultado, "cargado") entonces
+                        texto msg = ""
+                        si mapa_contiene(resultado, "mensaje") entonces
+                            msg = mapa_obtener(resultado, "mensaje")
+                        fin_si
+                        imprimir "[Neurixis IA] " + msg
+                        
+                        si mapa_contiene(resultado, "total_sinonimos") entonces
+                            imprimir "[Neurixis IA] Sinónimos cargados: " + str_desde_numero(mapa_obtener(resultado, "total_sinonimos"))
+                        fin_si
+                        si mapa_contiene(resultado, "categorias_cargadas") entonces
+                            imprimir "[Neurixis IA] Categorías cargadas: " + str_desde_numero(mapa_obtener(resultado, "categorias_cargadas"))
+                        fin_si
+                        imprimir "[Neurixis IA] Sistema listo para operación inteligente"
+                    sino
+                        texto msg_err = "Error desconocido"
+                        si mapa_contiene(resultado, "mensaje") entonces
+                            msg_err = mapa_obtener(resultado, "mensaje")
+                        fin_si
+                        imprimir "[Neurixis IA] Error: " + msg_err
+                    fin_si
+                sino
+                    imprimir "[Neurixis IA] Error inesperado en la respuesta del cargador"
+                fin_si
+            fin_si
+            imprimir ""
+            
+        sino si _entrada == "estado sistema" entonces
+            imprimir "\n[Neurixis IA] Estado del sistema:"
+            mapa estado_completo = cargador.obtener_estado_completo()
+            
+            # Acceso seguro con mapa_contiene
+            si mapa_contiene(estado_completo, "sinonimos_cargados") entonces
+                imprimir "- Sinónimos cargados: " + str_desde_numero(mapa_obtener(estado_completo, "sinonimos_cargados"))
+            fin_si
+            si mapa_contiene(estado_completo, "total_sinonimos") entonces
+                imprimir "- Total sinónimos: " + str_desde_numero(mapa_obtener(estado_completo, "total_sinonimos"))
+            fin_si
+            si mapa_contiene(estado_completo, "ultima_carga") entonces
+                imprimir "- Última carga: " + mapa_obtener(estado_completo, "ultima_carga")
+            fin_si
+            si mapa_contiene(estado_completo, "archivo_jmn") entonces
+                imprimir "- Archivo JMN: " + mapa_obtener(estado_completo, "archivo_jmn")
+            fin_si
+            si mapa_contiene(estado_completo, "sistema_listo") entonces
+                imprimir "- Sistema listo: " + str_desde_numero(mapa_obtener(estado_completo, "sistema_listo"))
+            fin_si
+            imprimir ""
+            
+        sino si _entrada == "forzar carga" entonces
+            imprimir "\n[Neurixis IA] Forzando carga de información base..."
+            mapa resultado = cargador.cargar_sinonimos_base(verdadero)
+            
+            si mapa_contiene(resultado, "cargado") entonces
+                si mapa_obtener(resultado, "cargado") entonces
+                    texto msg_ok = ""
+                    si mapa_contiene(resultado, "mensaje") entonces
+                        msg_ok = mapa_obtener(resultado, "mensaje")
+                    fin_si
+                    imprimir "[Neurixis IA] " + msg_ok
+                    si mapa_contiene(resultado, "total_sinonimos") entonces
+                        imprimir "[Neurixis IA] Sinónimos cargados: " + str_desde_numero(mapa_obtener(resultado, "total_sinonimos"))
+                    fin_si
+                sino
+                    imprimir "[Neurixis IA] Error al forzar la carga"
+                fin_si
+            sino
+                imprimir "[Neurixis IA] Error al forzar la carga: respuesta invalida"
+            fin_si
+            imprimir "\norm"
+            
+        sino si _entrada == "salir" entonces
+            control = falso
+            romper
+            
+        sino
+            // Procesamiento normal de la entrada
+            generador.generar(_entrada)
+        fin_si
+    fin_mientras
+    
+    imprimir "\norm[Neurixis IA] Sesión finalizada"
+
+fin_principal

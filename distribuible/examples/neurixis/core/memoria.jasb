@@ -1,0 +1,30 @@
+# core/memoria.jasb - Clase MemoriaNeuronal para gestión JMN
+
+clase MemoriaNeuronal
+    texto ruta_archivo
+    
+    funcion inicializar(texto ruta)
+        este.ruta_archivo = ruta
+    fin_funcion
+    
+    # Abrir memoria con valores por defecto (256 nodos, 1024 relaciones)
+    funcion abrir() retorna bool
+        crear_memoria(este.ruta_archivo, 256, 1024)
+        retornar verdadero
+    fin_funcion
+    
+    funcion cerrar() retorna bool
+        cerrar_memoria()
+        retornar verdadero
+    fin_funcion
+    
+    funcion crear_neurona(Neurona neurona, texto nombre)
+        neurona.inicializar(nombre)
+    fin_funcion
+    
+    funcion obtener_ruta() retorna texto
+        retornar este.ruta_archivo
+    fin_funcion
+fin_clase
+
+enviar {MemoriaNeuronal}

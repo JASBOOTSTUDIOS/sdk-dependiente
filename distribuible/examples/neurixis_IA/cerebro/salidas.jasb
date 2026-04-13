@@ -1,0 +1,200 @@
+enviar clase Salidas
+
+    # =============================================================================
+    # 1. salida_de_la_consola
+    # =============================================================================
+    # Propósito: Mostrar mensaje formateado en consola
+    # Parámetros:
+    #   - _mensaje (texto): Mensaje a mostrar
+    # Retorna:
+    #   - void: Muestra el mensaje con formato IA
+    # =============================================================================
+    funcion salida_de_la_consola(texto _mensaje)
+        imprimir "\n\t\mage[IA]: \cian${_mensaje}\norm"
+    fin_funcion
+    
+    # =============================================================================
+    # 2. salida_con_color_personalizado
+    # =============================================================================
+    # Propósito: Mostrar mensaje con color personalizado
+    # Parámetros:
+    #   - _mensaje (texto): Mensaje a mostrar
+    #   - color_texto (texto): Color del texto
+    #   - color_fondo (texto): Color del fondo (opcional)
+    #   - prefijo (texto): Prefijo personalizado (opcional)
+    # Retorna:
+    #   - void: Muestra el mensaje con formato personalizado
+    # =============================================================================
+    # funcion salida_con_color_personalizado(texto _mensaje, texto color_texto, texto color_fondo, texto prefijo) retorna
+    
+    # =============================================================================
+    # 3. salida_con_emocion
+    # =============================================================================
+    # Propósito: Mostrar mensaje con indicador emocional
+    # Parámetros:
+    #   - _mensaje (texto): Mensaje a mostrar
+    #   - emocion (texto): Emoción a expresar ("feliz", "triste", "sorprendido", etc.)
+    #   - intensidad (flotante): Intensidad de la emoción (0.0-1.0)
+    # Retorna:
+    #   - void: Muestra el mensaje con indicador emocional
+    # =============================================================================
+    # funcion salida_con_emocion(texto _mensaje, texto emocion, flotante intensidad) retorna
+    
+    # =============================================================================
+    # 4. salida_multilinea
+    # =============================================================================
+    # Propósito: Mostrar mensaje en múltiples líneas con formato
+    # Parámetros:
+    #   - _mensajes (lista<texto>): Lista de mensajes a mostrar
+    #   - separador (texto): Separador entre líneas (opcional)
+    #   - numerar_lineas (bool): Si numerar las líneas (opcional)
+    # Retorna:
+    #   - void: Muestra los mensajes con formato multilínea
+    # =============================================================================
+    # funcion salida_multilinea(lista<texto> _mensajes, texto separador, bool numerar_lineas) retorna
+    
+    # =============================================================================
+    # 5. salida_con_timestamp
+    # =============================================================================
+    # Propósito: Mostrar mensaje con marca de tiempo
+    # Parámetros:
+    #   - _mensaje (texto): Mensaje a mostrar
+    #   - formato_timestamp (texto): Formato del timestamp ("completo", "corto", "hora")
+    #   - zona_horaria (texto): Zona horaria (opcional)
+    # Retorna:
+    #   - void: Muestra el mensaje con timestamp
+    # =============================================================================
+    # funcion salida_con_timestamp(texto _mensaje, texto formato_timestamp, texto zona_horaria) retorna
+    
+    # =============================================================================
+    # 6. salida_con_progreso
+    # =============================================================================
+    # Propósito: Mostrar barra de progreso animada
+    # Parámetros:
+    #   - _mensaje (texto): Mensaje descriptivo
+    #   - progreso_actual (entero): Valor actual del progreso
+    #   - progreso_total (entero): Valor total del progreso
+    #   - caracter_progreso (texto): Carácter para la barra (opcional)
+    # Retorna:
+    #   - void: Muestra la barra de progreso
+    # =============================================================================
+    # funcion salida_con_progreso(texto _mensaje, entero progreso_actual, entero progreso_total, texto caracter_progreso) retorna
+    
+    # =============================================================================
+    # 7. salida_con_estructura
+    # =============================================================================
+    # Propósito: Mostrar mensaje con estructura jerárquica
+    # Parámetros:
+    #   - _contenido (mapa): Contenido estructurado a mostrar
+    #   - nivel_indentacion (entero): Nivel de indentación inicial
+    #   - mostrar_claves (bool): Si mostrar las claves del mapa
+    # Retorna:
+    #   - void: Muestra el contenido estructurado
+    # =============================================================================
+    # funcion salida_con_estructura(mapa _contenido, entero nivel_indentacion, bool mostrar_claves) retorna
+    
+    # =============================================================================
+    # 8. salida_con_animacion
+    # =============================================================================
+    # Propósito: Mostrar mensaje con animación de texto
+    # Parámetros:
+    #   - _mensaje (texto): Mensaje a animar
+    #   - tipo_animacion (texto): Tipo de animación ("typewriter", "fade", "slide")
+    #   - velocidad_animacion (entero): Velocidad en milisegundos
+    # Retorna:
+    #   - void: Muestra el mensaje animado
+    # =============================================================================
+    # funcion salida_con_animacion(texto _mensaje, texto tipo_animacion, entero velocidad_animacion) retorna
+    
+    # =============================================================================
+    # 9. salida_con_contexto
+    # =============================================================================
+    # Propósito: Mostrar mensaje con información de contexto
+    # Parámetros:
+    #   - _mensaje (texto): Mensaje principal
+    #   - contexto (mapa): Información de contexto adicional
+    #   - formato_contexto (texto): Formato del contexto ("compacto", "detallado")
+    # Retorna:
+    #   - void: Muestra el mensaje con contexto
+    # =============================================================================
+    # funcion salida_con_contexto(texto _mensaje, mapa contexto, texto formato_contexto) retorna
+    
+    # =============================================================================
+    # 10. salida_con_metadatos
+    # =============================================================================
+    # Propósito: Mostrar mensaje con metadatos del procesamiento
+    # Parámetros:
+    #   - _mensaje (texto): Mensaje principal
+    #   - metadatos (mapa): Metadatos del procesamiento
+    #   - nivel_detalle (texto): Nivel de detalle ("basico", "completo")
+    # Retorna:
+    #   - void: Muestra el mensaje con metadatos
+    # =============================================================================
+    # funcion salida_con_metadatos(texto _mensaje, mapa metadatos, texto nivel_detalle) retorna
+    
+    # =============================================================================
+    # 11. salida_con_estadisticas
+    # =============================================================================
+    # Propósito: Mostrar estadísticas formateadas
+    # Parámetros:
+    #   - estadisticas (mapa): Datos estadísticos a mostrar
+    #   - formato_estadisticas (texto): Formato de visualización
+    #   - ordenar_por (texto): Criterio de ordenamiento
+    # Retorna:
+    #   - void: Muestra las estadísticas formateadas
+    # =============================================================================
+    # funcion salida_con_estadisticas(mapa estadisticas, texto formato_estadisticas, texto ordenar_por) retorna
+    
+    # =============================================================================
+    # 12. salida_con_alerta
+    # =============================================================================
+    # Propósito: Mostrar mensaje de alerta con formato especial
+    # Parámetros:
+    #   - _mensaje (texto): Mensaje de alerta
+    #   - nivel_alerta (texto): Nivel de alerta ("info", "advertencia", "error", "critico")
+    #   - persistente (bool): Si la alerta es persistente
+    # Retorna:
+    #   - void: Muestra la alerta formateada
+    # =============================================================================
+    # funcion salida_con_alerta(texto _mensaje, texto nivel_alerta, bool persistente) retorna
+    
+    # =============================================================================
+    # 13. salida_interactiva
+    # =============================================================================
+    # Propósito: Mostrar mensaje con opciones interactivas
+    # Parámetros:
+    #   - _mensaje (texto): Mensaje principal
+    #   - opciones (lista<texto>): Opciones disponibles
+    #   - tiempo_espera (entero): Tiempo de espera para respuesta
+    # Retorna:
+    #   - entero: Opción seleccionada por el usuario
+    # =============================================================================
+    # funcion salida_interactiva(texto _mensaje, lista<texto> opciones, entero tiempo_espera) retorna entero
+    
+    # =============================================================================
+    # 14. salida_con_depuracion
+    # =============================================================================
+    # Propósito: Mostrar mensaje de depuración con información técnica
+    # Parámetros:
+    #   - _mensaje (texto): Mensaje de depuración
+    #   - nivel_depuracion (texto): Nivel de depuración ("trace", "debug", "info")
+    #   - informacion_tecnica (mapa): Información técnica adicional
+    # Retorna:
+    #   - void: Muestra el mensaje de depuración
+    # =============================================================================
+    # funcion salida_con_depuracion(texto _mensaje, texto nivel_depuracion, mapa informacion_tecnica) retorna
+    
+    # =============================================================================
+    # 15. limpiar_consola_personalizada
+    # =============================================================================
+    # Propósito: Limpiar consola con opciones personalizadas
+    # Parámetros:
+    #   - area_limpiar (texto): Área a limpiar ("completa", "parcial", "linea")
+    #   - preservar_historial (bool): Si preservar el historial
+    #   - animacion_limpieza (bool): Si usar animación de limpieza
+    # Retorna:
+    #   - void: Limpia la consola según opciones
+    # =============================================================================
+    # funcion limpiar_consola_personalizada(texto area_limpiar, bool preservar_historial, bool animacion_limpieza) retorna
+
+fin_clase

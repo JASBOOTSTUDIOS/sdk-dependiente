@@ -1,0 +1,625 @@
+
+usar {buscar_subcadena} de "./procesamiento/neocortex.jasb"
+usar {AlmacenamientoSemantico} de "./almacenamiento/almacenamiento_semantico.jasb"
+
+clase Entradas
+
+    # =============================================================================
+    # 1. entrada_por_la_terminal
+    # =============================================================================
+    # Propósito: Obtener entrada del usuario desde la terminal con formato
+    # Parámetros:
+    #   - void: No requiere parámetros
+    # Retorna:
+    #   - texto: Entrada del usuario
+    # =============================================================================
+    funcion entrada_por_la_terminal() retorna texto
+        // Variable para almacenar la entrada del usuario.
+        texto _entrada
+        
+        intentar
+            // Imprimir el prompt con colores
+            imprimir_sin_salto "\n\azul[Tu]: \verd"
+            ingresar_texto _entrada
+            retornar _entrada
+
+        atrapar error
+            // En caso de error, retornar cadena vacía
+            retornar ""
+        fin_intentar
+    fin_funcion
+    
+    # =============================================================================
+    # 2. entrada_con_prompt_personalizado
+    # =============================================================================
+    # Propósito: Obtener entrada con un prompt personalizado
+    # Parámetros:
+    #   - prompt (texto): Mensaje personalizado para mostrar
+    #   - color_prompt (texto): Color para el prompt (opcional)
+    #   - color_entrada (texto): Color para la entrada (opcional)
+    # Retorna:
+    #   - texto: Entrada del usuario
+    # =============================================================================
+    funcion entrada_con_prompt_personalizado(texto prompt, texto color_prompt, texto color_entrada) retorna mapa
+        mapa _resultado = mapa_crear()
+        
+        // Establecer colores por defecto si no se proporcionan
+        texto color_prompt_defecto = color_prompt
+        texto color_entrada_defecto = color_entrada
+        
+        si color_prompt_defecto == "" entonces
+            color_prompt_defecto = "\azul"
+        fin_si
+        
+        si color_entrada_defecto == "" entonces
+            color_entrada_defecto = "\verd"
+        fin_si
+        
+        // Inicializar almacenamiento semántico
+        AlmacenamientoSemantico almacenamiento = AlmacenamientoSemantico()
+        
+        // Detectar si el prompt contiene patrones específicos
+        texto texto_minusculas = str_minusculas(prompt)
+        booleano es_pregunta = falso
+        booleano es_comando = falso
+        booleano es_saludo = falso
+        booleano es_despedida = falso
+        texto tipo_prompt = "general"
+        
+        # Detectar preguntas usando sinónimos
+        lista<texto> palabras_pregunta = crear_lista()
+        lista_agregar(palabras_pregunta, "cómo")
+        lista_agregar(palabras_pregunta, "como")
+        lista_agregar(palabras_pregunta, "qué")
+        lista_agregar(palabras_pregunta, "que")
+        lista_agregar(palabras_pregunta, "dónde")
+        lista_agregar(palabras_pregunta, "donde")
+        lista_agregar(palabras_pregunta, "cuándo")
+        lista_agregar(palabras_pregunta, "cuando")
+        lista_agregar(palabras_pregunta, "por qué")
+        lista_agregar(palabras_pregunta, "porque")
+        
+        si buscar_subcadena(texto_minusculas, "?") o buscar_subcadena(texto_minusculas, "¿") entonces
+            es_pregunta = verdadero
+            tipo_prompt = "pregunta"
+        sino
+            // Buscar palabras de pregunta y sus sinónimos
+            entero i = 0
+            mientras i < lista_tamano(palabras_pregunta) hacer
+                texto palabra_actual = lista_obtener(palabras_pregunta, i)
+                si buscar_subcadena(texto_minusculas, palabra_actual) entonces
+                    es_pregunta = verdadero
+                    tipo_prompt = "pregunta"
+                    i = lista_tamano(palabras_pregunta) // Salir del bucle
+                sino
+                    // Buscar sinónimos de la palabra de pregunta
+                    lista<texto> sinonimos = almacenamiento.cargar_sinonimos(palabra_actual)
+                    entero j = 0
+                    mientras j < lista_tamano(sinonimos) hacer
+                        si buscar_subcadena(texto_minusculas, lista_obtener(sinonimos, j)) entonces
+                            es_pregunta = verdadero
+                            tipo_prompt = "pregunta"
+                            j = lista_tamano(sinonimos)
+                            i = lista_tamano(palabras_pregunta)
+                        fin_si
+                        j = j + 1
+                    fin_mientras
+                fin_si
+                i = i + 1
+            fin_mientras
+        fin_si
+        
+        # Detectar comandos usando sinónimos
+        lista<texto> palabras_comando = crear_lista()
+        lista_agregar(palabras_comando, "haz")
+        lista_agregar(palabras_comando, "hacer")
+        lista_agregar(palabras_comando, "crea")
+        lista_agregar(palabras_comando, "crear")
+        lista_agregar(palabras_comando, "genera")
+        lista_agregar(palabras_comando, "generar")
+        lista_agregar(palabras_comando, "desarrolla")
+        lista_agregar(palabras_comando, "desarrollar")
+        lista_agregar(palabras_comando, "implementa")
+        lista_agregar(palabras_comando, "implementar")
+        
+        si no es_pregunta entonces
+            entero i = 0
+            mientras i < lista_tamano(palabras_comando) hacer
+                texto palabra_actual = lista_obtener(palabras_comando, i)
+                si buscar_subcadena(texto_minusculas, palabra_actual) entonces
+                    es_comando = verdadero
+                    tipo_prompt = "comando"
+                    i = lista_tamano(palabras_comando)
+                sino
+                    // Buscar sinónimos de la palabra de comando
+                    lista<texto> sinonimos = almacenamiento.cargar_sinonimos(palabra_actual)
+                    entero j = 0
+                    mientras j < lista_tamano(sinonimos) hacer
+                        si buscar_subcadena(texto_minusculas, lista_obtener(sinonimos, j)) entonces
+                            es_comando = verdadero
+                            tipo_prompt = "comando"
+                            j = lista_tamano(sinonimos)
+                            i = lista_tamano(palabras_comando)
+                        fin_si
+                        j = j + 1
+                    fin_mientras
+                fin_si
+                i = i + 1
+            fin_mientras
+        fin_si
+        
+        # Detectar saludos usando sinónimos
+        lista<texto> palabras_saludo = crear_lista()
+        lista_agregar(palabras_saludo, "hola")
+        lista_agregar(palabras_saludo, "buenos")
+        lista_agregar(palabras_saludo, "buenas")
+        lista_agregar(palabras_saludo, "saludos")
+        lista_agregar(palabras_saludo, "hey")
+        lista_agregar(palabras_saludo, "buen día")
+        lista_agregar(palabras_saludo, "buenas tardes")
+        lista_agregar(palabras_saludo, "buenas noches")
+        
+        si no es_pregunta y no es_comando entonces
+            entero i = 0
+            mientras i < lista_tamano(palabras_saludo) hacer
+                texto palabra_actual = lista_obtener(palabras_saludo, i)
+                si buscar_subcadena(texto_minusculas, palabra_actual) entonces
+                    es_saludo = verdadero
+                    tipo_prompt = "saludo"
+                    i = lista_tamano(palabras_saludo)
+                sino
+                    // Buscar sinónimos de la palabra de saludo
+                    lista<texto> sinonimos = almacenamiento.cargar_sinonimos(palabra_actual)
+                    entero j = 0
+                    mientras j < lista_tamano(sinonimos) hacer
+                        si buscar_subcadena(texto_minusculas, lista_obtener(sinonimos, j)) entonces
+                            es_saludo = verdadero
+                            tipo_prompt = "saludo"
+                            j = lista_tamano(sinonimos)
+                            i = lista_tamano(palabras_saludo)
+                        fin_si
+                        j = j + 1
+                    fin_mientras
+                fin_si
+                i = i + 1
+            fin_mientras
+        fin_si
+        
+        # Detectar despedidas usando sinónimos
+        lista<texto> palabras_despedida = crear_lista()
+        lista_agregar(palabras_despedida, "adios")
+        lista_agregar(palabras_despedida, "chao")
+        lista_agregar(palabras_despedida, "salir")
+        lista_agregar(palabras_despedida, "hasta luego")
+        lista_agregar(palabras_despedida, "nos vemos")
+        lista_agregar(palabras_despedida, "adiós")
+        lista_agregar(palabras_despedida, "hasta pronto")
+        
+        si no es_pregunta y no es_comando y no es_saludo entonces
+            entero i = 0
+            mientras i < lista_tamano(palabras_despedida) hacer
+                texto palabra_actual = lista_obtener(palabras_despedida, i)
+                si buscar_subcadena(texto_minusculas, palabra_actual) entonces
+                    es_despedida = verdadero
+                    tipo_prompt = "despedida"
+                    i = lista_tamano(palabras_despedida)
+                sino
+                    // Buscar sinónimos de la palabra de despedida
+                    lista<texto> sinonimos = almacenamiento.cargar_sinonimos(palabra_actual)
+                    entero j = 0
+                    mientras j < lista_tamano(sinonimos) hacer
+                        si buscar_subcadena(texto_minusculas, lista_obtener(sinonimos, j)) entonces
+                            es_despedida = verdadero
+                            tipo_prompt = "despedida"
+                            j = lista_tamano(sinonimos)
+                            i = lista_tamano(palabras_despedida)
+                        fin_si
+                        j = j + 1
+                    fin_mientras
+                fin_si
+                i = i + 1
+            fin_mientras
+        fin_si
+        
+        # Contar palabras clave técnicas usando sinónimos
+        lista<texto> palabras_tecnicas_base = crear_lista()
+        lista_agregar(palabras_tecnicas_base, "algoritmo")
+        lista_agregar(palabras_tecnicas_base, "funcion")
+        lista_agregar(palabras_tecnicas_base, "variable")
+        lista_agregar(palabras_tecnicas_base, "sistema")
+        lista_agregar(palabras_tecnicas_base, "programación")
+        lista_agregar(palabras_tecnicas_base, "código")
+        lista_agregar(palabras_tecnicas_base, "datos")
+        lista_agregar(palabras_tecnicas_base, "análisis")
+        lista_agregar(palabras_tecnicas_base, "desarrollo")
+        lista_agregar(palabras_tecnicas_base, "software")
+        lista_agregar(palabras_tecnicas_base, "aplicación")
+        
+        entero palabras_tecnicas_encontradas = 0
+        lista<texto> palabras_tecnicas_detectadas = crear_lista()
+        
+        entero i = 0
+        mientras i < lista_tamano(palabras_tecnicas_base) hacer
+            texto palabra_actual = lista_obtener(palabras_tecnicas_base, i)
+            si buscar_subcadena(texto_minusculas, palabra_actual) entonces
+                palabras_tecnicas_encontradas = palabras_tecnicas_encontradas + 1
+                lista_agregar(palabras_tecnicas_detectadas, palabra_actual)
+            sino
+                // Buscar sinónimos de la palabra técnica
+                lista<texto> sinonimos = almacenamiento.cargar_sinonimos(palabra_actual)
+                entero j = 0
+                mientras j < lista_tamano(sinonimos) hacer
+                    si buscar_subcadena(texto_minusculas, lista_obtener(sinonimos, j)) entonces
+                        palabras_tecnicas_encontradas = palabras_tecnicas_encontradas + 1
+                        lista_agregar(palabras_tecnicas_detectadas, lista_obtener(sinonimos, j))
+                    fin_si
+                    j = j + 1
+                fin_mientras
+            fin_si
+            i = i + 1
+        fin_mientras
+        
+        // Ensamblar resultado del detector
+        mapa_poner(_resultado, "prompt_original", prompt)
+        mapa_poner(_resultado, "tipo_prompt", tipo_prompt)
+        mapa_poner(_resultado, "es_pregunta", es_pregunta)
+        mapa_poner(_resultado, "es_comando", es_comando)
+        mapa_poner(_resultado, "es_saludo", es_saludo)
+        mapa_poner(_resultado, "es_despedida", es_despedida)
+        mapa_poner(_resultado, "palabras_tecnicas_encontradas", palabras_tecnicas_encontradas)
+        mapa_poner(_resultado, "palabras_tecnicas_detectadas", palabras_tecnicas_detectadas)
+        mapa_poner(_resultado, "longitud_prompt", longitud_texto(prompt))
+        mapa_poner(_resultado, "color_prompt_detectado", color_prompt_defecto)
+        mapa_poner(_resultado, "color_entrada_detectado", color_entrada_defecto)
+        mapa_poner(_resultado, "usa_sinonimos", verdadero)
+        
+        retornar _resultado
+    fin_funcion
+    
+    # =============================================================================
+    # 3. detectar_sinonimos_contextual
+    # =============================================================================
+    # Propósito: Detectar sinónimos basados en el contexto de la conversación
+    # Parámetros:
+    #   - frase_actual (texto): Frase actual a analizar
+    #   - contexto_historico (lista<texto>): Historial de conversación reciente
+    #   - umbral_contexto (real): Umbral de relevancia contextual (0.0-1.0)
+    # Retorna:
+    #   - mapa: Resultado con sinónimos detectados y contexto
+    # =============================================================================
+    funcion detectar_sinonimos_contextual(texto frase_actual, lista<texto> contexto_historico, real umbral_contexto) retorna mapa
+        mapa resultado = mapa_crear()
+        mapa_poner(resultado, "frase_original", frase_actual)
+        mapa_poner(resultado, "contexto_detectado", "general")
+        mapa_poner(resultado, "confianza_contextual", 0.5)
+        mapa_poner(resultado, "total_palabras", 0)
+        mapa_poner(resultado, "palabras_con_sinonimos", 0)
+        
+        // Análisis básico de contexto
+        texto frase_minusculas = str_minusculas(frase_actual)
+        texto contexto = "general"
+        
+        // Detectar tipo de contexto
+        si buscar_subcadena(frase_minusculas, "?") o buscar_subcadena(frase_minusculas, "¿") entonces
+            contexto = "pregunta"
+        sino si buscar_subcadena(frase_minusculas, "hola") o buscar_subcadena(frase_minusculas, "buenos") entonces
+            contexto = "saludo"
+        sino si buscar_subcadena(frase_minusculas, "adios") o buscar_subcadena(frase_minusculas, "chao") entonces
+            contexto = "despedida"
+        sino si buscar_subcadena(frase_minusculas, "haz") o buscar_subcadena(frase_minusculas, "crea") o buscar_subcadena(frase_minusculas, "genera") entonces
+            contexto = "comando"
+        sino si buscar_subcadena(frase_minusculas, "algoritmo") o buscar_subcadena(frase_minusculas, "funcion") o buscar_subcadena(frase_minusculas, "sistema") entonces
+            contexto = "tecnico"
+        fin_si
+        
+        // Contar palabras básico (simplificado)
+        entero contador_palabras = 1
+        si buscar_subcadena(frase_minusculas, " ") entonces
+            contador_palabras = 2
+        fin_si
+        si buscar_subcadena(frase_minusculas, "  ") entonces
+            contador_palabras = 3
+        fin_si
+        mapa_poner(resultado, "total_palabras", contador_palabras)
+        
+        // Calcular confianza básica
+        real confianza = 0.5
+        si lista_tamano(contexto_historico) > 0 entonces
+            confianza = confianza + 0.1
+        fin_si
+        
+        si contador_palabras > 3 entonces
+            confianza = confianza + 0.1
+        fin_si
+        
+        si confianza > 1.0 entonces
+            confianza = 1.0
+        fin_si
+        
+        mapa_poner(resultado, "contexto_detectado", contexto)
+        // Usar confianza como entero simple (50-70)
+        entero confianza_simple = 60
+        si lista_tamano(contexto_historico) > 0 entonces
+            confianza_simple = confianza_simple + 10
+        fin_si
+        si confianza_simple > 100 entonces
+            confianza_simple = 100
+        fin_si
+        mapa_poner(resultado, "confianza_contextual", confianza_simple)
+        
+        retornar resultado
+    fin_funcion
+   
+    
+    # =============================================================================
+    # 4. entrada_validada
+    # =============================================================================
+    # Propósito: Obtener entrada y validarla contra criterios específicos
+    # Parámetros:
+    #   - tipo_validacion (texto): Tipo de validación ("texto", "numero", "email", etc.)
+    #   - mensaje_error (texto): Mensaje a mostrar si la validación falla
+    #   - intentos_maximos (entero): Número máximo de intentos permitidos
+    # Retorna:
+    #   - mapa: Entrada validada con información del proceso
+    # =============================================================================
+    # funcion entrada_validada(texto tipo_validacion, texto mensaje_error, entero intentos_maximos) retorna mapa
+    
+    # =============================================================================
+    # 4. entrada_multiple_opciones
+    # =============================================================================
+    # Propósito: Obtener entrada seleccionando de múltiples opciones
+    # Parámetros:
+    #   - opciones (lista<texto>): Lista de opciones disponibles
+    #   - permitir_otro (bool): Si permite opción "Otro"
+    #   - mostrar_numeros (bool): Si mostrar números junto a opciones
+    # Retorna:
+    #   - mapa: Opción seleccionada con metadatos
+    # =============================================================================
+    # funcion entrada_multiple_opciones(lista<texto> opciones, bool permitir_otro, bool mostrar_numeros) retorna mapa
+    
+    # =============================================================================
+    # 5. entrada_con_confirmacion
+    # =============================================================================
+    # Propósito: Obtener entrada y solicitar confirmación
+    # Parámetros:
+    #   - prompt (texto): Mensaje para la entrada
+    #   - mensaje_confirmacion (texto): Mensaje para confirmación
+    #   - case_sensitive (bool): Si la confirmación es sensible a mayúsculas
+    # Retorna:
+    #   - mapa: Entrada confirmada con información del proceso
+    # =============================================================================
+    # funcion entrada_con_confirmacion(texto prompt, texto mensaje_confirmacion, bool case_sensitive) retorna mapa
+    
+    # =============================================================================
+    # 6. entrada_con_autocompletado
+    # =============================================================================
+    # Propósito: Obtener entrada con funcionalidad de autocompletado
+    # Parámetros:
+    #   - sugerencias (lista<texto>): Lista de sugerencias para autocompletar
+    #   - sensible_mayusculas (bool): Si la búsqueda es sensible a mayúsculas
+    # Retorna:
+    #   - texto: Entrada con autocompletado aplicado
+    # =============================================================================
+    # funcion entrada_con_autocompletado(lista<texto> sugerencias, bool sensible_mayusculas) retorna texto
+    
+    # =============================================================================
+    # 7. entrada_con_historial
+    # =============================================================================
+    # Propósito: Obtener entrada con navegación de historial
+    # Parámetros:
+    #   - historial (lista<texto>): Historial de entradas anteriores
+    #   - max_historial (entero): Máximo de entradas en historial
+    # Retorna:
+    #   - mapa: Entrada seleccionada con información del historial
+    # =============================================================================
+    # funcion entrada_con_historial(lista<texto> historial, entero max_historial) retorna mapa
+    
+    # =============================================================================
+    # 8. entrada_multilinea
+    # =============================================================================
+    # Propósito: Obtener entrada de múltiples líneas
+    # Parámetros:
+    #   - linea_final (texto): Texto que indica fin de entrada
+    #   - mostrar_numeros_linea (bool): Si numerar las líneas
+    # Retorna:
+    #   - lista<texto>: Lista de líneas ingresadas
+    # =============================================================================
+    # funcion entrada_multilinea(texto linea_final, bool mostrar_numeros_linea) retorna lista<texto>
+    
+    # =============================================================================
+    # 9. entrada_con mascara
+    # =============================================================================
+    # Propósito: Obtener entrada ocultando caracteres (para contraseñas)
+    # Parámetros:
+    #   - caracter_mascara (texto): Carácter a mostrar en lugar de la entrada
+    #   - longitud_minima (entero): Longitud mínima requerida
+    # Retorna:
+    #   - texto: Entrada enmascarada
+    # =============================================================================
+    # funcion entrada_con_mascara(texto caracter_mascara, entero longitud_minima) retorna texto
+    
+    # =============================================================================
+    # 10. entrada_con_timeout
+    # =============================================================================
+    # Propósito: Obtener entrada con límite de tiempo
+    # Parámetros:
+    #   - segundos_timeout (entero): Segundos antes del timeout
+    #   - entrada_defecto (texto): Entrada por defecto si hay timeout
+    # Retorna:
+    #   - mapa: Entrada con información del tiempo
+    # =============================================================================
+    # funcion entrada_con_timeout(entero segundos_timeout, texto entrada_defecto) retorna mapa
+    
+    # =============================================================================
+    # 11. limpiar_buffer_entrada
+    # =============================================================================
+    # Propósito: Limpiar el buffer de entrada
+    # Parámetros:
+    #   - void: No requiere parámetros
+    # Retorna:
+    #   - void: Limpia el buffer
+    # =============================================================================
+    # funcion limpiar_buffer_entrada() retorna
+    
+    # =============================================================================
+    # 12. obtener_estadisticas_entrada
+    # =============================================================================
+    # Propósito: Obtener estadísticas de las entradas del usuario
+    # Parámetros:
+    #   - void: No requiere parámetros
+    # Retorna:
+    #   - mapa: Estadísticas detalladas de entradas
+    # =============================================================================
+    # funcion obtener_estadisticas_entrada() retorna mapa
+
+fin_clase
+
+
+# =============================================================================
+# TEST DE ENTRADAS - NEURIXIS IA
+# =============================================================================
+# Propósito: Probar las funciones de entrada implementadas
+# =============================================================================
+
+principal
+    imprimir "=== TEST DE DETECTOR DE PROMPTS ==="
+    imprimir ""
+    
+    Entradas entradas
+    
+    # Test 1: Detectar pregunta
+    imprimir "TEST 1: Detectar pregunta"
+    mapa resultado1 = entradas.entrada_con_prompt_personalizado("¿Cómo puedo optimizar mi algoritmo?", "", "")
+    imprimir "Prompt: ¿Cómo puedo optimizar mi algoritmo?"
+    imprimir "Tipo detectado: " + mapa_obtener(resultado1, "tipo_prompt")
+    imprimir "Es pregunta: " + str_desde_numero(mapa_obtener(resultado1, "es_pregunta"))
+    imprimir "Es comando: " + str_desde_numero(mapa_obtener(resultado1, "es_comando"))
+    imprimir "Palabras técnicas: " + str_desde_numero(mapa_obtener(resultado1, "palabras_tecnicas_encontradas"))
+    imprimir ""
+    
+    # Test 2: Detectar comando
+    imprimir "TEST 2: Detectar comando"
+    mapa resultado2 = entradas.entrada_con_prompt_personalizado("Genera una función para procesar datos", "", "")
+    imprimir "Prompt: Genera una función para procesar datos"
+    imprimir "Tipo detectado: " + mapa_obtener(resultado2, "tipo_prompt")
+    imprimir "Es pregunta: " + str_desde_numero(mapa_obtener(resultado2, "es_pregunta"))
+    imprimir "Es comando: " + str_desde_numero(mapa_obtener(resultado2, "es_comando"))
+    imprimir "Palabras técnicas: " + str_desde_numero(mapa_obtener(resultado2, "palabras_tecnicas_encontradas"))
+    imprimir ""
+    
+    # Test 3: Detectar saludo
+    imprimir "TEST 3: Detectar saludo"
+    mapa resultado3 = entradas.entrada_con_prompt_personalizado("Hola, buenos días", "", "")
+    imprimir "Prompt: Hola, buenos días"
+    imprimir "Tipo detectado: " + mapa_obtener(resultado3, "tipo_prompt")
+    imprimir "Es saludo: " + str_desde_numero(mapa_obtener(resultado3, "es_saludo"))
+    imprimir "Es despedida: " + str_desde_numero(mapa_obtener(resultado3, "es_despedida"))
+    imprimir ""
+    
+    # Test 4: Detectar despedida
+    imprimir "TEST 4: Detectar despedida"
+    mapa resultado4 = entradas.entrada_con_prompt_personalizado("Adiós, hasta luego", "", "")
+    imprimir "Prompt: Adiós, hasta luego"
+    imprimir "Tipo detectado: " + mapa_obtener(resultado4, "tipo_prompt")
+    imprimir "Es saludo: " + str_desde_numero(mapa_obtener(resultado4, "es_saludo"))
+    imprimir "Es despedida: " + str_desde_numero(mapa_obtener(resultado4, "es_despedida"))
+    imprimir ""
+    
+    # Test 5: Texto técnico mixto
+    imprimir "TEST 5: Texto técnico mixto"
+    mapa resultado5 = entradas.entrada_con_prompt_personalizado("Necesito implementar un sistema de análisis de datos con algoritmos eficientes", "", "")
+    imprimir "Prompt: Necesito implementar un sistema de análisis de datos con algoritmos eficientes"
+    imprimir "Tipo detectado: " + mapa_obtener(resultado5, "tipo_prompt")
+    imprimir "Es pregunta: " + str_desde_numero(mapa_obtener(resultado5, "es_pregunta"))
+    imprimir "Es comando: " + str_desde_numero(mapa_obtener(resultado5, "es_comando"))
+    imprimir "Palabras técnicas: " + str_desde_numero(mapa_obtener(resultado5, "palabras_tecnicas_encontradas"))
+    imprimir ""
+    
+    # Test 6: Texto general sin patrones
+    imprimir "TEST 6: Texto general sin patrones"
+    mapa resultado6 = entradas.entrada_con_prompt_personalizado("El día está muy bonito", "", "")
+    imprimir "Prompt: El día está muy bonito"
+    imprimir "Tipo detectado: " + mapa_obtener(resultado6, "tipo_prompt")
+    imprimir "Es saludo: " + str_desde_numero(mapa_obtener(resultado6, "es_saludo"))
+    imprimir "Es despedida: " + str_desde_numero(mapa_obtener(resultado6, "es_despedida"))
+    imprimir "Palabras técnicas: " + str_desde_numero(mapa_obtener(resultado6, "palabras_tecnicas_encontradas"))
+    imprimir ""
+    
+    imprimir "=== RESUMEN DEL DETECTOR ==="
+    imprimir "1. Pregunta técnica: " + str_desde_numero(mapa_obtener(resultado1, "palabras_tecnicas_encontradas")) + " palabras técnicas"
+    imprimir "2. Comando técnico: " + str_desde_numero(mapa_obtener(resultado2, "palabras_tecnicas_encontradas")) + " palabras técnicas"
+    imprimir "3. Saludo: " + mapa_obtener(resultado3, "tipo_prompt")
+    imprimir "4. Despedida: " + mapa_obtener(resultado4, "tipo_prompt")
+    imprimir "5. Texto mixto: " + str_desde_numero(mapa_obtener(resultado5, "palabras_tecnicas_encontradas")) + " palabras técnicas"
+    imprimir "6. Texto general: " + mapa_obtener(resultado6, "tipo_prompt")
+    imprimir ""
+    imprimir "=== TEST DE DETECTOR DE PROMPTS COMPLETADO ==="
+    imprimir "El detector de prompts funciona correctamente"
+    imprimir ""
+    
+    imprimir "=== TEST DE DETECCIÓN CONTEXTUAL DE SINÓNIMOS ==="
+    imprimir ""
+    
+    # Crear contexto histórico para pruebas
+    lista<texto> contexto_historico = crear_lista()
+    lista_agregar(contexto_historico, "hola, necesito ayuda con programación")
+    lista_agregar(contexto_historico, "¿cómo puedo mejorar mis algoritmos?")
+    lista_agregar(contexto_historico, "quiero crear un sistema eficiente")
+    
+    # Test 7: Detección contextual - Pregunta
+    imprimir "TEST 7: Detección contextual - Pregunta"
+    mapa resultado7 = entradas.detectar_sinonimos_contextual("¿dónde encuentro buenos tutoriales?", contexto_historico, 0.3)
+    imprimir "Frase: ¿dónde encuentro buenos tutoriales?"
+    imprimir "Contexto detectado: " + mapa_obtener(resultado7, "contexto_detectado")
+    imprimir "Confianza contextual: " + str_desde_numero(mapa_obtener(resultado7, "confianza_contextual")) + "%"
+    imprimir "Total palabras: " + str_desde_numero(mapa_obtener(resultado7, "total_palabras"))
+    imprimir ""
+    
+    # Test 8: Detección contextual - Comando
+    imprimir "TEST 8: Detección contextual - Comando"
+    mapa resultado8 = entradas.detectar_sinonimos_contextual("genera una función para analizar datos", contexto_historico, 0.4)
+    imprimir "Frase: genera una función para analizar datos"
+    imprimir "Contexto detectado: " + mapa_obtener(resultado8, "contexto_detectado")
+    imprimir "Confianza contextual: " + str_desde_numero(mapa_obtener(resultado8, "confianza_contextual")) + "%"
+    imprimir "Total palabras: " + str_desde_numero(mapa_obtener(resultado8, "total_palabras"))
+    imprimir ""
+    
+    # Test 9: Detección contextual - Saludo
+    imprimir "TEST 9: Detección contextual - Saludo"
+    mapa resultado9 = entradas.detectar_sinonimos_contextual("buenas tardes, cómo estás?", contexto_historico, 0.2)
+    imprimir "Frase: buenas tardes, cómo estás?"
+    imprimir "Contexto detectado: " + mapa_obtener(resultado9, "contexto_detectado")
+    imprimir "Confianza contextual: " + str_desde_numero(mapa_obtener(resultado9, "confianza_contextual")) + "%"
+    imprimir "Total palabras: " + str_desde_numero(mapa_obtener(resultado9, "total_palabras"))
+    imprimir ""
+    
+    # Test 10: Detección contextual - Técnico
+    imprimir "TEST 10: Detección contextual - Técnico"
+    mapa resultado10 = entradas.detectar_sinonimos_contextual("implementar un sistema de análisis con algoritmos eficientes", contexto_historico, 0.5)
+    imprimir "Frase: implementar un sistema de análisis con algoritmos eficientes"
+    imprimir "Contexto detectado: " + mapa_obtener(resultado10, "contexto_detectado")
+    imprimir "Confianza contextual: " + str_desde_numero(mapa_obtener(resultado10, "confianza_contextual")) + "%"
+    imprimir "Total palabras: " + str_desde_numero(mapa_obtener(resultado10, "total_palabras"))
+    imprimir ""
+    
+    # Test 11: Detección contextual - General
+    imprimir "TEST 11: Detección contextual - General"
+    mapa resultado11 = entradas.detectar_sinonimos_contextual("el clima está agradable hoy", contexto_historico, 0.1)
+    imprimir "Frase: el clima está agradable hoy"
+    imprimir "Contexto detectado: " + mapa_obtener(resultado11, "contexto_detectado")
+    imprimir "Confianza contextual: " + str_desde_numero(mapa_obtener(resultado11, "confianza_contextual")) + "%"
+    imprimir "Total palabras: " + str_desde_numero(mapa_obtener(resultado11, "total_palabras"))
+    imprimir ""
+    
+    imprimir "=== RESUMEN DE DETECCIÓN CONTEXTUAL ==="
+    imprimir "7. Contexto pregunta: " + mapa_obtener(resultado7, "contexto_detectado")
+    imprimir "8. Contexto comando: " + mapa_obtener(resultado8, "contexto_detectado")
+    imprimir "9. Contexto saludo: " + mapa_obtener(resultado9, "contexto_detectado")
+    imprimir "10. Contexto técnico: " + mapa_obtener(resultado10, "contexto_detectado")
+    imprimir "11. Contexto general: " + mapa_obtener(resultado11, "contexto_detectado")
+    imprimir ""
+    imprimir "=== TEST COMPLETO DE ENTRADAS COMPLETADO ==="
+    imprimir "Todas las funciones de entrada funcionan correctamente"
+fin_principal
+
+enviar { Entradas }

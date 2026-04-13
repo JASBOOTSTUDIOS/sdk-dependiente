@@ -1,0 +1,206 @@
+clase Aprendizaje
+ 
+    # =============================================================================
+    # MÓDULO DE APRENDIZAJE - NEURIXIS IA
+    # =============================================================================
+    # Propósito: Implementar capacidades de aprendizaje y adaptación
+    # Funcionalidades: Asociación, refuerzo, consolidación, optimización
+    # =============================================================================
+
+    # =============================================================================
+    # 1. aprender
+    # =============================================================================
+    # Propósito: Aprender asociación entre dos conceptos
+    # Parámetros:
+    #   - texto_a (texto): Primer concepto a asociar
+    #   - texto_b (texto): Segundo concepto a asociar
+    # Retorna:
+    #   - void: Realiza el aprendizaje y refuerzo
+    # =============================================================================
+    funcion aprender(texto texto_a, texto texto_b) retorna
+        flotante _peso
+        _peso = 0.5
+        
+        mem_asociar(texto_a, texto_b, _peso)
+        
+        reforzar(texto_a, 20)
+        reforzar(texto_b, 20)
+    fin_funcion
+
+    # =============================================================================
+    # 2. aprender_con_peso
+    # =============================================================================
+    # Propósito: Aprender asociación con peso específico
+    # Parámetros:
+    #   - texto_a (texto): Primer concepto a asociar
+    #   - texto_b (texto): Segundo concepto a asociar
+    #   - peso_inicial (flotante): Peso inicial de la asociación
+    # Retorna:
+    #   - void: Realiza el aprendizaje con peso personalizado
+    # =============================================================================
+    # funcion aprender_con_peso(texto texto_a, texto texto_b, flotante peso_inicial) retorna
+
+    # =============================================================================
+    # 3. aprender_secuencial
+    # =============================================================================
+    # Propósito: Aprender secuencias de conceptos
+    # Parámetros:
+    #   - secuencia (lista<texto>): Lista de conceptos en orden
+    #   - reforzar_secuencia (bool): Si reforzar la secuencia completa
+    # Retorna:
+    #   - mapa: Resultados del aprendizaje secuencial
+    # =============================================================================
+    # funcion aprender_secuencial(lista<texto> secuencia, bool reforzar_secuencia) retorna mapa
+
+    # =============================================================================
+    # 4. reforzar_asociacion
+    # =============================================================================
+    # Propósito: Reforzar una asociación existente
+    # Parámetros:
+    #   - texto_a (texto): Primer concepto de la asociación
+    #   - texto_b (texto): Segundo concepto de la asociación
+    #   - intensidad_refuerzo (entero): Intensidad del refuerzo (1-100)
+    # Retorna:
+    #   - bool: Verdadero si se reforzó correctamente
+    # =============================================================================
+    # funcion reforzar_asociacion(texto texto_a, texto texto_b, entero intensidad_refuerzo) retorna bool
+
+    # =============================================================================
+    # 5. debilitar_asociacion
+    # =============================================================================
+    # Propósito: Debilitar una asociación existente
+    # Parámetros:
+    #   - texto_a (texto): Primer concepto de la asociación
+    #   - texto_b (texto): Segundo concepto de la asociación
+    #   - factor_debilitamiento (flotante): Factor de debilitamiento (0.0-1.0)
+    # Retorna:
+    #   - bool: Verdadero si se debilitó correctamente
+    # =============================================================================
+    # funcion debilitar_asociacion(texto texto_a, texto texto_b, flotante factor_debilitamiento) retorna bool
+
+    # =============================================================================
+    # 6. consolidar_aprendizaje
+    # =============================================================================
+    # Propósito: Consolidar el aprendizaje realizado
+    # Parámetros:
+    #   - umbral_consolidacion (flotante): Umbral mínimo para consolidar
+    #   - tiempo_consolidacion (entero): Tiempo de consolidación en ciclos
+    # Retorna:
+    #   - mapa: Estadísticas de la consolidación
+    # =============================================================================
+    # funcion consolidar_aprendizaje(flotante umbral_consolidacion, entero tiempo_consolidacion) retorna mapa
+
+    # =============================================================================
+    # 7. olvidar_asociacion
+    # =============================================================================
+    # Propósito: Olvidar una asociación específica
+    # Parámetros:
+    #   - texto_a (texto): Primer concepto de la asociación
+    #   - texto_b (texto): Segundo concepto de la asociación
+    #   - gradual (bool): Si el olvido es gradual o inmediato
+    # Retorna:
+    #   - bool: Verdadero si se olvidó correctamente
+    # =============================================================================
+    # funcion olvidar_asociacion(texto texto_a, texto texto_b, bool gradual) retorna bool
+
+    # =============================================================================
+    # 8. obtener_estadisticas_aprendizaje
+    # =============================================================================
+    # Propósito: Obtener estadísticas del proceso de aprendizaje
+    # Parámetros:
+    #   - void: No requiere parámetros
+    # Retorna:
+    #   - mapa: Estadísticas detalladas del aprendizaje
+    # =============================================================================
+    # funcion obtener_estadisticas_aprendizaje() retorna mapa
+
+    # =============================================================================
+    # 9. optimizar_red_aprendizaje
+    # =============================================================================
+    # Propósito: Optimizar la red de aprendizaje
+    # Parámetros:
+    #   - criterio_optimizacion (texto): Criterio de optimización
+    #   - umbral_optimizacion (flotante): Umbral para optimización
+    # Retorna:
+    #   - mapa: Resultados de la optimización
+    # =============================================================================
+    # funcion optimizar_red_aprendizaje(texto criterio_optimizacion, flotante umbral_optimizacion) retorna mapa
+
+    # =============================================================================
+    # 10. aprender_por_refuerzo
+    # =============================================================================
+    # Propósito: Aprender usando refuerzo positivo/negativo
+    # Parámetros:
+    #   - accion (texto): Acción realizada
+    #   - resultado (texto): Resultado obtenido
+    #   - tipo_refuerzo (texto): "positivo" o "negativo"
+    #   - magnitud (flotante): Magnitud del refuerzo
+    # Retorna:
+    #   - mapa: Resultado del aprendizaje por refuerzo
+    # =============================================================================
+    # funcion aprender_por_refuerzo(texto accion, texto resultado, texto tipo_refuerzo, flotante magnitud) retorna mapa
+
+    # =============================================================================
+    # 11. generalizar_aprendizaje
+    # =============================================================================
+    # Propósito: Generalizar el aprendizaje a conceptos similares
+    # Parámetros:
+    #   - concepto_base (texto): Concepto base para generalizar
+    #   - umbral_similitud (flotante): Umbral de similitud para generalización
+    #   - factor_generalizacion (flotante): Factor de generalización
+    # Retorna:
+    #   - lista<mapa>: Conceptos generalizados con sus pesos
+    # =============================================================================
+    # funcion generalizar_aprendizaje(texto concepto_base, flotante umbral_similitud, flotante factor_generalizacion) retorna lista<mapa>
+
+    # =============================================================================
+    # 12. adaptar_aprendizaje
+    # =============================================================================
+    # Propósito: Adaptar el aprendizaje según el contexto
+    # Parámetros:
+    #   - contexto_actual (mapa): Contexto actual del sistema
+    #   - tasa_adaptacion (flotante): Tasa de adaptación
+    #   - preservar_conocimiento (bool): Si preservar conocimiento base
+    # Retorna:
+    #   - mapa: Estado de adaptación del aprendizaje
+    # =============================================================================
+    # funcion adaptar_aprendizaje(mapa contexto_actual, flotante tasa_adaptacion, bool preservar_conocimiento) retorna mapa
+
+    # =============================================================================
+    # 13. evaluar_calidad_aprendizaje
+    # =============================================================================
+    # Propósito: Evaluar la calidad del aprendizaje realizado
+    # Parámetros:
+    #   - criterios_evaluacion (lista<texto>): Criterios de evaluación
+    #   - contexto_evaluacion (mapa): Contexto para la evaluación
+    # Retorna:
+    #   - mapa: Calidad del aprendizaje con métricas
+    # =============================================================================
+    # funcion evaluar_calidad_aprendizaje(lista<texto> criterios_evaluacion, mapa contexto_evaluacion) retorna mapa
+
+    # =============================================================================
+    # 14. exportar_aprendizaje
+    # =============================================================================
+    # Propósito: Exportar el aprendizaje a formato externo
+    # Parámetros:
+    #   - formato_exportacion (texto): Formato de exportación
+    #   - incluir_metadatos (bool): Si incluir metadatos
+    # Retorna:
+    #   - texto: Aprendizaje exportado
+    # =============================================================================
+    # funcion exportar_aprendizaje(texto formato_exportacion, bool incluir_metadatos) retorna texto
+
+    # =============================================================================
+    # 15. importar_aprendizaje
+    # =============================================================================
+    # Propósito: Importar aprendizaje desde formato externo
+    # Parámetros:
+    #   - datos_importacion (texto): Datos a importar
+    #   - formato_importacion (texto): Formato de los datos
+    #   - sobreescribir (bool): Si sobreescribir aprendizaje existente
+    # Retorna:
+    #   - mapa: Resultado de la importación
+    # =============================================================================
+    # funcion importar_aprendizaje(texto datos_importacion, texto formato_importacion, bool sobreescribir) retorna mapa
+
+fin_clase

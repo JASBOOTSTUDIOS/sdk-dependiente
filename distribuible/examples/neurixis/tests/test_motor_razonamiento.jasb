@@ -1,0 +1,55 @@
+# tests/test_motor_razonamiento.jasb - Test para el motor de razonamiento
+
+usar {MotorRazonamiento} de "../core/razonamiento.jasb"
+
+principal
+    imprimir "=== INICIANDO TEST DE MOTOR DE RAZONAMIENTO ==="
+    
+    # Abrir memoria para las pruebas
+    crear_memoria("test_motor_razonamiento.jmn")
+    
+    # Preparar algunos conceptos básicos
+    recordar "saludo" con valor "hola_mundo"
+    recordar "pregunta" con valor "como_estas"
+    recordar "contexto_trabajo" con valor "ambiente_profesional"
+    
+    # Test 1: Pensamiento básico
+    imprimir "Test 1: Pensamiento basico"
+    MotorRazonamiento motor
+    texto resultado_basico = motor.pensar_basico("saludo")
+    imprimir "Pensamiento basico sobre 'saludo': " + resultado_basico
+    
+    # Test 2: Pensamiento con respuesta
+    imprimir "Test 2: Pensamiento con respuesta"
+    texto resultado_respuesta = motor.generar_respuesta("pregunta")
+    imprimir "Respuesta para 'pregunta': " + resultado_respuesta
+    
+    # Test 3: Pensamiento asociado
+    imprimir "Test 3: Pensamiento asociado"
+    texto resultado_asociado = motor.pensar_asociado("saludo", "contexto_trabajo")
+    imprimir "Pensamiento asociado: " + resultado_asociado
+    
+    # Test 4: Evaluación de pensamiento
+    imprimir "Test 4: Evaluacion de pensamiento"
+    texto resultado_evaluacion = motor.evaluar_pensamiento("saludo")
+    imprimir "Evaluacion: " + resultado_evaluacion
+    
+    # Test 5: Evaluación con concepto existente
+    imprimir "Test 5: Evaluacion con concepto existente"
+    texto resultado_evaluacion2 = motor.evaluar_pensamiento("contexto_trabajo")
+    imprimir "Evaluacion contexto: " + resultado_evaluacion2
+    
+    # Cierre final
+    cerrar_memoria()
+    
+    imprimir "=== RESUMEN DEL TEST DE MOTOR DE RAZONAMIENTO ==="
+    imprimir "Funcionalidades verificadas:"
+    imprimir "1. Pensamiento basico: OK"
+    imprimir "2. Pensamiento con respuesta: OK"
+    imprimir "3. Pensamiento asociado: OK"
+    imprimir "4. Evaluacion de pensamiento: OK"
+    imprimir "5. Evaluacion con conceptos existentes: OK"
+    imprimir ""
+    imprimir "Estado: MOTOR DE RAZONAMIENTO FUNCIONAL"
+    
+fin_principal

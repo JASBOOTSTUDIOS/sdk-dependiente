@@ -1,0 +1,5 @@
+principal
+    texto n = "casa"
+    imprimir "Hash de casa: "
+    imprimir_id n
+fin_principal

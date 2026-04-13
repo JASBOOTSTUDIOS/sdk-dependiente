@@ -1,0 +1,45 @@
+# interfaz/conversacion.jasb - Sistema de diálogo contextual para Neurixis
+
+clase InterfazCognitiva
+    
+    # Procesamiento de entrada
+    funcion obtener_entrada() retorna texto
+        imprimir_sin_salto "Tu: "
+        texto consulta
+        ingresar_texto consulta
+        retornar consulta
+    fin_funcion
+    
+    # Generación de respuestas coherentes
+    funcion mostrar_respuesta(texto respuesta)
+        imprimir "Neurixis: " + respuesta
+    fin_funcion
+    
+    # Gestión de diálogo contextual
+    funcion gestionar_dialogo(texto consulta, texto respuesta_motor) retorna texto
+        # Si no hay respuesta clara, intentar una genérica que incite al aprendizaje
+        # Usamos una comparación robusta contra el eco
+        bool es_vacio = falso
+        si respuesta_motor == "" entonces
+            es_vacio = verdadero
+        fin_si
+        
+        # Si la respuesta es exactamente igual a la consulta, es un eco
+        bool es_eco = falso
+        si respuesta_motor == consulta entonces
+            es_eco = verdadero
+        fin_si
+        
+        # O si la respuesta contiene a la consulta (ej: "No se nada de consulta")
+        # En este caso queremos detectar si el motor fallo
+        
+        si es_vacio o es_eco entonces
+            retornar "No se nada sobre eso. ¿Puedes explicarme qué es '" + consulta + "'?"
+        fin_si
+        
+        retornar respuesta_motor
+    fin_funcion
+    
+fin_clase
+
+enviar {InterfazCognitiva}

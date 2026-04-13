@@ -1,0 +1,120 @@
+# neurixis.jasb - Clase principal de Neurixis IA
+
+usar {MemoriaNeuronal} de "core/memoria.jasb"
+usar {MotorRazonamiento} de "core/razonamiento.jasb"
+usar {MotorAprendizaje} de "core/aprendizaje.jasb"
+usar {InterfazCognitiva} de "interfaz/conversacion.jasb"
+usar {Neurona} de "core/neurona.jasb"
+
+clase Neurixis
+    MemoriaNeuronal memoria
+    MotorRazonamiento razonamiento
+    MotorAprendizaje aprendizaje
+    InterfazCognitiva interfaz
+    
+    # Estado del sistema
+    bool encendido
+    
+    funcion inicializar(texto ruta_memoria)
+        imprimir "Inicializando Neurixis: " + ruta_memoria
+        este.memoria.inicializar(ruta_memoria)
+        imprimir "Abriendo memoria..."
+        este.memoria.abrir()
+        imprimir "Memoria abierta."
+        este.encendido = verdadero
+        
+        # Cargar conocimientos base
+        imprimir "Configurando base..."
+        este.configurar_base()
+        imprimir "Neurixis inicializado."
+    fin_funcion
+    
+    funcion configurar_base()
+        # Inicializar conceptos fundamentales
+        Neurona n_hola
+        Neurona n_chao
+        Neurona n_saludo
+        Neurona n_despedida
+        Neurona n_quien
+        
+        n_hola.inicializar("hola")
+        n_hola.establecer_valor("Hola! Soy Neurixis, tu asistente cognitivo.")
+        
+        n_chao.inicializar("adios")
+        n_chao.establecer_valor("Hasta pronto, humano.")
+        
+        n_quien.inicializar("quien eres")
+        n_quien.establecer_valor("Soy Neurixis, una IA basada en memoria neuronal.")
+        
+        n_saludo.inicializar("saludo")
+        n_despedida.inicializar("despedida")
+        
+        # Establecer asociaciones básicas
+        mem_asociar("hola", "saludo", 80)
+        mem_asociar("adios", "despedida", 60)
+    fin_funcion
+    
+    funcion conversar()
+        mientras este.encendido hacer
+            texto consulta = este.interfaz.obtener_entrada()
+            
+            si consulta == "salir" entonces
+                este.encendido = falso
+                imprimir "Saliendo de Neurixis..."
+                romper
+            fin_si
+            
+            # 1. Heurística rápida para aprendizaje directo
+            si contiene_texto(consulta, "mi nombre es ") o contiene_texto(consulta, "me llamo ") entonces
+                recordar "usuario_nombre" con valor consulta
+                este.interfaz.mostrar_respuesta("Encantado de conocerte. He guardado tu nombre.")
+                este.aprendizaje.consolidar_experiencia()
+                continuar
+            fin_si
+
+            # 2. Razonamiento contextual
+            texto respuesta_cruda = este.razonamiento.generar_respuesta(consulta)
+            
+            # 3. Si no hay respuesta, intentar buscar palabras clave
+            si respuesta_cruda == "" o respuesta_cruda == consulta entonces
+                si contiene_texto(consulta, "nombre") entonces
+                    buscar "usuario_nombre"
+                    respuesta_cruda = resultado
+                fin_si
+            fin_si
+
+            texto respuesta_final = este.interfaz.gestionar_dialogo(consulta, respuesta_cruda)
+            este.interfaz.mostrar_respuesta(respuesta_final)
+            
+            # Aprendizaje autónomo (Fase 4)
+            este.aprendizaje_autonomo(consulta, respuesta_final)
+        fin_mientras
+    fin_funcion
+    
+    funcion aprendizaje_autonomo(texto consulta, texto respuesta)
+        # 1. Detección de patrones de información (X es Y)
+        si contiene_texto(consulta, " es ") entonces
+            # Intentar separar "nombre es valor"
+            # Como no tenemos 'split', buscaremos la posicion de " es "
+            # Para esta version simplificada, asumiremos que el usuario quiere
+            # que la IA asocie el sujeto con el predicado
+            aprender consulta con peso 5
+            consolidar_memoria()
+            retornar
+        fin_si
+
+        # 2. Refuerzo de interacción (solo si la respuesta no fue un eco)
+        si respuesta != "" y respuesta != consulta entonces
+            recordar consulta con valor respuesta
+            este.aprendizaje.aprender_concepto(consulta, 1)
+            este.aprendizaje.consolidar_experiencia()
+        fin_si
+    fin_funcion
+    
+    funcion terminar()
+        este.memoria.cerrar()
+    fin_funcion
+    
+fin_clase
+
+enviar {Neurixis}

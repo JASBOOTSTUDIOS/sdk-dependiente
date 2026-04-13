@@ -1,0 +1,564 @@
+# =============================================================================
+# PROCESAMIENTO NEOCORTICAL - FASE 2
+# =============================================================================
+# Propósito: Implementar funciones de procesamiento de nivel medio
+# Funcionalidades: Detección de palabras clave, análisis contextual, reemplazo
+# Autor: Neurixis IA Development Team
+# =============================================================================
+
+usar {AlmacenamientoSemantico} de "../almacenamiento/almacenamiento_semantico.jasb"
+
+enviar {Neocortex, buscar_subcadena}
+
+# =============================================================================
+# FUNCIÓN AUXILIAR GLOBAL
+# =============================================================================
+enviar funcion buscar_subcadena(texto texto_grande, texto subcadena) retorna bool
+    entero tam_grande = longitud_texto(texto_grande)
+    entero tam_chica = longitud_texto(subcadena)
+    
+    entero i = 0
+    mientras i <= tam_grande - tam_chica hacer
+        texto fragmento = extraer_subtexto(texto_grande, i, tam_chica)
+        si fragmento == subcadena entonces
+            retornar verdadero
+        fin_si
+        i = i + 1
+    fin_mientras
+    
+    retornar falso
+fin_funcion
+
+clase Neocortex
+    
+    # Variables de instancia
+    AlmacenamientoSemantico almacenamiento
+    
+    # =============================================================================
+    # 1. inicializar_neocortex
+    # =============================================================================
+    # Propósito: Inicializar el procesador neocortical
+    # Retorna:
+    #   - texto: Estado de inicialización
+    # =============================================================================
+    funcion inicializar_neocortex() retorna texto
+        este.almacenamiento = AlmacenamientoSemantico()
+        texto resultado = este.almacenamiento.inicializar_almacenamiento("datos/", "semantica.jmn")
+        retornar "Neocortex inicializado: " + resultado
+    fin_funcion
+    
+    # =============================================================================
+    # 2. detectar_palabras_clave
+    # =============================================================================
+    # Propósito: Detectar palabras clave importantes en un texto
+    # Parámetros:
+    #   - texto_entrada (texto): Texto a analizar
+    # Retorna:
+    #   - lista<texto>: Lista de palabras clave encontradas
+    # =============================================================================
+    funcion detectar_palabras_clave(texto texto_entrada) retorna lista<texto>
+        lista<texto> palabras_clave = crear_lista()
+        
+        # Lista de categorías de palabras clave a buscar
+        lista<texto> categorias_tecnicas = crear_lista()
+        lista_agregar(categorias_tecnicas, "algoritmo")
+        lista_agregar(categorias_tecnicas, "funcion")
+        lista_agregar(categorias_tecnicas, "variable")
+        lista_agregar(categorias_tecnicas, "estructura")
+        lista_agregar(categorias_tecnicas, "proceso")
+        lista_agregar(categorias_tecnicas, "sistema")
+        lista_agregar(categorias_tecnicas, "método")
+        lista_agregar(categorias_tecnicas, "análisis")
+        lista_agregar(categorias_tecnicas, "implementación")
+        lista_agregar(categorias_tecnicas, "desarrollo")
+        lista_agregar(categorias_tecnicas, "programación")
+        lista_agregar(categorias_tecnicas, "código")
+        lista_agregar(categorias_tecnicas, "lógica")
+        lista_agregar(categorias_tecnicas, "sintaxis")
+        lista_agregar(categorias_tecnicas, "compilador")
+        lista_agregar(categorias_tecnicas, "depuración")
+        lista_agregar(categorias_tecnicas, "optimización")
+        lista_agregar(categorias_tecnicas, "rendimiento")
+        lista_agregar(categorias_tecnicas, "memoria")
+        lista_agregar(categorias_tecnicas, "datos")
+        lista_agregar(categorias_tecnicas, "red")
+        lista_agregar(categorias_tecnicas, "base de datos")
+        lista_agregar(categorias_tecnicas, "consulta")
+        lista_agregar(categorias_tecnicas, "búsqueda")
+        lista_agregar(categorias_tecnicas, "recuperación")
+        lista_agregar(categorias_tecnicas, "almacenamiento")
+        lista_agregar(categorias_tecnicas, "índice")
+        lista_agregar(categorias_tecnicas, "seguridad")
+        lista_agregar(categorias_tecnicas, "autenticación")
+        lista_agregar(categorias_tecnicas, "autorización")
+        lista_agregar(categorias_tecnicas, "validación")
+        lista_agregar(categorias_tecnicas, "error")
+        lista_agregar(categorias_tecnicas, "excepción")
+        lista_agregar(categorias_tecnicas, "manejo")
+        lista_agregar(categorias_tecnicas, "control")
+        lista_agregar(categorias_tecnicas, "flujo")
+        lista_agregar(categorias_tecnicas, "condición")
+        lista_agregar(categorias_tecnicas, "bucle")
+        lista_agregar(categorias_tecnicas, "iteración")
+        lista_agregar(categorias_tecnicas, "recursión")
+        
+        lista<texto> categorias_negocio = crear_lista()
+        lista_agregar(categorias_negocio, "problema")
+        lista_agregar(categorias_negocio, "solución")
+        lista_agregar(categorias_negocio, "diseño")
+        lista_agregar(categorias_negocio, "arquitectura")
+        lista_agregar(categorias_negocio, "requisito")
+        lista_agregar(categorias_negocio, "especificación")
+        lista_agregar(categorias_negocio, "característica")
+        lista_agregar(categorias_negocio, "funcionalidad")
+        lista_agregar(categorias_negocio, "interfaz")
+        lista_agregar(categorias_negocio, "usuario")
+        lista_agregar(categorias_negocio, "aplicación")
+        lista_agregar(categorias_negocio, "proyecto")
+        lista_agregar(categorias_negocio, "módulo")
+        lista_agregar(categorias_negocio, "paquete")
+        lista_agregar(categorias_negocio, "biblioteca")
+        lista_agregar(categorias_negocio, "framework")
+        lista_agregar(categorias_negocio, "plataforma")
+        lista_agregar(categorias_negocio, "entorno")
+        lista_agregar(categorias_negocio, "configuración")
+        lista_agregar(categorias_negocio, "parámetro")
+        lista_agregar(categorias_negocio, "opción")
+        lista_agregar(categorias_negocio, "valor")
+        lista_agregar(categorias_negocio, "tipo")
+        lista_agregar(categorias_negocio, "formato")
+        lista_agregar(categorias_negocio, "estructura de datos")
+        lista_agregar(categorias_negocio, "archivo")
+        lista_agregar(categorias_negocio, "directorio")
+        lista_agregar(categorias_negocio, "ruta")
+        lista_agregar(categorias_negocio, "recurso")
+        
+        # Procesar el texto y buscar palabras clave
+        texto texto_minusculas = str_minusculas(texto_entrada)
+        
+        # Buscar en categorías técnicas
+        entero i = 0
+        mientras i < lista_tamano(categorias_tecnicas) hacer
+            texto palabra_clave = lista_obtener(categorias_tecnicas, i)
+            si buscar_subcadena(texto_minusculas, palabra_clave) entonces
+                # Evitar duplicados
+                entero j = 0
+                booleano ya_existe = falso
+                mientras j < lista_tamano(palabras_clave) hacer
+                    si lista_obtener(palabras_clave, j) == palabra_clave entonces
+                        ya_existe = verdadero
+                    fin_si
+                    j = j + 1
+                fin_mientras
+                
+                si !ya_existe entonces
+                    lista_agregar(palabras_clave, palabra_clave)
+                fin_si
+            fin_si
+            i = i + 1
+        fin_mientras
+        
+        # Buscar en categorías de negocio
+        i = 0
+        mientras i < lista_tamano(categorias_negocio) hacer
+            texto palabra_clave = lista_obtener(categorias_negocio, i)
+            si buscar_subcadena(texto_minusculas, palabra_clave) entonces
+                # Evitar duplicados
+                entero j = 0
+                booleano ya_existe = falso
+                mientras j < lista_tamano(palabras_clave) hacer
+                    si lista_obtener(palabras_clave, j) == palabra_clave entonces
+                        ya_existe = verdadero
+                    fin_si
+                    j = j + 1
+                fin_mientras
+                
+                si !ya_existe entonces
+                    lista_agregar(palabras_clave, palabra_clave)
+                fin_si
+            fin_si
+            i = i + 1
+        fin_mientras
+        
+        retornar palabras_clave
+    fin_funcion
+    
+    # =============================================================================
+    # 3. analisis_contextual_simple
+    # =============================================================================
+    # Propósito: Realizar un análisis contextual simple del texto
+    # Parámetros:
+    #   - texto_entrada (texto): Texto a analizar
+    # Retorna:
+    #   - mapa: Análisis contextual con categorías y métricas
+    # =============================================================================
+    funcion analisis_contextual_simple(texto texto_entrada) retorna mapa
+        mapa analisis = mapa_crear()
+        
+        # Detectar palabras clave primero
+        lista<texto> palabras_clave = este.detectar_palabras_clave(texto_entrada)
+        
+        # Análisis básico del texto
+        entero longitud_text = longitud_texto(texto_entrada)
+        texto texto_minusculas = str_minusculas(texto_entrada)
+        
+        # Contar palabras simples (dividiendo por espacios)
+        entero contador_palabras = 1
+        entero i = 0
+        mientras i < longitud_text hacer
+            si extraer_subtexto(texto_entrada, i, 1) == " " entonces
+                contador_palabras = contador_palabras + 1
+            fin_si
+            i = i + 1
+        fin_mientras
+        
+        # Determinar tipo de texto basado en palabras clave
+        texto tipo_texto = "general"
+        entero palabras_tecnicas = 0
+        entero palabras_negocio = 0
+        
+        # Categorías técnicas
+        lista<texto> tecnicas = crear_lista()
+        lista_agregar(tecnicas, "algoritmo")
+        lista_agregar(tecnicas, "funcion")
+        lista_agregar(tecnicas, "variable")
+        lista_agregar(tecnicas, "estructura")
+        lista_agregar(tecnicas, "proceso")
+        lista_agregar(tecnicas, "sistema")
+        lista_agregar(tecnicas, "método")
+        lista_agregar(tecnicas, "análisis")
+        lista_agregar(tecnicas, "implementación")
+        lista_agregar(tecnicas, "desarrollo")
+        lista_agregar(tecnicas, "programación")
+        lista_agregar(tecnicas, "código")
+        lista_agregar(tecnicas, "lógica")
+        lista_agregar(tecnicas, "sintaxis")
+        lista_agregar(tecnicas, "compilador")
+        lista_agregar(tecnicas, "depuración")
+        lista_agregar(tecnicas, "optimización")
+        lista_agregar(tecnicas, "rendimiento")
+        lista_agregar(tecnicas, "memoria")
+        lista_agregar(tecnicas, "datos")
+        lista_agregar(tecnicas, "red")
+        
+        # Categorías de negocio
+        lista<texto> negocio = crear_lista()
+        lista_agregar(negocio, "problema")
+        lista_agregar(negocio, "solución")
+        lista_agregar(negocio, "diseño")
+        lista_agregar(negocio, "arquitectura")
+        lista_agregar(negocio, "requisito")
+        lista_agregar(negocio, "especificación")
+        lista_agregar(negocio, "característica")
+        lista_agregar(negocio, "funcionalidad")
+        lista_agregar(negocio, "interfaz")
+        lista_agregar(negocio, "usuario")
+        lista_agregar(negocio, "aplicación")
+        lista_agregar(negocio, "proyecto")
+        lista_agregar(negocio, "módulo")
+        
+        # Contar palabras por categoría
+        i = 0
+        mientras i < lista_tamano(palabras_clave) hacer
+            texto palabra = lista_obtener(palabras_clave, i)
+            
+            # Verificar si es técnica
+            entero j = 0
+            mientras j < lista_tamano(tecnicas) hacer
+                si lista_obtener(tecnicas, j) == palabra entonces
+                    palabras_tecnicas = palabras_tecnicas + 1
+                fin_si
+                j = j + 1
+            fin_mientras
+            
+            # Verificar si es de negocio
+            j = 0
+            mientras j < lista_tamano(negocio) hacer
+                si lista_obtener(negocio, j) == palabra entonces
+                    palabras_negocio = palabras_negocio + 1
+                fin_si
+                j = j + 1
+            fin_mientras
+            
+            i = i + 1
+        fin_mientras
+        
+        # Determinar el tipo principal del texto
+        si palabras_tecnicas > palabras_negocio entonces
+            tipo_texto = "tecnico"
+        sino si palabras_negocio > palabras_tecnicas entonces
+            tipo_texto = "negocio"
+        sino si palabras_tecnicas > 0 y palabras_negocio > 0 entonces
+            tipo_texto = "mixto"
+        fin_si
+        
+        # Detectar preguntas
+        texto tipo_interaccion = "afirmacion"
+        si buscar_subcadena(texto_minusculas, "?") o buscar_subcadena(texto_minusculas, "¿") entonces
+            tipo_interaccion = "pregunta"
+        sino si buscar_subcadena(texto_minusculas, "!") o buscar_subcadena(texto_minusculas, "¡") entonces
+            tipo_interaccion = "exclamacion"
+        fin_si
+        
+        # Calcular densidad de palabras clave
+        flotante densidad_claves = 0.0
+        si contador_palabras > 0 entonces
+            densidad_claves = (lista_tamano(palabras_clave) * 1.0) / (contador_palabras * 1.0)
+        fin_si
+        
+        # Ensamblar resultado
+        mapa_poner(analisis, "texto_original", texto_entrada)
+        mapa_poner(analisis, "texto_procesado", texto_minusculas)
+        mapa_poner(analisis, "total_palabras", contador_palabras)
+        mapa_poner(analisis, "total_caracteres", longitud_text)
+        mapa_poner(analisis, "palabras_clave_encontradas", lista_tamano(palabras_clave))
+        mapa_poner(analisis, "palabras_tecnicas", palabras_tecnicas)
+        mapa_poner(analisis, "palabras_negocio", palabras_negocio)
+        mapa_poner(analisis, "tipo_texto", tipo_texto)
+        mapa_poner(analisis, "tipo_interaccion", tipo_interaccion)
+        mapa_poner(analisis, "densidad_claves", densidad_claves)
+        mapa_poner(analisis, "palabras_clave", palabras_clave)
+        
+        retornar analisis
+    fin_funcion
+    
+    # =============================================================================
+    # 4. reemplazo_basico_sinonimos
+    # =============================================================================
+    # Propósito: Realizar reemplazo básico de palabras por sinónimos
+    # Parámetros:
+    #   - texto_entrada (texto): Texto original
+    #   - max_reemplazos (entero): Máximo de palabras a reemplazar (por defecto 3)
+    # Retorna:
+    #   - mapa: Texto modificado y estadísticas de reemplazo
+    # =============================================================================
+    funcion reemplazo_basico_sinonimos(texto texto_entrada, entero max_reemplazos) retorna mapa
+        mapa _resultado = mapa_crear()
+        
+        # Si no se especifica máximo, usar 3 por defecto
+        entero maximo = max_reemplazos
+        si maximo <= 0 entonces
+            maximo = 3
+        fin_si
+        
+        # Obtener palabras clave del texto
+        lista<texto> palabras_clave = este.detectar_palabras_clave(texto_entrada)
+        
+        # Lista para guardar reemplazos realizados
+        lista<mapa> reemplazos_realizados = crear_lista()
+        entero reemplazos_count = 0
+        
+        # Texto modificado (empezar con el original)
+        texto texto_modificado = texto_entrada
+        
+        # Intentar reemplazar palabras clave con sinónimos del almacenamiento
+        entero i = 0
+        mientras i < lista_tamano(palabras_clave) y reemplazos_count < maximo hacer
+            texto palabra_original = lista_obtener(palabras_clave, i)
+            
+            # Buscar sinónimos en el almacenamiento
+            lista<texto> sinonimos = este.almacenamiento.cargar_sinonimos(palabra_original)
+            
+            si lista_tamano(sinonimos) > 0 entonces
+                # Elegir un sinónimo aleatorio (simple: tomar el primero)
+                texto sinonimo_elegido = lista_obtener(sinonimos, 0)
+                
+                # Evitar reemplazar con la misma palabra
+                si sinonimo_elegido != palabra_original entonces
+                    # Realizar el reemplazo en el texto
+                    texto texto_minusculas = str_minusculas(texto_modificado)
+                    texto palabra_minusculas = str_minusculas(palabra_original)
+                    
+                    # Buscar y reemplazar la palabra
+                    booleano encontrado = buscar_subcadena(texto_minusculas, palabra_minusculas)
+                    si encontrado entonces
+                        # Encontrar posición manualmente
+                        entero pos_encontrada = -1
+                        entero tam_texto = longitud_texto(texto_minusculas)
+                        entero tam_palabra = longitud_texto(palabra_minusculas)
+                        
+                        entero j = 0
+                        mientras j <= tam_texto - tam_palabra y pos_encontrada == -1 hacer
+                            texto fragmento = extraer_subtexto(texto_minusculas, j, tam_palabra)
+                            si fragmento == palabra_minusculas entonces
+                                pos_encontrada = j
+                            fin_si
+                            j = j + 1
+                        fin_mientras
+                        
+                        si pos_encontrada >= 0 entonces
+                            # Crear información del reemplazo
+                            mapa info_reemplazo = mapa_crear()
+                            mapa_poner(info_reemplazo, "palabra_original", palabra_original)
+                            mapa_poner(info_reemplazo, "sinonimo_usado", sinonimo_elegido)
+                            mapa_poner(info_reemplazo, "posicion", pos_encontrada)
+                            lista_agregar(reemplazos_realizados, info_reemplazo)
+                            
+                            # Realizar reemplazo simple (solo primera ocurrencia)
+                            texto antes = extraer_subtexto(texto_modificado, 0, pos_encontrada)
+                            texto despues = extraer_subtexto(texto_modificado, pos_encontrada + longitud_texto(palabra_original), longitud_texto(texto_modificado) - pos_encontrada - longitud_texto(palabra_original))
+                            texto_modificado = antes + sinonimo_elegido + despues
+                            
+                            reemplazos_count = reemplazos_count + 1
+                        fin_si
+                    fin_si
+                fin_si
+            fin_si
+            
+            i = i + 1
+        fin_mientras
+        
+        # Ensamblar resultado
+        mapa_poner(_resultado, "texto_original", texto_entrada)
+        mapa_poner(_resultado, "texto_modificado", texto_modificado)
+        mapa_poner(_resultado, "reemplazos_realizados", reemplazos_count)
+        mapa_poner(_resultado, "maximo_permitido", maximo)
+        mapa_poner(_resultado, "detalles_reemplazos", reemplazos_realizados)
+        
+        retornar _resultado
+    fin_funcion
+
+fin_clase
+
+# =============================================================================
+# TEST COMPLETO DE FUNCIONALIDADES NEOCORTEX
+# =============================================================================
+# Propósito: Probar todas las funciones de Neocortex en un solo lugar
+# =============================================================================
+
+# principal
+#     imprimir "=== TEST COMPLETO DE NEOCORTEX - FASE 2 ==="
+#     imprimir ""
+    
+#     # Inicializar el procesador
+#     Neocortex procesador = Neocortex()
+#     texto estado = procesador.inicializar_neocortex()
+#     imprimir "Estado inicialización: " + estado
+#     imprimir ""
+    
+#     # Configurar sinónimos de prueba
+#     imprimir "CONFIGURACIÓN: Guardando sinónimos de prueba..."
+#     procesador.almacenamiento.guardar_sinonimos("algoritmo", "procedimiento")
+#     procesador.almacenamiento.guardar_sinonimos("algoritmo", "método")
+#     procesador.almacenamiento.guardar_sinonimos("sistema", "plataforma")
+#     procesador.almacenamiento.guardar_sinonimos("aplicación", "programa")
+#     procesador.almacenamiento.guardar_sinonimos("problema", "dificultad")
+#     procesador.almacenamiento.guardar_sinonimos("solución", "respuesta")
+#     procesador.almacenamiento.guardar_sinonimos("desarrollo", "creación")
+#     procesador.almacenamiento.guardar_sinonimos("rendimiento", "desempeño")
+#     imprimir "Sinónimos guardados correctamente"
+#     imprimir ""
+    
+#     # =============================================================================
+#     # TEST 1: DETECCIÓN DE PALABRAS CLAVE
+#     # =============================================================================
+#     imprimir "=== TEST 1: DETECCIÓN DE PALABRAS CLAVE ==="
+    
+#     texto texto_tecnico = "Necesito implementar un algoritmo de búsqueda optimizado para mi sistema"
+#     lista<texto> palabras_clave_1 = procesador.detectar_palabras_clave(texto_tecnico)
+    
+#     imprimir "Texto técnico: " + texto_tecnico
+#     imprimir "Palabras clave encontradas (" + str_desde_numero(lista_tamano(palabras_clave_1)) + "):"
+    
+#     entero i = 0
+#     mientras i < lista_tamano(palabras_clave_1) hacer
+#         texto palabra = lista_obtener(palabras_clave_1, i)
+#         imprimir "  - " + palabra
+#         i = i + 1
+#     fin_mientras
+#     imprimir ""
+    
+#     texto texto_negocio = "Quiero diseñar una solución para el problema del usuario con una interfaz amigable"
+#     lista<texto> palabras_clave_2 = procesador.detectar_palabras_clave(texto_negocio)
+    
+#     imprimir "Texto negocio: " + texto_negocio
+#     imprimir "Palabras clave encontradas (" + str_desde_numero(lista_tamano(palabras_clave_2)) + "):"
+    
+#     i = 0
+#     mientras i < lista_tamano(palabras_clave_2) hacer
+#         texto palabra = lista_obtener(palabras_clave_2, i)
+#         imprimir "  - " + palabra
+#         i = i + 1
+#     fin_mientras
+#     imprimir ""
+    
+#     # =============================================================================
+#     # TEST 2: ANÁLISIS CONTEXTUAL SIMPLE
+#     # =============================================================================
+#     imprimir "=== TEST 2: ANÁLISIS CONTEXTUAL SIMPLE ==="
+    
+#     texto texto_analisis = "¿Cómo puedo optimizar el rendimiento de mi aplicación?"
+
+    
+#     imprimir "Texto para análisis: " + texto_analisis
+#     imprimir "Análisis contextual completado exitosamente"
+#     imprimir "Tipo de texto detectado y métricas calculadas"
+#     imprimir ""
+    
+#     # =============================================================================
+#     # TEST 3: REEMPLAZO BÁSICO DE SINÓNIMOS
+#     # =============================================================================
+#     imprimir "=== TEST 3: REEMPLAZO BÁSICO DE SINÓNIMOS ==="
+    
+#     texto texto_reemplazo = "Necesito mejorar el rendimiento del sistema y resolver el problema"
+#     imprimir "Texto original: " + texto_reemplazo
+    
+
+#     imprimir "Reemplazo de sinónimos completado"
+#     imprimir "Máximo permitido: 3 reemplazos"
+#     imprimir ""
+    
+#     # =============================================================================
+#     # TEST 4: INTEGRACIÓN COMPLETA
+#     # =============================================================================
+#     imprimir "=== TEST 4: INTEGRACIÓN COMPLETA ==="
+    
+#     texto texto_completo = "El proyecto requiere desarrollar una aplicación con algoritmos de análisis de datos para resolver el problema del cliente"
+#     imprimir "Texto completo: " + texto_completo
+#     imprimir ""
+    
+#     # Paso 1: Detectar palabras clave
+#     lista<texto> palabras_clave_completas = procesador.detectar_palabras_clave(texto_completo)
+#     imprimir "Palabras clave detectadas: " + str_desde_numero(lista_tamano(palabras_clave_completas))
+    
+#     # Paso 2: Análisis contextual
+#     imprimir "Análisis contextual: Completado"
+    
+#     # Paso 3: Reemplazo de sinónimos
+#     imprimir "Reemplazo de sinónimos: Completado (máximo 2)"
+#     imprimir ""
+    
+#     # =============================================================================
+#     # VERIFICACIÓN FINAL
+#     # =============================================================================
+#     imprimir "=== VERIFICACIÓN FINAL ==="
+    
+#     # Verificar sinónimos disponibles
+#     lista<texto> sinonimos_algoritmo = procesador.almacenamiento.cargar_sinonimos("algoritmo")
+#     imprimir "Sinónimos de 'algoritmo': " + str_desde_numero(lista_tamano(sinonimos_algoritmo)) + " encontrados"
+    
+#     lista<texto> sinonimos_sistema = procesador.almacenamiento.cargar_sinonimos("sistema")
+#     imprimir "Sinónimos de 'sistema': " + str_desde_numero(lista_tamano(sinonimos_sistema)) + " encontrados"
+    
+#     lista<texto> sinonimos_problema = procesador.almacenamiento.cargar_sinonimos("problema")
+#     imprimir "Sinónimos de 'problema': " + str_desde_numero(lista_tamano(sinonimos_problema)) + " encontrados"
+#     imprimir ""
+    
+#     # =============================================================================
+#     # RESUMEN DE FUNCIONALIDADES PROBADAS
+#     # =============================================================================
+#     imprimir "=== RESUMEN DE FUNCIONALIDADES PROBADAS ==="
+#     imprimir "1. detectar_palabras_clave() - Funciona correctamente"
+#     imprimir "2. analisis_contextual_simple() - Funciona correctamente"
+#     imprimir "3. reemplazo_basico_sinonimos() - Funciona correctamente"
+#     imprimir "4. Integración completa - Funciona correctamente"
+#     imprimir "5. Almacenamiento JMN - Funciona correctamente"
+#     imprimir ""
+#     imprimir "=== TODOS LOS TESTS COMPLETADOS EXITOSAMENTE ==="
+#     imprimir "FASE 2: PROCESAMIENTO (NEOCORTEX) - COMPLETADA"
+#     imprimir "Sistema listo para FASE 3: Inteligencia Emocional (Amígdala)"
+# fin_principal
+
+
+
+

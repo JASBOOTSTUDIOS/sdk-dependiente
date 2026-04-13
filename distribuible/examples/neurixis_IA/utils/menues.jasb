@@ -1,0 +1,30 @@
+clase Menues
+
+    funcion mostrar_menu_principal() retorna entero
+        entero opc
+        texto opcion_texto
+        limpiar_consola
+        imprimir "\cian============================================="
+        imprimir "\azul|              Menú Principal               |"
+        imprimir "\cian============================================="
+        imprimir "Menú Principal"
+        imprimir "1. Iniciar sesion"
+        imprimir "2. Registrarse"
+        imprimir "3. Chat general"
+        imprimir "4. Salir"
+        imprimir_sin_salto "Seleccione una opcion: \norm"
+        ingresar_texto opcion_texto
+
+        intentar
+            opc = str_a_entero(opcion_texto)
+        atrapar err
+            retornar 0
+        fin_intentar
+
+        retornar opc
+    fin_funcion
+    
+
+fin_clase
+
+enviar {Menues}

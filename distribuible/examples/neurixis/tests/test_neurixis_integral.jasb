@@ -1,0 +1,73 @@
+# tests/test_neurixis_integral.jasb - Test de integración completa de Neurixis
+
+usar {Neurixis} de "../neurixis.jasb"
+
+principal
+    Neurixis ia
+    
+    imprimir "=== TEST INTEGRAL: NEURIXIS IA COGNITIVA ==="
+    
+    # 0. Abrir memoria manualmente para evitar restricciones de scope de la VM
+    crear_memoria("build/memoria_integral.jmn", 256, 1024)
+    
+    # 1. Inicializar sistema (sin abrir memoria otra vez)
+    imprimir "1. Inicializando Neurixis..."
+    ia.memoria.inicializar("build/memoria_integral.jmn")
+    ia.encendido = verdadero
+    ia.configurar_base()
+    
+    # 2. Probar respuestas base (Configuración base)
+    imprimir "2. Probando respuestas pre-configuradas..."
+    
+    # Simulamos entrada "hola"
+    texto r1 = ia.razonamiento.generar_respuesta("hola")
+    imprimir "Entrada: 'hola' -> Respuesta: " + r1
+    
+    si r1 != "" entonces
+        imprimir "Prueba de respuesta base: OK"
+    sino
+        imprimir "Prueba de respuesta base: ERROR"
+    fin_si
+    
+    # 3. Probar aprendizaje autonomo
+    imprimir "3. Probando aprendizaje autonomo..."
+    # Simulamos una interaccion de aprendizaje
+    ia.aprendizaje_autonomo("clima", "El clima esta soleado.")
+    
+    # Verificamos si se guardó el concepto
+    buscar "clima"
+    texto r2 = resultado
+    imprimir "Consulta concepto aprendido 'clima' -> " + r2
+    
+    si r2 == "El clima esta soleado." entonces
+        imprimir "Aprendizaje autonomo: OK"
+    sino
+        # A veces el built-in 'buscar' requiere 'pensar' antes en esta VM
+        pensar "clima"
+        buscar "clima"
+        r2 = resultado
+        si r2 == "El clima esta soleado." entonces
+            imprimir "Aprendizaje autonomo (con pensar): OK"
+        sino
+            imprimir "Aprendizaje autonomo: ERROR (esperado 'El clima esta soleado.', obtenido '" + r2 + "')"
+        fin_si
+    fin_si
+    
+    # 4. Probar asociaciones en el motor de razonamiento
+    imprimir "4. Probando razonamiento contextual..."
+    lista rel = ia.razonamiento.buscar_relacionados("hola")
+    entero n = lista_tamano(rel)
+    imprimir "Relaciones encontradas para 'hola': " + n
+    
+    si n > 0 entonces
+        imprimir "Razonamiento contextual: OK"
+    sino
+        imprimir "Razonamiento contextual: ERROR - No se encontraron relaciones"
+    fin_si
+    
+    # 5. Finalizar y cerrar
+    imprimir "5. Cerrando y persistiendo memoria..."
+    cerrar_memoria()
+    
+    imprimir "=== TEST INTEGRAL FINALIZADO ==="
+fin_principal

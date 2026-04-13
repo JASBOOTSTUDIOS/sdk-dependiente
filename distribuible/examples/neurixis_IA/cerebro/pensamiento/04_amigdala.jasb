@@ -1,0 +1,96 @@
+# =============================================================================
+# AMÍGDALA - ANÁLISIS EMOCIONAL
+# =============================================================================
+# Propósito: Procesamiento emocional y respuestas instintivas
+# Dependencia: Normalizador
+# =============================================================================
+
+usar {Normalizador} de "./01_normalizador.jasb"
+
+enviar {Amigdala}
+
+clase Amigdala
+    
+    # =============================================================================
+    # 1. inicializar_sistema_emocional
+    # =============================================================================
+    # Propósito: Inicializar el sistema emocional con emociones básicas
+    # Retorna:
+    #   - texto: Estado de inicialización
+    # =============================================================================
+    
+    # =============================================================================
+    # 2. analizar_emocion_texto
+    # =============================================================================
+    # Propósito: Analizar contenido emocional de un texto
+    # Parámetros:
+    #   - texto (texto): Texto a analizar emocionalmente
+    # Retorna:
+    #   - mapa: Análisis emocional completo con puntuaciones
+    # =============================================================================
+    
+    # =============================================================================
+    # 3. generar_respuesta_emocional
+    # =============================================================================
+    # Propósito: Generar respuesta emocional apropiada
+    # Parámetros:
+    #   - estimulo (texto): Estímulo entrante
+    #   - estado_emocional (mapa): Estado emocional actual
+    # Retorna:
+    #   - texto: Respuesta emocional generada
+    # =============================================================================
+    
+    # =============================================================================
+    # 4. generar_respuesta_positiva
+    # =============================================================================
+    # Propósito: Generar respuesta emocional positiva
+    # Parámetros:
+    #   - estimulo (texto): Estímulo entrante
+    #   - intensidad (flotante): Intensidad emocional (0.0 - 1.0)
+    # Retorna:
+    #   - texto: Respuesta positiva generada
+    # =============================================================================
+    
+    # =============================================================================
+    # 5. generar_respuesta_negativa
+    # =============================================================================
+    # Propósito: Generar respuesta emocional negativa
+    # Parámetros:
+    #   - estimulo (texto): Estímulo entrante
+    #   - nivel_concern (entero): Nivel de preocupación (1-10)
+    # Retorna:
+    #   - texto: Respuesta negativa generada
+    # =============================================================================
+    
+    # =============================================================================
+    # 6. generar_respuesta_neutra
+    # =============================================================================
+    # Propósito: Generar respuesta emocional neutra
+    # Parámetros:
+    #   - estimulo (texto): Estímulo entrante
+    #   - tipo_neutro (texto): Tipo de respuesta neutra (informativo, analítico, directivo)
+    # Retorna:
+    #   - texto: Respuesta neutra generada
+    # =============================================================================
+    
+    # =============================================================================
+    # 7. extraer_palabras_clave
+    # =============================================================================
+    # Propósito: Extraer palabras clave de un texto para análisis
+    # Parámetros:
+    #   - texto (texto): Texto del cual extraer palabras clave
+    # Retorna:
+    #   - texto: Palabras clave encontradas separadas por comas
+    # =============================================================================
+    
+    # =============================================================================
+    # 8. es_palabra_comun
+    # =============================================================================
+    # Propósito: Verificar si una palabra es común (artículo, preposición)
+    # Parámetros:
+    #   - palabra (texto): Palabra a verificar
+    # Retorna:
+    #   - bool: Verdadero si es palabra común, falso de lo contrario
+    # =============================================================================
+
+fin_clase

@@ -23,6 +23,8 @@
 static int jmn_io_mkdir_one(const char* path) {
     if (!path || !path[0]) return 0;
 #if defined(_WIN32) || defined(_WIN64)
+    /* Ignorar directorios de unidad como "C:" */
+    if (strlen(path) == 2 && path[1] == ':') return 0;
     if (_mkdir(path) == 0 || errno == EEXIST) return 0;
 #else
     if (mkdir(path, 0777) == 0 || errno == EEXIST) return 0;
@@ -76,9 +78,8 @@ static uint32_t jmn_crc32_update(uint32_t crc, const void* data, size_t len) {
         }
         init = 1;
     }
-    crc = ~crc;
     while (len--) crc = table[(crc ^ *p++) & 0xFF] ^ (crc >> 8);
-    return ~crc;
+    return crc;
 }
 
 int jmn_io_guardar(JMNMemoria* mem, const char* ruta) {
@@ -89,19 +90,18 @@ int jmn_io_guardar(JMNMemoria* mem, const char* ruta) {
 
     uint32_t magic = JMN_MAGIC;
     uint32_t version = JMN_VERSION;
-    uint32_t crc = 0;
-
-    crc = jmn_crc32_update(crc, &magic, 4);
-    crc = jmn_crc32_update(crc, &version, 4);
-    crc = jmn_crc32_update(crc, &mem->num_nodos, 4);
-    crc = jmn_crc32_update(crc, &mem->num_conexiones, 4);
-    crc = jmn_crc32_update(crc, &mem->num_textos, 4);
+    uint32_t crc = 0xFFFFFFFF;
 
     fwrite(&magic, 4, 1, f);
+    crc = jmn_crc32_update(crc, &magic, 4);
     fwrite(&version, 4, 1, f);
+    crc = jmn_crc32_update(crc, &version, 4);
     fwrite(&mem->num_nodos, 4, 1, f);
+    crc = jmn_crc32_update(crc, &mem->num_nodos, 4);
     fwrite(&mem->num_conexiones, 4, 1, f);
+    crc = jmn_crc32_update(crc, &mem->num_conexiones, 4);
     fwrite(&mem->num_textos, 4, 1, f);
+    crc = jmn_crc32_update(crc, &mem->num_textos, 4);
 
     for (uint32_t i = 0; i < mem->cap_nodos; i++) {
         if (mem->nodos[i].used) {
@@ -114,11 +114,17 @@ int jmn_io_guardar(JMNMemoria* mem, const char* ruta) {
 
     for (uint32_t i = 0; i < mem->cap_conexiones; i++) {
         if (mem->conexiones[i].used) {
-            fwrite(&mem->conexiones[i].origen_id, 4, 1, f);
-            fwrite(&mem->conexiones[i].destino_id, 4, 1, f);
-            fwrite(&mem->conexiones[i].key_id, 4, 1, f);
-            fwrite(&mem->conexiones[i].fuerza.f, 4, 1, f);
-            crc = jmn_crc32_update(crc, &mem->conexiones[i].origen_id, 16);
+            uint32_t buf[4] = {
+                mem->conexiones[i].origen_id,
+                mem->conexiones[i].destino_id,
+                mem->conexiones[i].key_id,
+                mem->conexiones[i].fuerza.u
+            };
+            fwrite(&buf[0], 4, 1, f);
+            fwrite(&buf[1], 4, 1, f);
+            fwrite(&buf[2], 4, 1, f);
+            fwrite(&buf[3], 4, 1, f);
+            crc = jmn_crc32_update(crc, buf, 16);
         }
     }
 
@@ -135,7 +141,8 @@ int jmn_io_guardar(JMNMemoria* mem, const char* ruta) {
         }
     }
 
-    fwrite(&crc, 4, 1, f);
+    uint32_t final_crc = ~crc;
+    fwrite(&final_crc, 4, 1, f);
     fclose(f);
     return 0;
 }
@@ -145,7 +152,7 @@ int jmn_io_cargar(JMNMemoria* mem, const char* ruta) {
     FILE* f = fopen(ruta, "rb");
     if (!f) return -1;
 
-    uint32_t crc = 0;
+    uint32_t crc = 0xFFFFFFFF;
     uint32_t magic, version;
     if (fread(&magic, 4, 1, f) != 1 || magic != JMN_MAGIC) {
         fclose(f);
@@ -224,12 +231,18 @@ int jmn_io_cargar(JMNMemoria* mem, const char* ruta) {
         crc = jmn_crc32_update(crc, mem->textos[slot].texto, toread);
         mem->textos[slot].texto[255] = '\0';
         mem->textos[slot].used = 1;
+
+        /* REPARACIÓN: Actualizar hash_textos para que find_texto_slot funcione tras cargar */
+        uint32_t h = jmn_hash_u32(id) % JMN_HASH_SIZE;
+        mem->textos[slot].next_hash = mem->hash_textos[h];
+        mem->hash_textos[h] = slot;
+
         mem->num_textos++;
     }
 
     /* Checksum: si existe (formato nuevo), verificar; si no (formato viejo), aceptar */
     uint32_t stored_crc;
-    if (fread(&stored_crc, 4, 1, f) == 1 && stored_crc != crc) {
+    if (fread(&stored_crc, 4, 1, f) == 1 && stored_crc != (~crc)) {
         fclose(f);
         return -1;  /* Checksum inválido: archivo corrupto */
     }

@@ -1,0 +1,34 @@
+# =============================================================================
+# MÓDULO DE BÚSQUEDA MEJORADA
+# =============================================================================
+# Propósito: Implementar la función buscar(modo, concepto) para Neurixis IA
+# =============================================================================
+
+enviar funcion buscar_avanzado(texto modo, texto consulta) retorna entero
+    # La palabra clave 'buscar' pone el resultado en la variable sistema 'resultado'
+    buscar consulta
+    
+    # En Jasboot, 'resultado' contiene el ID del valor asociado.
+    # Si queremos el valor como texto para manejarlo en variables, 
+    # simplemente lo retornamos. El llamador podrá asignarlo a una variable 
+    # de tipo 'texto' o 'entero' según necesite.
+    
+    si modo == "id" entonces
+        # Retornamos el ID numérico
+        entero id_resultado = resultado
+        retornar id_resultado
+    fin_si
+    
+    si modo == "v" o modo == "valor" entonces
+        # Retornamos el valor. Si es un concepto de texto, 
+        # al asignarlo a una variable 'texto' se obtendrá la cadena.
+        retornar resultado
+    fin_si
+    
+    # Por defecto retornamos el resultado tal cual
+    retornar resultado
+fin_funcion
+
+
+
+

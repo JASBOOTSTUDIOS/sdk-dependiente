@@ -1,0 +1,248 @@
+# =============================================================================
+# MÓDULO DE VALIDACIÓN Y SANEAMIENTO DE ENTRADAS
+# =============================================================================
+# Este módulo proporciona funciones para validar y sanear entradas de usuario
+# asegurando que los datos sean seguros y cumplan con los formatos esperados.
+# Autor: Sistema Jasboot IA
+# Versión: 1.0
+# =============================================================================
+
+enviar clase ValidadorEntradas
+
+    # =============================================================================
+    # FUNCIÓN: validar_entrada
+    # =============================================================================
+    # Propósito: Realiza una validación básica de una entrada de usuario
+    # Parámetros:
+    #   - entrada (texto): Texto a validar
+    # Retorna: 
+    #   - bool: verdadero si la entrada es válida, falso en caso contrario
+    # =============================================================================
+    funcion validar_entrada(texto _entrada) retorna bool
+        # Verificar que la entrada no sea nula o vacía
+        si longitud_texto(_entrada) == 0 entonces
+            retornar falso
+        fin_si
+        
+        # Verificar que no contenga caracteres de control peligrosos
+        entero i = 0
+        entero tam = longitud_texto(_entrada)
+        
+        mientras i < tam hacer
+            texto char = extraer_subtexto(_entrada, i, 1)
+            entero codigo = codigo_caracter(char)
+            
+            # Rechazar caracteres de control (excepto espacio, tab, newline)
+            si (codigo >= 0 y codigo <= 31) y codigo != 9 y codigo != 10 y codigo != 13 entonces
+                retornar falso
+            fin_si
+            
+            i = i + 1
+        fin_mientras
+        
+        retornar verdadero
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: sanitizar_entrada
+    # =============================================================================
+    # Propósito: Elimina caracteres potencialmente peligrosos de una entrada
+    # Parámetros:
+    #   - entrada (texto): Texto a sanear
+    # Retorna:
+    #   - texto: Entrada saneada y segura
+    # =============================================================================
+    funcion sanitizar_entrada(texto entrada) retorna texto
+        texto resultado = ""
+        entero i = 0
+        entero tam = longitud_texto(entrada)
+        
+        mientras i < tam hacer
+            texto char = extraer_subtexto(entrada, i, 1)
+            entero codigo = codigo_caracter(char)
+            
+            # Permitir caracteres seguros: letras, números, espacios básicos
+            # y puntuación común. Rechazar caracteres de control y especiales.
+            si (codigo >= 65 y codigo <= 90) o           # A-Z
+               (codigo >= 97 y codigo <= 122) o          # a-z
+               (codigo >= 48 y codigo <= 57) o           # 0-9
+               codigo == 32 o                            # espacio
+               codigo == 9 o                             # tab
+               (codigo >= 33 y codigo <= 47) o           # ! " # $ % & ' ( ) * + , - . /
+               (codigo >= 58 y codigo <= 64) o           # : ; < = > ? @
+               (codigo >= 91 y codigo <= 96) o           # [ \ ] ^ _ `
+               (codigo >= 123 y codigo <= 126) entonces  # { | } ~
+                resultado = resultado + char
+            fin_si
+            
+            i = i + 1
+        fin_mientras
+        
+        retornar resultado
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: remover_scripting
+    # =============================================================================
+    # Propósito: Elimina patrones de scripting y código potencialmente malicioso
+    # Parámetros:
+    #   - entrada (texto): Texto a limpiar
+    # Retorna:
+    #   - texto: Texto sin patrones de scripting
+    # =============================================================================
+    funcion remover_scripting(texto entrada) retorna texto
+        # Convertir a minúsculas para detección case-insensitive
+        texto entrada_lower = str_minusculas(entrada)
+        texto _resultado = entrada
+        
+        # Lista de patrones peligrosos a buscar
+        lista<texto> patrones_peligrosos = crear_lista()
+        lista_agregar(patrones_peligrosos, "<script")
+        lista_agregar(patrones_peligrosos, "javascript:")
+        lista_agregar(patrones_peligrosos, "vbscript:")
+        lista_agregar(patrones_peligrosos, "onload=")
+        lista_agregar(patrones_peligrosos, "onerror=")
+        lista_agregar(patrones_peligrosos, "onclick=")
+        lista_agregar(patrones_peligrosos, "onmouseover=")
+        lista_agregar(patrones_peligrosos, "eval(")
+        lista_agregar(patrones_peligrosos, "alert(")
+        lista_agregar(patrones_peligrosos, "document.")
+        lista_agregar(patrones_peligrosos, "window.")
+        
+        # Buscar y reemplazar patrones peligrosos
+        entero i = 0
+        entero tam = lista_tamano(patrones_peligrosos)
+        
+        mientras i < tam hacer
+            texto patron = lista_obtener(patrones_peligrosos, i)
+            si contiene_texto(entrada_lower, patron) entonces
+                # Reemplazar con cadena vacía
+                _resultado = reemplazar_texto(_resultado, patron, "")
+                # También reemplazar la versión en mayúsculas
+                _resultado = reemplazar_texto(_resultado, str_mayusculas(patron), "")
+            fin_si
+            i = i + 1
+        fin_mientras
+        
+        retornar _resultado
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: validar_longitud
+    # =============================================================================
+    # Propósito: Verifica que una entrada cumpla con los límites de longitud
+    # Parámetros:
+    #   - entrada (texto): Texto a validar
+    #   - min (entero): Longitud mínima requerida
+    #   - max (entero): Longitud máxima permitida
+    # Retorna:
+    #   - bool: verdadero si está dentro de los límites, falso en caso contrario
+    # =============================================================================
+    funcion validar_longitud(texto entrada, entero min, entero max) retorna bool
+        entero longitud = longitud_texto(entrada)
+        
+        # Verificar que esté dentro del rango permitido
+        si longitud >= min y longitud <= max entonces
+            retornar verdadero
+        sino
+            retornar falso
+        fin_si
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: validar_caracteres_permitidos
+    # =============================================================================
+    # Propósito: Verifica que una entrada solo contenga caracteres permitidos
+    # Parámetros:
+    #   - entrada (texto): Texto a validar
+    #   - permitidos (texto): Cadena con caracteres permitidos
+    # Retorna:
+    #   - bool: verdadero si solo contiene caracteres permitidos
+    # =============================================================================
+    funcion validar_caracteres_permitidos(texto entrada, texto permitidos) retorna bool
+        entero i = 0
+        entero tam = longitud_texto(entrada)
+        
+        mientras i < tam hacer
+            texto char = extraer_subtexto(entrada, i, 1)
+            si no contiene_texto(permitidos, char) entonces
+                retornar falso
+            fin_si
+            i = i + 1
+        fin_mientras
+        
+        retornar verdadero
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: detectar_inyeccion_sql
+    # =============================================================================
+    # Propósito: Detecta patrones comunes de inyección SQL
+    # Parámetros:
+    #   - entrada (texto): Texto a analizar
+    # Retorna:
+    #   - bool: verdadero si se detectan patrones de inyección SQL
+    # =============================================================================
+    funcion detectar_inyeccion_sql(texto entrada) retorna bool
+        texto entrada_lower = str_minusculas(entrada)
+        
+        # Patrones comunes de inyección SQL
+        lista<texto> patrones_sql = crear_lista()
+        lista_agregar(patrones_sql, "union select")
+        lista_agregar(patrones_sql, "drop table")
+        lista_agregar(patrones_sql, "insert into")
+        lista_agregar(patrones_sql, "delete from")
+        lista_agregar(patrones_sql, "update set")
+        lista_agregar(patrones_sql, "exec(")
+        lista_agregar(patrones_sql, "execute(")
+        lista_agregar(patrones_sql, "sp_")
+        lista_agregar(patrones_sql, "xp_")
+        lista_agregar(patrones_sql, "--")
+        lista_agregar(patrones_sql, "/*")
+        lista_agregar(patrones_sql, "*/")
+        lista_agregar(patrones_sql, "' or")
+        lista_agregar(patrones_sql, "\" or")
+        lista_agregar(patrones_sql, "1=1")
+        lista_agregar(patrones_sql, "true")
+        
+        entero i = 0
+        entero tam = lista_tamano(patrones_sql)
+        
+        mientras i < tam hacer
+            texto patron = lista_obtener(patrones_sql, i)
+            si contiene_texto(entrada_lower, patron) entonces
+                retornar verdadero
+            fin_si
+            i = i + 1
+        fin_mientras
+        
+        retornar falso
+    fin_funcion
+
+    funcion reemplazar_texto(texto _texto, texto _buscar, texto _reemplazar) retorna texto
+        # Implementación simple de reemplazo
+        texto resultado = ""
+        entero i = 0
+        entero tam = longitud_texto(_texto)
+        entero tam_buscar = longitud_texto(_buscar)
+        
+        mientras i <= tam - tam_buscar hacer
+            texto subtexto = extraer_subtexto(_texto, i, tam_buscar)
+            si subtexto == _buscar entonces
+                resultado = resultado + _reemplazar
+                i = i + tam_buscar
+            sino
+                resultado = resultado + extraer_subtexto(_texto, i, 1)
+                i = i + 1
+            fin_si
+        fin_mientras
+        
+        # Agregar los caracteres restantes
+        si i < tam entonces
+            resultado = resultado + extraer_subtexto(_texto, i, tam - i)
+        fin_si
+        
+        retornar resultado
+    fin_funcion
+
+fin_clase

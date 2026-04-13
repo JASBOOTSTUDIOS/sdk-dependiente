@@ -1,0 +1,194 @@
+clase Razonador
+
+    # =============================================================================
+    # 1. razonar
+    # =============================================================================
+    # Propósito: Realizar razonamiento básico sobre una entrada de texto
+    # Parámetros:
+    #   - _entrada (texto): Texto de entrada para razonar
+    # Retorna:
+    #   - texto: Resultado del razonamiento
+    # =============================================================================
+    enviar funcion razonar(texto _entrada) retorna texto
+        # Primero verificar si es un concepto básico conocido
+        buscar _entrada
+        cuando resultado no es igual a "" entonces
+            retornar resultado
+        fin_cuando
+        
+        # Intentar propagación de activación
+        propagar_activacion(_entrada)
+        
+        entero tam
+        tam = rastro_activacion_tamano()
+        
+        cuando tam > 0 entonces
+            texto idea
+            idea = rastro_activacion_obtener(tam - 1)
+            
+            # Verificar que la idea obtenida sea útil
+            cuando idea no es igual a "" y idea no es igual a _entrada entonces
+                retornar idea
+            fin_cuando
+        fin_cuando
+        
+        # Si no hay resultados, intentar similitud básica
+        cuando contiene_texto(_entrada, "hola") o contiene_texto(_entrada, "buen") entonces
+            retornar "hola"
+        fin_cuando
+        
+        cuando contiene_texto(_entrada, "adios") o contiene_texto(_entrada, "chao") entonces
+            retornar "adios"
+        fin_cuando
+        
+        cuando contiene_texto(_entrada, "como") o contiene_texto(_entrada, "estas") entonces
+            retornar "como_estas"
+        fin_cuando
+        
+        retornar "desconocido"
+    fin_funcion
+    
+    # =============================================================================
+    # 2. razonar_avanzado
+    # =============================================================================
+    # Propósito: Realizar razonamiento avanzado con múltiples niveles
+    # Parámetros:
+    #   - _entrada (texto): Texto de entrada para razonar
+    #   - nivel_profundidad (entero): Nivel de profundidad del razonamiento
+    #   - contexto (mapa): Contexto adicional para el razonamiento
+    # Retorna:
+    #   - mapa: Resultado del razonamiento con metadatos
+    # =============================================================================
+    # funcion razonar_avanzado(texto _entrada, entero nivel_profundidad, mapa contexto) retorna mapa
+    
+    # =============================================================================
+    # 3. razonar_con_neocortex
+    # =============================================================================
+    # Propósito: Realizar razonamiento usando procesamiento Neocortex
+    # Parámetros:
+    #   - _entrada (texto): Texto de entrada
+    #   - palabras_clave (lista<texto>): Palabras clave detectadas
+    #   - analisis_contextual (mapa): Análisis contextual previo
+    # Retorna:
+    #   - mapa: Razonamiento enriquecido con contexto
+    # =============================================================================
+    # funcion razonar_con_neocortex(texto _entrada, lista<texto> palabras_clave, mapa analisis_contextual) retorna mapa
+    
+    # =============================================================================
+    # 4. razonar_por_analogia
+    # =============================================================================
+    # Propósito: Realizar razonamiento por analogía y similitud
+    # Parámetros:
+    #   - _entrada (texto): Texto de entrada
+    #   - base_conocimiento (lista<mapa>): Base de conocimiento para analogías
+    #   - umbral_similitud (flotante): Umbral mínimo de similitud
+    # Retorna:
+    #   - lista<mapa>: Analogías encontradas con sus similitudes
+    # =============================================================================
+    # funcion razonar_por_analogia(texto _entrada, lista<mapa> base_conocimiento, flotante umbral_similitud) retorna lista<mapa>
+    
+    # =============================================================================
+    # 5. razonar_causal
+    # =============================================================================
+    # Propósito: Realizar razonamiento causal (causa-efecto)
+    # Parámetros:
+    #   - _situacion (texto): Situación a analizar
+    #   - buscar_causas (bool): Si buscar causas o efectos
+    #   - profundidad (entero): Niveles de causalidad a explorar
+    # Retorna:
+    #   - mapa: Relaciones causales encontradas
+    # =============================================================================
+    # funcion razonar_causal(texto _situacion, bool buscar_causas, entero profundidad) retorna mapa
+    
+    # =============================================================================
+    # 6. razonar_logico
+    # =============================================================================
+    # Propósito: Realizar razonamiento lógico formal
+    # Parámetros:
+    #   - premisas (lista<texto>): Lista de premisas
+    #   - tipo_inferencia (texto): Tipo de inferencia ("deductivo", "inductivo", "abductivo")
+    #   - reglas (lista<texto>): Reglas lógicas a aplicar
+    # Retorna:
+    #   - mapa: Conclusión lógica con justificación
+    # =============================================================================
+    # funcion razonar_logico(lista<texto> premisas, texto tipo_inferencia, lista<texto> reglas) retorna mapa
+    
+    # =============================================================================
+    # 7. razonar_con_heuristica
+    # =============================================================================
+    # Propósito: Realizar razonamiento usando heurísticas y reglas prácticas
+    # Parámetros:
+    #   - _problema (texto): Problema a resolver
+    #   - heuristicas (lista<texto>): Lista de heurísticas a aplicar
+    #   - contexto (mapa): Contexto del problema
+    # Retorna:
+    #   - mapa: Solución heurística con explicación
+    # =============================================================================
+    # funcion razonar_con_heuristica(texto _problema, lista<texto> heuristicas, mapa contexto) retorna mapa
+    
+    # =============================================================================
+    # 8. razonar_bayesiano
+    # =============================================================================
+    # Propósito: Realizar razonamiento probabilístico bayesiano
+    # Parámetros:
+    #   - evidencia (lista<texto>): Evidencias disponibles
+    #   - hipotesis (lista<texto): Hipótesis a evaluar
+    #   - probabilidades_previas (mapa): Probabilidades a priori
+    # Retorna:
+    #   - mapa: Probabilidades posteriores con justificación
+    # =============================================================================
+    # funcion razonar_bayesiano(lista<texto> evidencia, lista<texto> hipotesis, mapa probabilidades_previas) retorna mapa
+    
+    # =============================================================================
+    # 9. razonar_por_casos
+    # =============================================================================
+    # Propósito: Realizar razonamiento basado en casos similares
+    # Parámetros:
+    #   - _caso_actual (texto): Caso actual a resolver
+    #   - base_casos (lista<mapa>): Base de casos anteriores
+    #   - metrica_similitud (texto): Métrica de similitud a usar
+    # Retorna:
+    #   - mapa: Casos similares con sus soluciones
+    # =============================================================================
+    # funcion razonar_por_casos(texto _caso_actual, lista<mapa> base_casos, texto metrica_similitud) retorna mapa
+    
+    # =============================================================================
+    # 10. razonar_contrafactico
+    # =============================================================================
+    # Propósito: Realizar razonamiento contrafactual (qué pasaría si...)
+    # Parámetros:
+    #   - _situacion_actual (texto): Situación actual
+    #   - cambios_hipoteticos (lista<texto>): Cambios hipotéticos
+    #   - profundidad (entero): Niveles de análisis contrafactual
+    # Retorna:
+    #   - mapa: Escenarios contrafactuales con predicciones
+    # =============================================================================
+    # funcion razonar_contrafactico(texto _situacion_actual, lista<texto> cambios_hipoteticos, entero profundidad) retorna mapa
+    
+    # =============================================================================
+    # 11. evaluar_confianza_razonamiento
+    # =============================================================================
+    # Propósito: Evaluar la confianza en el razonamiento realizado
+    # Parámetros:
+    #   - resultado_razonamiento (mapa): Resultado del razonamiento
+    #   - metodo_usado (texto): Método de razonamiento utilizado
+    #   - evidencia_disponible (lista<texto>): Evidencia disponible
+    # Retorna:
+    #   - mapa: Nivel de confianza con justificación
+    # =============================================================================
+    # funcion evaluar_confianza_razonamiento(mapa resultado_razonamiento, texto metodo_usado, lista<texto> evidencia_disponible) retorna mapa
+    
+    # =============================================================================
+    # 12. optimizar_razonamiento
+    # =============================================================================
+    # Propósito: Optimizar el proceso de razonamiento
+    # Parámetros:
+    #   - _entrada (texto): Entrada original
+    #   - restricciones (mapa): Restricciones de tiempo y recursos
+    #   - calidad_minima (flotante): Calidad mínima aceptable
+    # Retorna:
+    #   - mapa: Razonamiento optimizado con métricas
+    # =============================================================================
+    # funcion optimizar_razonamiento(texto _entrada, mapa restricciones, flotante calidad_minima) retorna mapa
+
+fin_clase

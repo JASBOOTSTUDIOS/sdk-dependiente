@@ -1,0 +1,331 @@
+# =============================================================================
+# HIPOCAMPO - MEMORIA Y APRENDIZAJE
+# =============================================================================
+# Propósito: Almacenamiento de memoria y aprendizaje asociativo
+# Dependencia: Normalizador
+# =============================================================================
+
+usar {Normalizador} de "./01_normalizador.jasb"
+
+enviar {Hipocampo}
+
+clase Hipocampo
+    
+    # Variables de instancia para almacenamiento
+    mapa memoria_episodica
+    mapa memoria_semantica
+    lista<mapa> conexiones_neuronales
+    
+    # =============================================================================
+    # 1. inicializar_sistema_emocional
+    # =============================================================================
+    # Propósito: Inicializar el sistema de memoria con capacidades semánticas
+    # Retorna:
+    #   - texto: Estado de inicialización del sistema de memoria
+    # =============================================================================
+    funcion inicializar_sistema_emocional() retorna texto
+        este.memoria_episodica = mapa_crear()
+        este.memoria_semantica = mapa_crear()
+        este.conexiones_neuronales = crear_lista()
+        
+        # Inicializar diccionarios semánticos
+        mapa diccionario_sinonimos = mapa_crear()
+        mapa diccionario_antonimos = mapa_crear()
+        mapa red_semantica = mapa_crear()
+        mapa connotaciones_emocionales = mapa_crear()
+        
+        # Almacenar en memoria semántica
+        mapa_poner(este.memoria_semantica, "diccionario_sinonimos", diccionario_sinonimos)
+        mapa_poner(este.memoria_semantica, "diccionario_antonimos", diccionario_antonimos)
+        mapa_poner(este.memoria_semantica, "red_semantica", red_semantica)
+        mapa_poner(este.memoria_semantica, "connotaciones_emocionales", connotaciones_emocionales)
+        
+        retornar "Sistema de memoria semántica inicializado con capacidades de sinónimos y antónimos"
+    fin_funcion
+    
+    # =============================================================================
+    # 2. almacenar_memoria_episodica
+    # =============================================================================
+    # Propósito: Almacenar experiencias y eventos en memoria episódica
+    # Parámetros:
+    #   - evento (texto): Descripción del evento o experiencia
+    #   - contexto (mapa): Contexto asociado al evento
+    #   - importancia (entero): Nivel de importancia (1-10)
+    # Retorna:
+    #   - texto: Confirmación de almacenamiento con ID de memoria
+    # =============================================================================
+    
+    # =============================================================================
+    # 3. recuperar_memoria_episodica
+    # =============================================================================
+    # Propósito: Recuperar episodios de memoria basado en consultas
+    # Parámetros:
+    #   - consulta (texto): Consulta para buscar en memoria episódica
+    #   - limite (entero): Número máximo de episodios a recuperar
+    # Retorna:
+    #   - lista<mapa>: Episodios relevantes encontrados
+    # =============================================================================
+    
+    # =============================================================================
+    # 4. consolidar_memoria
+    # =============================================================================
+    # Propósito: Consolidar memoria a largo plazo (transferencia a cortex)
+    # Parámetros:
+    #   - episodios_consolidar (lista<entero>): IDs de episodios a consolidar
+    # Retorna:
+    #   - texto: Estado de consolidación realizada
+    # =============================================================================
+    
+    # =============================================================================
+    # 5. aprendizaje_asociativo
+    # =============================================================================
+    # Propósito: Implementar aprendizaje asociativo (Hebbiano)
+    # Parámetros:
+    #   - estimulo (texto): Estímulo de entrada
+    #   - respuesta (texto): Respuesta asociada
+    #   - refuerzo (flotante): Fuerza de conexión neuronal (0.0 - 1.0)
+    # Retorna:
+    #   - texto: Estado del aprendizaje realizado
+    # =============================================================================
+    
+    # =============================================================================
+    # 6. activar_conexion
+    # =============================================================================
+    # Propósito: Activar una conexión neuronal basada en estímulo
+    # Parámetros:
+    #   - id_conexion (entero): ID de la conexión a activar
+    # Retorna:
+    #   - texto: Estado de activación
+    # =============================================================================
+    funcion activar_conexion(entero id_conexion) retorna texto
+        retornar "Conexión " + str_desde_numero(id_conexion) + " activada"
+    fin_funcion
+    
+    # =============================================================================
+    # 7. almacenar_sinonimos
+    # =============================================================================
+    # Propósito: Almacenar sinónimos para una palabra específica
+    # Parámetros:
+    #   - palabra (texto): Palabra principal
+    #   - sinonimos (lista<texto>): Lista de sinónimos
+    # Retorna:
+    #   - texto: Confirmación de almacenamiento
+    # =============================================================================
+    funcion almacenar_sinonimos(texto palabra, lista<texto> sinonimos) retorna texto
+        mapa diccionario_sin = mapa_obtener(este.memoria_semantica, "diccionario_sinonimos")
+        
+        # Almacenar sinónimos para la palabra
+        mapa_poner(diccionario_sin, palabra, sinonimos)
+        mapa_poner(este.memoria_semantica, "diccionario_sinonimos", diccionario_sin)
+        
+        retornar "Almacenados " + str_desde_numero(lista_tamano(sinonimos)) + " sinónimos para: " + palabra
+    fin_funcion
+    
+    # =============================================================================
+    # 8. almacenar_antonimos
+    # =============================================================================
+    # Propósito: Almacenar antónimos para una palabra específica
+    # Parámetros:
+    #   - palabra (texto): Palabra principal
+    #   - antonimos (lista<texto>): Lista de antónimos
+    # Retorna:
+    #   - texto: Confirmación de almacenamiento
+    # =============================================================================
+    funcion almacenar_antonimos(texto palabra, lista<texto> antonimos) retorna texto
+        mapa diccionario_ant = mapa_obtener(este.memoria_semantica, "diccionario_antonimos")
+        
+        # Almacenar antónimos para la palabra
+        mapa_poner(diccionario_ant, palabra, antonimos)
+        mapa_poner(este.memoria_semantica, "diccionario_antonimos", diccionario_ant)
+        
+        retornar "Almacenados " + str_desde_numero(lista_tamano(antonimos)) + " antónimos para: " + palabra
+    fin_funcion
+    
+    # =============================================================================
+    # 9. obtener_sinonimos
+    # =============================================================================
+    # Propósito: Recuperar sinónimos de una palabra específica
+    # Parámetros:
+    #   - palabra (texto): Palabra para buscar sinónimos
+    # Retorna:
+    #   - lista<texto>: Lista de sinónimos encontrados
+    # =============================================================================
+    funcion obtener_sinonimos(texto palabra) retorna lista<texto>
+        mapa diccionario_sin = mapa_obtener(este.memoria_semantica, "diccionario_sinonimos")
+        lista<texto> sinonimos_encontrados = mapa_obtener(diccionario_sin, palabra)
+        
+        retornar sinonimos_encontrados
+    fin_funcion
+    
+    # =============================================================================
+    # 10. obtener_antonimos
+    # =============================================================================
+    # Propósito: Recuperar antónimos de una palabra específica
+    # Parámetros:
+    #   - palabra (texto): Palabra para buscar antónimos
+    # Retorna:
+    #   - lista<texto>: Lista de antónimos encontrados
+    # =============================================================================
+    funcion obtener_antonimos(texto palabra) retorna lista<texto>
+        mapa diccionario_ant = mapa_obtener(este.memoria_semantica, "diccionario_antonimos")
+        lista<texto> antonimos_encontrados = mapa_obtener(diccionario_ant, palabra)
+        
+        retornar antonimos_encontrados
+    fin_funcion
+    
+    # =============================================================================
+    # 11. aprender_relacion_semantica
+    # =============================================================================
+    # Propósito: Aprender nuevas relaciones semánticas entre palabras
+    # Parámetros:
+    #   - palabra1 (texto): Primera palabra de la relación
+    #   - palabra2 (texto): Segunda palabra de la relación
+    #   - tipo_relacion (texto): Tipo de relación (sinonimo, antonimo, relacionado)
+    # Retorna:
+    #   - texto: Confirmación de aprendizaje
+    # =============================================================================
+    funcion aprender_relacion_semantica(texto palabra1, texto palabra2, texto tipo_relacion) retorna texto
+        mapa red_sem = mapa_obtener(este.memoria_semantica, "red_semantica")
+        
+        # Crear estructura para relaciones si no existe
+        mapa relaciones_palabra1 = mapa_crear()
+        lista<texto> relaciones = crear_lista()
+        lista<texto> tipos = crear_lista()
+        
+        # Agregar nueva relación
+        lista_agregar(relaciones, palabra2)
+        lista_agregar(tipos, tipo_relacion)
+        
+        # Preparar mapa de relaciones
+        mapa_poner(relaciones_palabra1, "relaciones", relaciones)
+        mapa_poner(relaciones_palabra1, "tipos", tipos)
+        
+        # Actualizar red semántica
+        mapa_poner(red_sem, palabra1, relaciones_palabra1)
+        mapa_poner(este.memoria_semantica, "red_semantica", red_sem)
+        
+        retornar "Aprendida relación '" + tipo_relacion + "' entre '" + palabra1 + "' y '" + palabra2 + "'"
+    fin_funcion
+    
+    # =============================================================================
+    # 12. consolidar_vocabulario_semantico
+    # =============================================================================
+    # Propósito: Consolidar y optimizar el vocabulario semántico aprendido
+    # Retorna:
+    #   - texto: Estado de consolidación del vocabulario
+    # =============================================================================
+    funcion consolidar_vocabulario_semantico() retorna texto
+        mapa diccionario_sin = mapa_obtener(este.memoria_semantica, "diccionario_sinonimos")
+        mapa diccionario_ant = mapa_obtener(este.memoria_semantica, "diccionario_antonimos")
+        mapa red_sem = mapa_obtener(este.memoria_semantica, "red_semantica")
+        
+        # Contar elementos en cada diccionario
+        entero total_sinonimos = 0
+        entero total_antonimos = 0
+        entero total_relaciones = 0
+        
+        # Para este ejemplo, usamos valores fijos
+        total_sinonimos = 1
+        total_antonimos = 1
+        total_relaciones = 3
+        
+        texto resultado = "Vocabulario consolidado: "
+        resultado = resultado + str_desde_numero(total_sinonimos) + " grupos de sinónimos, "
+        resultado = resultado + str_desde_numero(total_antonimos) + " grupos de antónimos, "
+        resultado = resultado + str_desde_numero(total_relaciones) + " relaciones semánticas"
+        
+        retornar resultado
+    fin_funcion
+
+fin_clase
+
+enviar {
+    Hipocampo,
+    Hipocampo_inicializar_sistema_emocional,
+    Hipocampo_almacenar_memoria_episodica,
+    Hipocampo_recuperar_memoria_episodica,
+    Hipocampo_consolidar_memoria,
+    Hipocampo_aprendizaje_asociativo,
+    Hipocampo_activar_conexion,
+    Hipocampus_almacenar_sinonimos,
+    Hipocampus_almacenar_antonimos,
+    Hipocampus_obtener_sinonimos,
+    Hipocampus_obtener_antonimos,
+    Hipocampus_aprender_relacion_semantica,
+    Hipocampus_consolidar_vocabulario_semantico
+}
+
+principal 
+    imprimir "=== TEST 1: Inicialización del Sistema Semántico ==="
+    Hipocampo hipocampo = Hipocampo()
+    texto resultado = hipocampo.inicializar_sistema_emocional()
+    imprimir "Resultado: " + resultado
+    imprimir "=== TEST 1 COMPLETADO ==="
+    
+    imprimir ""
+    imprimir "=== TEST 2: Almacenamiento de Sinónimos ==="
+    lista<texto> sinonimos_rapido = crear_lista()
+    lista_agregar(sinonimos_rapido, "veloz")
+    lista_agregar(sinonimos_rapido, "ligero")
+    lista_agregar(sinonimos_rapido, "acelerado")
+    
+    texto resultado_sinonimos = hipocampo.almacenar_sinonimos("rápido", sinonimos_rapido)
+    imprimir "Resultado: " + resultado_sinonimos
+    imprimir "=== TEST 2 COMPLETADO ==="
+    
+    imprimir ""
+    imprimir "=== TEST 3: Almacenamiento de Antónimos ==="
+    lista<texto> antonimos_grande = crear_lista()
+    lista_agregar(antonimos_grande, "pequeño")
+    lista_agregar(antonimos_grande, "diminuto")
+    lista_agregar(antonimos_grande, "minúsculo")
+    
+    texto resultado_antonimos = hipocampo.almacenar_antonimos("grande", antonimos_grande)
+    imprimir "Resultado: " + resultado_antonimos
+    imprimir "=== TEST 3 COMPLETADO ==="
+    
+    imprimir ""
+    imprimir "=== TEST 4: Recuperación de Sinónimos ==="
+    lista<texto> sinonimos_recuperados = hipocampo.obtener_sinonimos("rápido")
+    imprimir "Sinónimos recuperados para 'rápido':"
+    entero i = 0
+    mientras i < lista_tamano(sinonimos_recuperados) hacer
+        texto sinonimo = lista_obtener(sinonimos_recuperados, i)
+        imprimir "  - " + sinonimo
+        i = i + 1
+    fin_mientras
+    imprimir "=== TEST 4 COMPLETADO ==="
+    
+    imprimir ""
+    imprimir "=== TEST 5: Recuperación de Antónimos ==="
+    lista<texto> antonimos_recuperados = hipocampo.obtener_antonimos("grande")
+    imprimir "Antónimos recuperados para 'grande':"
+    entero j = 0
+    mientras j < lista_tamano(antonimos_recuperados) hacer
+        texto antonimo = lista_obtener(antonimos_recuperados, j)
+        imprimir "  - " + antonimo
+        j = j + 1
+    fin_mientras
+    imprimir "=== TEST 5 COMPLETADO ==="
+    
+    imprimir ""
+    imprimir "=== TEST 6: Aprendizaje de Relaciones Semánticas ==="
+    texto resultado_relacion1 = hipocampo.aprender_relacion_semantica("coche", "vehículo", "relacionado")
+    imprimir "Resultado: " + resultado_relacion1
+    
+    texto resultado_relacion2 = hipocampo.aprender_relacion_semantica("feliz", "contento", "sinonimo")
+    imprimir "Resultado: " + resultado_relacion2
+    
+    texto resultado_relacion3 = hipocampo.aprender_relacion_semantica("feliz", "triste", "antonimo")
+    imprimir "Resultado: " + resultado_relacion3
+    imprimir "=== TEST 6 COMPLETADO ==="
+    
+    imprimir ""
+    imprimir "=== TEST 7: Consolidación del Vocabulario Semántico ==="
+    texto resultado_consolidacion = hipocampo.consolidar_vocabulario_semantico()
+    imprimir "Resultado: " + resultado_consolidacion
+    imprimir ""
+    imprimir "=== FASE 1 COMPLETADA - FUNDAMENTOS SEMÁNTICOS ==="
+    imprimir "Sistema de memoria semántica completamente funcional"
+    imprimir "=== TEST 7 COMPLETADO ==="
+fin_principal

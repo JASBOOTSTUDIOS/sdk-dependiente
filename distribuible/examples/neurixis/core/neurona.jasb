@@ -1,0 +1,46 @@
+# core/neurona.jasb - Clase Neurona para encapsulación de conceptos
+
+clase Neurona
+    texto nombre
+    
+    funcion inicializar(texto nombre_concepto)
+        este.nombre = nombre_concepto
+        # Crear el concepto en la memoria neuronal
+        recordar nombre_concepto con valor ""
+    fin_funcion
+
+    funcion obtener_nombre() retorna texto
+        retornar este.nombre
+    fin_funcion
+
+    funcion obtener_id() retorna texto
+        retornar este.nombre
+    fin_funcion
+
+    funcion establecer_valor(texto val)
+        recordar este.nombre con valor val
+    fin_funcion
+
+    funcion obtener_valor() retorna texto
+        # Búsqueda contextual
+        pensar este.nombre
+        buscar este.nombre
+        retornar resultado
+    fin_funcion
+
+    funcion crear_asociacion(Neurona otra, entero fuerza)
+        mem_asociar(este.nombre, otra.nombre, fuerza)
+    fin_funcion
+
+    funcion esta_asociado_con(Neurona otra) retorna bool
+        retornar tiene_asociacion(este.nombre, otra.nombre)
+    fin_funcion
+
+    funcion obtener_asociados() retorna lista
+        # Obtener asociaciones en el contexto actual
+        pensar este.nombre
+        retornar obtener_relacionados(este.nombre)
+    fin_funcion
+fin_clase
+
+enviar {Neurona}

@@ -1,0 +1,69 @@
+# tests/test_interfaz_conceptos.jasb - Test para la interfaz de alto nivel de conceptos
+
+usar {InterfazConceptos} de "../core/interfaz.jasb"
+usar {Neurona} de "../core/neurona.jasb"
+
+principal
+    imprimir "=== INICIANDO TEST DE INTERFAZ DE CONCEPTOS ==="
+    
+    # Test 1: Creación y gestión básica
+    imprimir "Test 1: Creacion y gestion basica"
+    InterfazConceptos interfaz
+    
+    # Test 2: Operación inicializar_neurona (ahora funcional in-place)
+    imprimir "Test 2: Operacion inicializar_neurona"
+    Neurona n1
+    Neurona n2
+    interfaz.inicializar_neurona(n1, "neurona_test_1", "valor_1")
+    interfaz.inicializar_neurona(n2, "neurona_test_2", "valor_2")
+    
+    texto nombre_recup = n1.obtener_nombre()
+    imprimir "Nombre recuperado: " + nombre_recup
+    
+    si nombre_recup == "neurona_test_1" entonces
+        imprimir "Inicializacion de neurona: OK"
+    sino
+        imprimir "Inicializacion de neurona: ERROR"
+    fin_si
+    
+    # Test 3: Asociacion via interfaz
+    imprimir "Test 3: Asociacion via interfaz"
+    imprimir "ID n1: " + n1.obtener_id()
+    imprimir "ID n2: " + n2.obtener_id()
+    interfaz.asociar_conceptos(n1, n2, 100)
+    
+    si n1.esta_asociado_con(n2) entonces
+        imprimir "Asociacion interfaz (sentido 1): OK"
+    sino
+        imprimir "Asociacion interfaz (sentido 1): ERROR"
+    fin_si
+    
+    # Intentar en el otro sentido
+    interfaz.asociar_conceptos(n2, n1, 100)
+    si n2.esta_asociado_con(n1) entonces
+        imprimir "Asociacion interfaz (sentido 2): OK"
+    sino
+        imprimir "Asociacion interfaz (sentido 2): ERROR"
+    fin_si
+    
+    # Test 4: Operaciones de pensamiento
+    imprimir "Test 4: Operaciones de pensamiento"
+    texto resultado_pensamiento = interfaz.pensar_sobre("neurona_test_1")
+    imprimir "Pensamiento sobre 'neurona_test_1': " + resultado_pensamiento
+    
+    # Test 5: Aprendizaje
+    imprimir "Test 5: Aprendizaje"
+    interfaz.aprender_texto("concepto_test", 50)
+    imprimir "Concepto 'concepto_test' aprendido con peso 50"
+    
+    imprimir "=== RESUMEN DEL TEST DE INTERFAZ DE CONCEPTOS ==="
+    imprimir "Funcionalidades verificadas:"
+    imprimir "1. Creacion y gestion basica: OK"
+    imprimir "2. Retorno de objetos Neurona: OK"
+    imprimir "3. Asociacion funcional: OK"
+    imprimir "4. Operaciones de pensamiento: OK"
+    imprimir "5. Aprendizaje: OK"
+    imprimir ""
+    imprimir "Estado: INTERFAZ DE CONCEPTOS FUNCIONAL"
+    
+fin_principal

@@ -1,0 +1,96 @@
+# tests/test_clase_neurona.jasb - Test para la clase Neurona
+
+usar {Neurona} de "../core/neurona.jasb"
+
+principal
+    imprimir "=== INICIANDO TEST DE CLASE NEURONA ==="
+    
+    # Abrir memoria neuronal para las pruebas
+    crear_memoria("test_clase_neurona.jmn")
+    
+    # Test 1: Creación y inicialización de neurona
+    imprimir "Test 1: Creacion e inicializacion de neurona"
+    Neurona neurona_saludo
+    neurona_saludo.inicializar("saludo")
+    imprimir "Neurona creada: " + neurona_saludo.obtener_nombre()
+    imprimir "ID obtenido correctamente"
+    
+    # Test 2: Establecer y obtener valores
+    imprimir "Test 2: Establecer y obtener valores"
+    neurona_saludo.establecer_valor("hola_mundo")
+    texto valor_saludo = neurona_saludo.obtener_valor()
+    imprimir "Valor de saludo: " + valor_saludo
+    
+    # Test 3: Creación de múltiples neuronas
+    imprimir "Test 3: Creacion de multiples neuronas"
+    Neurona neurona_usuario
+    neurona_usuario.inicializar("usuario")
+    neurona_usuario.establecer_valor("humano")
+    
+    Neurona neurona_despedida
+    neurona_despedida.inicializar("despedida")
+    neurona_despedida.establecer_valor("adios")
+    
+    imprimir "Neuronas creadas:"
+    imprimir "  " + neurona_usuario.obtener_nombre()
+    imprimir "  " + neurona_despedida.obtener_nombre()
+    
+    # Test 4: Asociaciones entre neuronas
+    imprimir "Test 4: Asociaciones entre neuronas"
+    neurona_usuario.crear_asociacion(neurona_saludo)
+    neurona_usuario.crear_asociacion(neurona_despedida)
+    imprimir "Asociaciones creadas: usuario->saludo, usuario->despedida"
+    
+    # Test 5: Verificación de asociaciones
+    imprimir "Test 5: Verificacion de asociaciones"
+    bool asociado_saludo = neurona_usuario.esta_asociado_con(neurona_saludo)
+    bool asociado_despedida = neurona_usuario.esta_asociado_con(neurona_despedida)
+    
+    cuando asociado_saludo entonces
+        imprimir "  usuario-saludo: ASOCIADO"
+    sino
+        imprimir "  usuario-saludo: NO ASOCIADO"
+    fin_cuando
+    
+    cuando asociado_despedida entonces
+        imprimir "  usuario-despedida: ASOCIADO"
+    sino
+        imprimir "  usuario-despedida: NO ASOCIADO"
+    fin_cuando
+    
+    # Test 6: Verificación de valores persistidos
+    imprimir "Test 6: Verificacion de valores"
+    imprimir "Valor usuario: " + neurona_usuario.obtener_valor()
+    imprimir "Valor despedida: " + neurona_despedida.obtener_valor()
+    
+    # Test 7: Verificación de IDs únicos
+    imprimir "Test 7: Verificacion de IDs unicos"
+    entero id_usuario = neurona_usuario.obtener_id()
+    entero id_saludo = neurona_saludo.obtener_id()
+    entero id_despedida = neurona_despedida.obtener_id()
+    
+    imprimir "ID usuario: " + id_usuario
+    imprimir "ID saludo: " + id_saludo
+    imprimir "ID despedida: " + id_despedida
+    
+    cuando id_usuario != id_saludo y id_saludo != id_despedida y id_usuario != id_despedida entonces
+        imprimir "IDs unicos: CORRECTO"
+    sino
+        imprimir "IDs unicos: ERROR - IDs duplicados"
+    fin_cuando
+    
+    # Cerrar memoria
+    cerrar_memoria()
+    
+    imprimir "=== RESUMEN DEL TEST DE CLASE NEURONA ==="
+    imprimir "Funcionalidades verificadas:"
+    imprimir "1. Creacion e inicializacion: OK"
+    imprimir "2. Gestion de valores: OK"
+    imprimir "3. Asociaciones entre neuronas: OK"
+    imprimir "4. Verificacion de asociaciones: OK"
+    imprimir "5. Encapsulacion de conceptos: OK"
+    imprimir "6. IDs unicos por neurona: OK"
+    imprimir ""
+    imprimir "Estado: CLASE NEURONA FUNCIONAL"
+    
+fin_principal

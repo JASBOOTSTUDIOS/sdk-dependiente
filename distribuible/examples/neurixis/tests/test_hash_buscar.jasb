@@ -1,0 +1,16 @@
+principal
+    crear_memoria("build/test_hash.jmn", 256, 1024)
+    texto n = "casa"
+    recordar n con valor "un hogar"
+    entero id = hash n
+    
+    imprimir "Buscando por nombre 'casa'..."
+    buscar "casa"
+    imprimir "Resultado: " + resultado
+    
+    imprimir "Buscando por ID (hash) " + id + "..."
+    buscar id
+    imprimir "Resultado: " + resultado
+    
+    cerrar_memoria()
+fin_principal

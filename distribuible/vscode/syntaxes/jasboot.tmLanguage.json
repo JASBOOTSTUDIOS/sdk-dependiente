@@ -1,0 +1,369 @@
+{
+    "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+    "name": "jasboot",
+    "scopeName": "source.jasboot",
+    "patterns": [
+        {
+            "include": "#jasboot_root"
+        }
+    ],
+    "repository": {
+        "jasboot_root": {
+            "patterns": [
+                {
+                    "include": "#comments"
+                },
+                {
+                    "include": "#strings_double"
+                },
+                {
+                    "include": "#strings_backtick"
+                },
+                {
+                    "include": "#strings_concept"
+                },
+                {
+                    "include": "#numbers"
+                },
+                {
+                    "include": "#operators"
+                },
+                {
+                    "include": "#keywords_control"
+                },
+                {
+                    "include": "#keywords_declarative"
+                },
+                {
+                    "include": "#keywords_storage"
+                },
+                {
+                    "include": "#keywords_word_op"
+                },
+                {
+                    "include": "#keywords_import"
+                },
+                {
+                    "include": "#keywords_constant"
+                },
+                {
+                    "include": "#keywords_io"
+                },
+                {
+                    "include": "#keywords_support_1"
+                },
+                {
+                    "include": "#keywords_support_2"
+                },
+                {
+                    "include": "#keywords_support_3"
+                },
+                {
+                    "include": "#forbidden_english"
+                },
+                {
+                    "include": "#identifiers"
+                }
+            ]
+        },
+        "comments": {
+            "patterns": [
+                {
+                    "name": "comment.line.double-slash.jasboot",
+                    "match": "//.*"
+                },
+                {
+                    "name": "comment.line.number-sign.jasboot",
+                    "match": "#.*"
+                },
+                {
+                    "begin": "/\\*",
+                    "end": "\\*/",
+                    "patterns": [],
+                    "name": "comment.block.jasboot"
+                }
+            ]
+        },
+        "strings_double": {
+            "begin": "\"",
+            "end": "\"",
+            "patterns": [
+                {
+                    "include": "#string_escapes"
+                },
+                {
+                    "include": "#string_color_escape"
+                },
+                {
+                    "include": "#interpolation"
+                }
+            ],
+            "name": "string.quoted.double.jasboot"
+        },
+        "strings_backtick": {
+            "begin": "`",
+            "end": "`",
+            "patterns": [
+                {
+                    "include": "#string_escapes"
+                },
+                {
+                    "include": "#string_color_escape"
+                },
+                {
+                    "include": "#interpolation"
+                }
+            ],
+            "name": "string.quoted.backtick.jasboot"
+        },
+        "string_escapes": {
+            "patterns": [
+                {
+                    "name": "constant.character.escape.jasboot",
+                    "match": "\\\\([nrt\"\\\\]|[eE])"
+                },
+                {
+                    "name": "constant.character.escape.jasboot",
+                    "match": "\\\\."
+                }
+            ]
+        },
+        "string_color_escape": {
+            "patterns": [
+                {
+                    "name": "constant.other.escape.color.jasboot",
+                    "match": "\\\\(normal|negrita|amarillo|magenta|blanco|verde|reset|rojo|verd|amar|azul|mage|cian|blan|negr|norm|rese)\\b"
+                }
+            ]
+        },
+        "interpolation": {
+            "begin": "\\$\\{",
+            "end": "\\}",
+            "patterns": [
+                {
+                    "include": "#interpolated_expr"
+                }
+            ],
+            "name": "meta.interpolation.jasboot",
+            "beginCaptures": {
+                "0": {
+                    "name": "punctuation.definition.template-expression.begin.jasboot"
+                }
+            },
+            "endCaptures": {
+                "0": {
+                    "name": "punctuation.definition.template-expression.end.jasboot"
+                }
+            }
+        },
+        "interpolated_expr": {
+            "patterns": [
+                {
+                    "begin": "\\{",
+                    "end": "\\}",
+                    "patterns": [
+                        {
+                            "include": "#interpolated_expr"
+                        }
+                    ],
+                    "name": "meta.block.interpolation.jasboot"
+                },
+                {
+                    "begin": "\"",
+                    "end": "\"",
+                    "patterns": [
+                        {
+                            "include": "#string_escapes"
+                        },
+                        {
+                            "include": "#string_color_escape"
+                        }
+                    ],
+                    "name": "string.quoted.double.jasboot"
+                },
+                {
+                    "begin": "`",
+                    "end": "`",
+                    "patterns": [
+                        {
+                            "include": "#string_escapes"
+                        },
+                        {
+                            "include": "#string_color_escape"
+                        },
+                        {
+                            "include": "#interpolation"
+                        }
+                    ],
+                    "name": "string.quoted.backtick.jasboot"
+                },
+                {
+                    "include": "#comments"
+                },
+                {
+                    "include": "#numbers"
+                },
+                {
+                    "include": "#operators"
+                },
+                {
+                    "include": "#keywords_control"
+                },
+                {
+                    "include": "#keywords_declarative"
+                },
+                {
+                    "include": "#keywords_storage"
+                },
+                {
+                    "include": "#keywords_word_op"
+                },
+                {
+                    "include": "#keywords_import"
+                },
+                {
+                    "include": "#keywords_constant"
+                },
+                {
+                    "include": "#keywords_io"
+                },
+                {
+                    "include": "#keywords_support_1"
+                },
+                {
+                    "include": "#keywords_support_2"
+                },
+                {
+                    "include": "#keywords_support_3"
+                },
+                {
+                    "name": "meta.brace.round.jasboot",
+                    "match": "[()]"
+                },
+                {
+                    "name": "punctuation.separator.comma.jasboot",
+                    "match": ","
+                },
+                {
+                    "name": "variable.other.readwrite.jasboot",
+                    "match": "\\b[a-zA-Z_][a-zA-Z0-9_]*\\b"
+                }
+            ]
+        },
+        "strings_concept": {
+            "begin": "'",
+            "end": "'",
+            "patterns": [
+                {
+                    "name": "constant.character.escape.jasboot",
+                    "match": "\\\\."
+                }
+            ],
+            "name": "string.quoted.single.concept.jasboot"
+        },
+        "numbers": {
+            "patterns": [
+                {
+                    "name": "constant.numeric.hex.jasboot",
+                    "match": "\\b0[xX][0-9a-fA-F]+\\b"
+                },
+                {
+                    "name": "constant.numeric.float.jasboot",
+                    "match": "\\b\\d+\\.\\d+\\b"
+                },
+                {
+                    "name": "constant.numeric.integer.jasboot",
+                    "match": "\\b\\d+\\b"
+                }
+            ]
+        },
+        "operators": {
+            "patterns": [
+                {
+                    "name": "keyword.operator.arrow.jasboot",
+                    "match": "=>"
+                },
+                {
+                    "name": "keyword.operator.comparison.jasboot",
+                    "match": "(===|==|!=|<=|>=|\\+\\+|--|\\+=|-=|\\*=|/=|<<|>>)"
+                },
+                {
+                    "name": "keyword.operator.assignment.jasboot",
+                    "match": "="
+                },
+                {
+                    "name": "keyword.operator.jasboot",
+                    "match": "[+\\-*/%?:!]"
+                },
+                {
+                    "name": "keyword.operator.jasboot",
+                    "match": "[<>=]"
+                },
+                {
+                    "name": "punctuation.accessor.jasboot",
+                    "match": "\\."
+                },
+                {
+                    "name": "punctuation.definition.bracket.jasboot",
+                    "match": "[()\\[\\]{}]"
+                },
+                {
+                    "name": "punctuation.separator.comma.jasboot",
+                    "match": ","
+                },
+                {
+                    "name": "punctuation.terminator.jasboot",
+                    "match": ";"
+                }
+            ]
+        },
+        "keywords_control": {
+            "match": "\\b(fin_seleccionar|fin_principal|fin_para_cada|fin_mientras|fin_concepto|fin_registro|fin_intentar|fin_funcion|fin_archivo|seleccionar|fin_cuando|principal|continuar|fin_hacer|para_cada|mientras|retornar|concepto|registro|intentar|funcion|defecto|atrapar|cuando|fin_si|romper|lanzar|llamar|hacer|final|macro|sobre|sino|caso|si)\\b",
+            "name": "keyword.control.jasboot"
+        },
+        "keywords_declarative": {
+            "match": "\\b(app|vista|componente|tema|rutas|columna|fila|tarjeta|texto|titulo|subtitulo|boton_ruta|boton_alerta|boton_secundario|jasb)\\b",
+            "name": "keyword.declarative.jasboot"
+        },
+        "keywords_storage": {
+            "match": "\\b(constante|flotante|caracter|entero|texto|lista|byte|vec2|vec3|vec4|mat4|mat3|mapa|bool|u32|u64|u8)\\b",
+            "name": "storage.type.jasboot"
+        },
+        "keywords_word_op": {
+            "match": "\\b(entonces|distinto|entrada|retorna|valor|igual|mayor|menor|peso|como|con|que|es|no|de|o|y|a)\\b",
+            "name": "keyword.operator.word.jasboot"
+        },
+        "keywords_import": {
+            "match": "\\b(enviar|todas|usar|todo)\\b",
+            "name": "keyword.control.import.jasboot"
+        },
+        "keywords_constant": {
+            "match": "\\b(verdadero|falso)\\b",
+            "name": "constant.language.jasboot"
+        },
+        "keywords_io": {
+            "match": "\\b(imprimir_sin_salto|ingreso_inmediato|imprimir_flotante|limpiar_consola|imprimir_texto|ingresar_texto|imprimir_id|imprimir|decimal)\\b",
+            "name": "support.function.builtin.io.jasboot"
+        },
+        "forbidden_english": {
+            "match": "\\b(function|endwhile|return|endfor|import|export|while|endif|false|const|class|else|true|null|for|var|let|if)\\b",
+            "name": "invalid.illegal.name.jasboot"
+        },
+        "identifiers": {
+            "match": "\\b[a-zA-Z_][a-zA-Z0-9_]*\\b",
+            "name": "variable.other.readwrite.jasboot"
+        },
+        "keywords_support_1": {
+            "match": "\\b(rastro_activacion_recientes|ventana_rastro_activacion|rastro_activacion_ventana|rastro_activacion_limpiar|rastro_activacion_obtener|rastro_activacion_tamano|asociar_pesos_conceptos|obtener_todos_conceptos|obtener_nombre_concepto|rastro_activacion_lista|elegir_por_peso_semilla|n_recordar_triple_texto|buscar_asociados_lista|rastro_activacion_peso|propagar_activacion_de|resolver_conflictos_de|diferencia_en_segundos|n_buscar_donde_aparece|n_configurar_cache_lru|mem_aprender_peso_reg|elegir_por_peso_segun|n_buscar_objeto_texto|obtener_relacionados|str_extraer_caracter|percepcion_recientes|elegir_por_peso_seed|es_variable_sistema|json_objeto_obtener|mem_obtener_u32_ind|percepcion_anterior|propagar_activacion|resolver_conflictos|n_buscar_predicados|extraer_despues_de|imprimir_auditoria|propiedad_concepto|leer_linea_archivo|json_lista_obtener|corregir_secuencia|asociar_diferencia|asociados_lista_de|consolidar_memoria|ventana_percepcion|percepcion_limpiar|elegir_por_peso_id|segmentar_palabras|convertir_flotante|mem_obtener_fuerza|n_configurar_bloom|obtener_timestamp|mem_lista_agregar|mem_lista_obtener|mem_lista_limpiar|mem_lista_liberar|mem_lista_filtrar|json_lista_tamano|bytes_desde_texto|mem_poner_u32_ind|asociar_secuencia|comparar_patrones|asociar_similitud|decaer_conexiones|percepcion_tamano|n_existe_concepto|extraer_antes_de|escribir_archivo|pensar_respuesta|sistema_ejecutar|fs_escribir_byte|entrada_flotante|fs_escribir_byte|str_desde_numero|caracter_a_texto|mem_lista_tamano|mem_lista_mapear|tiene_asociacion|registrar_patron|pensar_siguiente|asociar_relacion|buscar_asociados|decae_conexiones|extraer_subtexto|convertir_entero|percibir_teclado|n_buscar_objetos|n_buscar_sujetos|n_olvidar_triple|mat4_transpuesta|define_concepto|listar_archivos|codigo_caracter|byte_a_caracter)\\b",
+            "name": "support.function.builtin.jasboot"
+        },
+        "keywords_support_2": {
+            "match": "\\b(caracter_a_byte|mem_lista_crear|json_a_flotante|comparar_gt_flt|pensar_anterior|olvidar_debiles|elegir_por_peso|buscar_en_texto|n_obtener_texto|n_recordar_peso|n_buscar_objeto|n_buscar_sujeto|n_lista_triples|n_heredar_texto|vec2_normalizar|vec3_normalizar|vec4_normalizar|http_solicitud|http_respuesta|activar_modulo|contiene_texto|ultima_palabra|cerrar_memoria|crear_concepto|cerrar_archivo|existe_archivo|procesar_texto|str_minusculas|str_a_flotante|json_stringify|bytes_subbytes|flujo_temporal|longitud_texto|n_cerrar_grafo|n_grafo_valido|n_tamano_grafo|mat4_identidad|http_servidor|crear_memoria|abrir_archivo|lista_obtener|aprender_peso|lista_agregar|lista_limpiar|obtener_campo|fs_leer_linea|lista_liberar|lista_filtrar|json_a_entero|bytes_obtener|bytes_a_texto|dividir_texto|fs_leer_texto|obtener_ahora|n_abrir_grafo|vec2_longitud|vec3_longitud|vec4_longitud|arcotangente2|mat4_mul_vec4|mat3_mul_vec3|copiar_texto|lista_tamano|mapa_obtener|str_a_entero|fs_leer_byte|lista_mapear|json_a_texto|bytes_tamano|bytes_anexar|dns_resolver|tcp_conectar|tcp_escuchar|tls_servidor|asociados_de|leer_entrada|n_obtener_id|mat4_inversa|buscar_peso|termina_con|crear_lista|lista_crear|fs_escribir|json_a_bool|bytes_crear|bytes_poner|tcp_aceptar|tcp_recibir|tls_cliente|tls_recibir|mem_asociar|palabras_de|ir_escribir|vec2_restar|vec3_restar|vec4_restar|ffi_simbolo|biblioteca|str_copiar|mapa_crear|mapa_poner|json_parse|tcp_enviar|tcp_cerrar|tls_enviar|tls_cerrar|mem_cerrar|consolidar|percepcion|minusculas|concatenar|n_recordar|vec2_sumar|vec3_sumar|vec4_sumar|vec3_cross|ffi_cargar|ffi_llamar|responder|penalizar|fs_listar|finalizar|fs_cerrar|json_tipo|mem_crear|n_heredar|recordar|aprender|reforzar|fs_abrir|sys_argc|sys_argv|reservar|longitud|vec2_dot|vec3_dot|vec4_dot|mat4_mul|mat3_mul|asociar)\\b",
+            "name": "support.function.builtin.jasboot"
+        },
+        "keywords_support_3": {
+            "match": "\\b(olvidar|bit_shl|bit_shr|liberar|dividir|socket|buscar|pensar|dormir|bytes|ahora|atan2|log10|tls|sin|cos|tan|exp|log)\\b",
+            "name": "support.function.builtin.jasboot"
+        }
+    }
+}

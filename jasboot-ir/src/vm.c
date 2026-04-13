@@ -1880,20 +1880,6 @@ static VMTlsEntry* vm_tls_get(VM* vm, uint32_t handle) {
     return &vm->tls_entries[handle - 1];
 }
 
-static int vm_http_server_reserve(VM* vm, uint32_t needed) {
-    if (!vm) return 0;
-    if (needed <= vm->http_server_cap) return 1;
-    {
-        uint32_t cap = vm->http_server_cap ? vm->http_server_cap * 2u : 8u;
-        while (cap < needed) cap *= 2u;
-        VMHttpServerEntry* next = (VMHttpServerEntry*)realloc(vm->http_servers, cap * sizeof(VMHttpServerEntry));
-        if (!next) return 0;
-        memset(next + vm->http_server_cap, 0, (cap - vm->http_server_cap) * sizeof(VMHttpServerEntry));
-        vm->http_servers = next;
-        vm->http_server_cap = cap;
-    }
-    return 1;
-}
 
 typedef struct VMOpenSslApi {
     int loaded;
@@ -2899,7 +2885,13 @@ static void vm_put_throw_texto(VM* vm, const char* msg) {
 static int vm_try_catch_or_abort(VM* vm, const char* msg) {
     if (!vm || !vm->ir || vm->try_depth <= 0) return 0;
     size_t code_start = vm_code_start(vm->ir);
-    uint32_t off = vm->try_code_off[vm->try_depth - 1];
+    int idx = vm->try_depth - 1;
+    uint32_t off = vm->try_code_off[idx];
+    vm->fp = vm->try_fp[idx];
+    vm->sp = vm->try_sp[idx];
+    vm->stack_ptr = vm->try_stack_ptr[idx];
+    vm->fp_stack_ptr = vm->try_fp_stack_ptr[idx];
+    vm->current_closure_env = vm->try_closure_env[idx];
     vm->try_depth--;
     vm_put_throw_texto(vm, msg);
     vm->pc = code_start + (size_t)off;
@@ -2911,7 +2903,9 @@ static int vm_try_catch_or_abort(VM* vm, const char* msg) {
 static int vm_memoria_abierta_en_este_bloque(VM* vm) {
 #ifdef JASBOOT_LANG_INTEGRATION
     if (!vm || !vm->mem_neuronal) return 0;
-    return vm->mem_neuronal_owner_depth == vm_call_depth(vm);
+    /* REPARACIÓN: No restringir el cierre a la misma profundidad de llamada.
+       Esto permite que objetos (como AlmacenamientoSemantico) gestionen la memoria. */
+    return 0; 
 #else
     (void)vm;
     return 0;
@@ -3439,6 +3433,24 @@ int vm_step(VM* vm) {
             break;
         }
 
+        case OP_MEM_MAPA_CONTIENE: {
+            uint32_t map_id_val = (uint32_t)b_val;
+            uint32_t key_val = (uint32_t)c_val;
+            uint32_t existe = 0;
+#ifdef JASBOOT_LANG_INTEGRATION
+            ensure_jmn_col(vm);
+            if (vm->mem_colecciones) {
+                JMNValor val;
+                if (jmn_mapa_obtener_si_existe(vm->mem_colecciones, map_id_val, key_val, &val)) {
+                    existe = 1;
+                }
+            }
+#endif
+            vm_set_register(vm, inst.operand_a, (uint64_t)existe);
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
         case OP_IR: {
             if (inst.flags & IR_INST_FLAG_A_IMMEDIATE) {
                 uint32_t target = vm_decode_u24(inst.operand_a, inst.operand_b, inst.operand_c, inst.flags);
@@ -3464,7 +3476,14 @@ int vm_step(VM* vm) {
                 vm->exit_code = 1;
                 return 0;
             }
-            vm->try_code_off[vm->try_depth++] = target;
+            int idx = vm->try_depth;
+            vm->try_code_off[idx] = target;
+            vm->try_fp[idx] = vm->fp;
+            vm->try_sp[idx] = vm->sp;
+            vm->try_stack_ptr[idx] = vm->stack_ptr;
+            vm->try_fp_stack_ptr[idx] = vm->fp_stack_ptr;
+            vm->try_closure_env[idx] = vm->current_closure_env;
+            vm->try_depth++;
             vm->pc += IR_INSTRUCTION_SIZE;
             break;
         }
@@ -3773,6 +3792,24 @@ int vm_step(VM* vm) {
                 } else {
                     vm->running = 0;
                 }
+            }
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
+        case OP_ID_A_TEXTO: {
+            uint32_t id = (uint32_t)vm_get_register(vm, inst.operand_b);
+            if (vm->mem_neuronal) {
+                char buf[1024];
+                if (jmn_obtener_texto(vm->mem_neuronal, id, buf, sizeof(buf)) >= 0 && buf[0]) {
+                    uint32_t tid = vm_alloc_runtime_text_id(vm);
+                    vm_text_cache_put_owned(vm, tid, strdup(buf), strlen(buf));
+                    vm_set_register(vm, inst.operand_a, (uint64_t)tid);
+                } else {
+                    vm_set_register(vm, inst.operand_a, (uint64_t)id);
+                }
+            } else {
+                vm_set_register(vm, inst.operand_a, (uint64_t)id);
             }
             vm->pc += IR_INSTRUCTION_SIZE;
             break;
@@ -5024,7 +5061,8 @@ int vm_step(VM* vm) {
                         vm_leer_u32(vm->ir->data, vm->ir->header.data_size, off24, &id_a);
                         vm_leer_u32(vm->ir->data, vm->ir->header.data_size, off24 + 4, &id_b);
                         vm_leer_u32(vm->ir->data, vm->ir->header.data_size, off24 + 8, &f_bits);
-                        float fuerza = *(float*)&f_bits;
+                        float fuerza;
+                        memcpy(&fuerza, &f_bits, sizeof(fuerza));
                         // fprintf(stderr, "[VM_ASOCIAR] (off) id_a=%u id_b=%u fuerza=%.2f\n", id_a, id_b, fuerza);
                         JMNValor v_f; v_f.f = fuerza;
                         jmn_agregar_conexion(vm->mem_neuronal, id_a, id_b, v_f, 0);
@@ -5064,7 +5102,8 @@ int vm_step(VM* vm) {
                         vm_leer_u32(vm->ir->data, vm->ir->header.data_size, off24, &id_a);
                         vm_leer_u32(vm->ir->data, vm->ir->header.data_size, off24 + 4, &id_b);
                         vm_leer_u32(vm->ir->data, vm->ir->header.data_size, off24 + 8, &f_bits);
-                        float delta = *(float*)&f_bits;
+                        float delta;
+                        memcpy(&delta, &f_bits, sizeof(delta));
                         // fprintf(stderr, "[VM_PENALIZAR] (off) id_a=%u id_b=%u delta=%.2f\n", id_a, id_b, delta);
                         jmn_penalizar_asociacion(vm->mem_neuronal, id_a, id_b, delta);
                     }
@@ -5406,7 +5445,7 @@ int vm_step(VM* vm) {
                 return 0;
             }
             vm->registers[inst.operand_a] = 0;
-            *(float*)&vm->registers[inst.operand_a] = val;
+            memcpy(&vm->registers[inst.operand_a], &val, sizeof(val));
             vm->pc += IR_INSTRUCTION_SIZE;
             break;
         }
@@ -6139,7 +6178,7 @@ int vm_step(VM* vm) {
                 return 0;
             }
             vm->registers[inst.operand_a] = 0;
-            *(float*)&vm->registers[inst.operand_a] = fv;
+            memcpy(&vm->registers[inst.operand_a], &fv, sizeof(fv));
             vm->pc += IR_INSTRUCTION_SIZE;
             break;
         }
@@ -7357,6 +7396,31 @@ int vm_step(VM* vm) {
             vm->pc += IR_INSTRUCTION_SIZE;
             break;
         }
+
+        case OP_STR_MAYUSCULAS: {
+            // A = dest, B = string_reg
+            uint64_t b_val = vm_get_register(vm, inst.operand_b);
+            const char* str = vm_text_cache_get(vm, (uint32_t)b_val);
+            if (str) {
+                char* upper = strdup(str);
+                for (char* p = upper; *p; p++) {
+                    *p = toupper(*p);
+                }
+                uint32_t hash = vm_hash_texto(upper);
+                vm_text_cache_put(vm, hash, upper);
+#ifdef JASBOOT_LANG_INTEGRATION
+                if (vm->mem_neuronal) {
+                    jmn_guardar_texto(vm->mem_neuronal, hash, upper);
+                }
+#endif
+                vm_set_register(vm, inst.operand_a, (uint64_t)hash);
+                free(upper);
+            } else {
+                vm_set_register(vm, inst.operand_a, 5381);
+            }
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
         
         case OP_FS_ABRIR: {
             // A = file_handle, B = path_reg, C = mode_reg (hash o offset en data)
@@ -8173,7 +8237,7 @@ int vm_run_with_limit(VM* vm, uint64_t max_steps) {
                 vm->pc += IR_INSTRUCTION_SIZE;
                 break;
             case OP_NO:
-                STORE_REG_FAST(op_a, ~b_val);
+                STORE_REG_FAST(op_a, (b_val == 0) ? 1 : 0);
                 vm->pc += IR_INSTRUCTION_SIZE;
                 break;
             case OP_BIT_SHL:

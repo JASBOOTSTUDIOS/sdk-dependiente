@@ -56,7 +56,8 @@ typedef enum {
     NODE_SELECT,
     NODE_TRY,
     NODE_THROW,
-    NODE_LAMBDA_DECL
+    NODE_LAMBDA_DECL,
+    NODE_EXPORT_DIRECTIVE
 } NodeType;
 
 struct ASTNode {
@@ -111,6 +112,11 @@ typedef struct {
     char **field_types;
     char **field_names;
     size_t n_fields;
+    ASTNode **methods;        /* FunctionNode */
+    size_t n_methods;
+    int *field_visibilities;  /* 0=publico, 1=privado */
+    int *method_visibilities; /* 0=publico, 1=privado */
+    int is_exported;
 } StructDefNode;
 
 /* 2.3 Expresiones */
@@ -406,5 +412,11 @@ typedef struct {
     size_t n_params;
     ASTNode *body;
 } LambdaDeclNode;
+
+typedef struct {
+    ASTNode base;
+    char **names;
+    size_t n_names;
+} ExportDirectiveNode;
 
 #endif /* NODES_H */

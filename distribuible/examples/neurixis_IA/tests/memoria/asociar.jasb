@@ -1,0 +1,12 @@
+
+
+principal
+crear_memoria("test.jmn", 1000, 1024)
+    recordar "Nombre" con valor "Jefry Astacio"
+    buscar "Nombre"
+    texto nombre = resultado
+    imprimir "Nombre: " + nombre
+    imprimir "Hola Mundo"
+consolidar_memoria()
+cerrar_memoria()
+fin_principal

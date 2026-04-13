@@ -1,0 +1,594 @@
+# =============================================================================
+# MÓDULO DE VALIDACIÓN Y NORMALIZACIÓN DE FORMATOS ESPECÍFICOS
+# =============================================================================
+# Este módulo proporciona funciones para validar y normalizar formatos comunes
+# como emails, URLs, números de teléfono, fechas y otros datos estructurados.
+# Optimizado para validación de entradas de usuario en formularios y aplicaciones.
+# Autor: Sistema Jasboot IA
+# Versión: 1.0
+# =============================================================================
+
+enviar clase ValidadorFormatos
+
+    # =============================================================================
+    # FUNCIÓN: es_email_valido
+    # =============================================================================
+    # Propósito: Valida si un texto tiene formato de email válido
+    # Implementa validación básica según RFC 5322 simplificada
+    # Parámetros:
+    #   - email (texto): Email a validar
+    # Retorna:
+    #   - bool: verdadero si el formato es válido, falso en caso contrario
+    # =============================================================================
+    funcion es_email_valido(texto email) retorna bool
+        # Verificar longitud mínima y máxima
+        si longitud_texto(email) < 5 o longitud_texto(email) > 254 entonces
+            retornar falso
+        fin_si
+        
+        # Verificar que contenga exactamente un @
+        entero arroba_count = 0
+        entero i = 0
+        entero tam = longitud_texto(email)
+        
+        mientras i < tam hacer
+            texto char = extraer_subtexto(email, i, 1)
+            si char == "@" entonces
+                arroba_count = arroba_count + 1
+            fin_si
+            i = i + 1
+        fin_mientras
+        
+        si arroba_count != 1 entonces
+            retornar falso
+        fin_si
+        
+        # Dividir en parte local y dominio
+        entero pos_arroba = 0
+        i = 0
+        mientras i < tam hacer
+            texto char = extraer_subtexto(email, i, 1)
+            si char == "@" entonces
+                pos_arroba = i
+                romper
+            fin_si
+            i = i + 1
+        fin_mientras
+        
+        texto parte_local = extraer_subtexto(email, 0, pos_arroba)
+        texto dominio = extraer_subtexto(email, pos_arroba + 1, tam - pos_arroba - 1)
+        
+        # Validar parte local (antes del @)
+        si longitud_texto(parte_local) == 0 o longitud_texto(parte_local) > 64 entonces
+            retornar falso
+        fin_si
+        
+        # Validar que la parte local solo contenga caracteres permitidos
+        si no validar_parte_local_email(parte_local) entonces
+            retornar falso
+        fin_si
+        
+        # Validar dominio (después del @)
+        si longitud_texto(dominio) == 0 o longitud_texto(dominio) > 253 entonces
+            retornar falso
+        fin_si
+        
+        # Validar que el dominio tenga formato válido
+        si no validar_dominio_email(dominio) entonces
+            retornar falso
+        fin_si
+        
+        retornar verdadero
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: validar_parte_local_email (privada)
+    # =============================================================================
+    # Propósito: Valida la parte local de un email (antes del @)
+    # Parámetros:
+    #   - parte (texto): Parte local a validar
+    # Retorna:
+    #   - bool: verdadero si es válida
+    # =============================================================================
+    funcion validar_parte_local_email(texto parte) retorna bool
+        entero i = 0
+        entero tam = longitud_texto(parte)
+        
+        mientras i < tam hacer
+            texto char = extraer_subtexto(parte, i, 1)
+            entero codigo = codigo_caracter(char)
+            
+            # Permitir: letras (A-Z, a-z), números (0-9)
+            # y caracteres especiales permitidos en email
+            bool permitido = (codigo >= 65 y codigo <= 90) o     # A-Z
+                           (codigo >= 97 y codigo <= 122) o    # a-z
+                           (codigo >= 48 y codigo <= 57) o     # 0-9
+                           (codigo == 33) o                    # !
+                           (codigo == 35) o                    # #
+                           (codigo == 36) o                    # $
+                           (codigo == 37) o                    # %
+                           (codigo == 38) o                    # &
+                           (codigo == 39) o                    # '
+                           (codigo == 42) o                    # *
+                           (codigo == 43) o                    # +
+                           (codigo == 45) o                    # -
+                           (codigo == 47) o                    # /
+                           (codigo == 61) o                    # =
+                           (codigo == 63) o                    # ?
+                           (codigo == 94) o                    # ^
+                           (codigo == 95) o                    # _
+                           (codigo == 96) o                    # `
+                           (codigo == 123) o                   # {
+                           (codigo == 124) o                   # |
+                           (codigo == 125) o                   # }
+                           (codigo == 126)                     # ~
+            
+            si no permitido entonces
+                retornar falso
+            fin_si
+            
+            i = i + 1
+        fin_mientras
+        
+        # No puede empezar o terminar con punto
+        si extraer_subtexto(parte, 0, 1) == "." o extraer_subtexto(parte, tam - 1, 1) == "." entonces
+            retornar falso
+        fin_si
+        
+        retornar verdadero
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: validar_dominio_email (privada)
+    # =============================================================================
+    # Propósito: Valida el dominio de un email (después del @)
+    # Parámetros:
+    #   - dominio (texto): Dominio a validar
+    # Retorna:
+    #   - bool: verdadero si es válido
+    # =============================================================================
+    funcion validar_dominio_email(texto dominio) retorna bool
+        # Verificar que no empiece o termine con punto o guión
+        texto primer_char = extraer_subtexto(dominio, 0, 1)
+        texto ultimo_char = extraer_subtexto(dominio, longitud_texto(dominio) - 1, 1)
+        
+        si primer_char == "." o primer_char == "-" o ultimo_char == "." o ultimo_char == "-" entonces
+            retornar falso
+        fin_si
+        
+        # Validar caracteres del dominio
+        entero i = 0
+        entero tam = longitud_texto(dominio)
+        
+        mientras i < tam hacer
+            texto char = extraer_subtexto(dominio, i, 1)
+            entero codigo = codigo_caracter(char)
+            
+            # Permitir: letras, números, punto, guión
+            bool permitido = (codigo >= 65 y codigo <= 90) o     # A-Z
+                           (codigo >= 97 y codigo <= 122) o    # a-z
+                           (codigo >= 48 y codigo <= 57) o     # 0-9
+                           (codigo == 46) o                    # .
+                           (codigo == 45)                      # -
+            
+            si no permitido entonces
+                retornar falso
+            fin_si
+            
+            i = i + 1
+        fin_mientras
+        
+        # Verificar que tenga al menos un punto (para dominios de segundo nivel)
+        si no contiene_texto(dominio, ".") entonces
+            retornar falso
+        fin_si
+        
+        retornar verdadero
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: normalizar_email
+    # =============================================================================
+    # Propósito: Normaliza un email a formato estándar (minúsculas)
+    # Parámetros:
+    #   - email (texto): Email a normalizar
+    # Retorna:
+    #   - texto: Email normalizado
+    # =============================================================================
+    funcion normalizar_email(texto email) retorna texto
+        # Convertir a minúsculas (los emails son case-insensitive)
+        texto email_normalizado = str_minusculas(email)
+        
+        # Eliminar espacios al inicio y final
+        email_normalizado = trim_completo(email_normalizado)
+        
+        retornar email_normalizado
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: es_url_valida
+    # =============================================================================
+    # Propósito: Valida si un texto tiene formato de URL válida
+    # Soporta HTTP, HTTPS, FTP y otros protocolos comunes
+    # Parámetros:
+    #   - url (texto): URL a validar
+    # Retorna:
+    #   - bool: verdadero si el formato es válido
+    # =============================================================================
+    funcion es_url_valida(texto url) retorna bool
+        # Verificar longitud mínima
+        si longitud_texto(url) < 7 entonces
+            retornar falso
+        fin_si
+        
+        # Convertir a minúsculas para validación
+        texto url_lower = str_minusculas(url)
+        
+        # Verificar protocolo válido
+        lista<texto> protocolos = crear_lista()
+        lista_agregar(protocolos, "http://")
+        lista_agregar(protocolos, "https://")
+        lista_agregar(protocolos, "ftp://")
+        lista_agregar(protocolos, "ftps://")
+        
+        bool tiene_protocolo = falso
+        entero i = 0
+        entero tam = lista_tamano(protocolos)
+        
+        mientras i < tam hacer
+            texto protocolo = lista_obtener(protocolos, i)
+            si empieza_con(url_lower, protocolo) entonces
+                tiene_protocolo = verdadero
+                romper
+            fin_si
+            i = i + 1
+        fin_mientras
+        
+        si no tiene_protocolo entonces
+            retornar falso
+        fin_si
+        
+        # Extraer dominio de la URL
+        texto dominio = extraer_dominio_url(url)
+        si longitud_texto(dominio) == 0 entonces
+            retornar falso
+        fin_si
+        
+        # Validar formato del dominio
+        si no validar_dominio_url(dominio) entonces
+            retornar falso
+        fin_si
+        
+        retornar verdadero
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: extraer_dominio_url (privada)
+    # =============================================================================
+    # Propósito: Extrae el dominio de una URL
+    # Parámetros:
+    #   - url (texto): URL completa
+    # Retorna:
+    #   - texto: Dominio extraído
+    # =============================================================================
+    funcion extraer_dominio_url(texto url) retorna texto
+        texto url_lower = str_minusculas(url)
+        
+        # Encontrar fin del protocolo
+        entero inicio_dominio = 0
+        lista<texto> protocolos = crear_lista()
+        lista_agregar(protocolos, "http://")
+        lista_agregar(protocolos, "https://")
+        lista_agregar(protocolos, "ftp://")
+        lista_agregar(protocolos, "ftps://")
+        
+        entero i = 0
+        entero tam = lista_tamano(protocolos)
+        
+        mientras i < tam hacer
+            texto protocolo = lista_obtener(protocolos, i)
+            si empieza_con(url_lower, protocolo) entonces
+                inicio_dominio = longitud_texto(protocolo)
+                romper
+            fin_si
+            i = i + 1
+        fin_mientras
+        
+        # Encontrar fin del dominio (primer /, ?, o #)
+        entero fin_dominio = longitud_texto(url)
+        entero j = inicio_dominio
+        entero tam_url = longitud_texto(url)
+        
+        mientras j < tam_url hacer
+            texto char = extraer_subtexto(url, j, 1)
+            si char == "/" o char == "?" o char == "#" entonces
+                fin_dominio = j
+                romper
+            fin_si
+            j = j + 1
+        fin_mientras
+        
+        retornar extraer_subtexto(url, inicio_dominio, fin_dominio - inicio_dominio)
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: validar_dominio_url (privada)
+    # =============================================================================
+    # Propósito: Valida el formato de un dominio de URL
+    # Parámetros:
+    #   - dominio (texto): Dominio a validar
+    # Retorna:
+    #   - bool: verdadero si es válido
+    # =============================================================================
+    funcion validar_dominio_url(texto dominio) retorna bool
+        # Verificar longitud mínima
+        si longitud_texto(dominio) < 4 entonces
+            retornar falso
+        fin_si
+        
+        # Validar caracteres
+        entero i = 0
+        entero tam = longitud_texto(dominio)
+        
+        mientras i < tam hacer
+            texto char = extraer_subtexto(dominio, i, 1)
+            entero codigo = codigo_caracter(char)
+            
+            # Permitir: letras, números, punto, guión
+            bool permitido = (codigo >= 65 y codigo <= 90) o     # A-Z
+                           (codigo >= 97 y codigo <= 122) o    # a-z
+                           (codigo >= 48 y codigo <= 57) o     # 0-9
+                           (codigo == 46) o                    # .
+                           (codigo == 45)                      # -
+            
+            si no permitido entonces
+                retornar falso
+            fin_si
+            
+            i = i + 1
+        fin_mientras
+        
+        # No puede empezar o terminar con punto o guión
+        texto primer_char = extraer_subtexto(dominio, 0, 1)
+        texto ultimo_char = extraer_subtexto(dominio, tam - 1, 1)
+        
+        si primer_char == "." o primer_char == "-" o ultimo_char == "." o ultimo_char == "-" entonces
+            retornar falso
+        fin_si
+        
+        retornar verdadero
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: es_telefono_valido
+    # =============================================================================
+    # Propósito: Valida si un texto tiene formato de número de teléfono válido
+    # Soporta formatos internacionales y locales
+    # Parámetros:
+    #   - telefono (texto): Teléfono a validar
+    # Retorna:
+    #   - bool: verdadero si el formato es válido
+    # =============================================================================
+    funcion es_telefono_valido(texto telefono) retorna texto
+        # Limpiar el teléfono: eliminar espacios, guiones, paréntesis, puntos
+        texto telefono_limpio = ""
+        entero i = 0
+        entero tam = longitud_texto(telefono)
+        
+        mientras i < tam hacer
+            texto char = extraer_subtexto(telefono, i, 1)
+            entero codigo = codigo_caracter(char)
+            
+            # Solo mantener números y el símbolo +
+            si (codigo >= 48 y codigo <= 57) o codigo == 43 entonces
+                telefono_limpio = telefono_limpio + char
+            fin_si
+            
+            i = i + 1
+        fin_mientras
+        
+        # Validar longitud (7-15 dígitos es el rango internacional)
+        si longitud_texto(telefono_limpio) < 7 o longitud_texto(telefono_limpio) > 15 entonces
+            retornar "inválido: longitud incorrecta"
+        fin_si
+        
+        # Validar que solo contenga números (posiblemente con + al inicio)
+        i = 0
+        tam = longitud_texto(telefono_limpio)
+        
+        mientras i < tam hacer
+            texto char = extraer_subtexto(telefono_limpio, i, 1)
+            entero codigo = codigo_caracter(char)
+            
+            # El primer carácter puede ser +
+            si i == 0 y codigo == 43 entonces
+                # Permitido
+            sino si codigo < 48 o codigo > 57 entonces
+                retornar "inválido: contiene caracteres no numéricos"
+            fin_si
+            
+            i = i + 1
+        fin_mientras
+        
+        retornar "válido"
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: normalizar_telefono
+    # =============================================================================
+    # Propósito: Normaliza un número de teléfono a formato estándar
+    # Parámetros:
+    #   - telefono (texto): Teléfono a normalizar
+    # Retorna:
+    #   - texto: Teléfono normalizado
+    # =============================================================================
+    funcion normalizar_telefono(texto telefono) retorna texto
+        # Eliminar todos los caracteres no numéricos excepto +
+        texto telefono_limpio = ""
+        entero i = 0
+        entero tam = longitud_texto(telefono)
+        
+        mientras i < tam hacer
+            texto char = extraer_subtexto(telefono, i, 1)
+            entero codigo = codigo_caracter(char)
+            
+            si (codigo >= 48 y codigo <= 57) o codigo == 43 entonces
+                telefono_limpio = telefono_limpio + char
+            fin_si
+            
+            i = i + 1
+        fin_mientras
+        
+        retornar telefono_limpio
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: validar_codigo_postal
+    # =============================================================================
+    # Propósito: Valida códigos postales de diferentes países
+    # Parámetros:
+    #   - codigo (texto): Código postal a validar
+    #   - pais (texto): Código de país (ISO 2 letras)
+    # Retorna:
+    #   - bool: verdadero si el formato es válido para el país
+    # =============================================================================
+    funcion validar_codigo_postal(texto codigo, texto pais) retorna bool
+        texto pais_lower = str_minusculas(pais)
+        texto codigo_limpio = ""
+        
+        # Eliminar espacios y caracteres no alfanuméricos
+        entero i = 0
+        entero tam = longitud_texto(codigo)
+        
+        mientras i < tam hacer
+            texto char = extraer_subtexto(codigo, i, 1)
+            entero codigo_char = codigo_caracter(char)
+            
+            # Permitir letras y números
+            si (codigo_char >= 65 y codigo_char <= 90) o     # A-Z
+               (codigo_char >= 97 y codigo_char <= 122) o    # a-z
+               (codigo_char >= 48 y codigo_char <= 57) entonces # 0-9
+                codigo_limpio = codigo_limpio + char
+            fin_si
+            
+            i = i + 1
+        fin_mientras
+        
+        # Validar según país
+        si pais_lower == "es" o pais_lower == "españa" entonces
+            # España: 5 dígitos (02000-52999)
+            retornar longitud_texto(codigo_limpio) == 5 y es_numero(codigo_limpio)
+        sino si pais_lower == "mx" o pais_lower == "méxico" entonces
+            # México: 5 dígitos
+            retornar longitud_texto(codigo_limpio) == 5 y es_numero(codigo_limpio)
+        sino si pais_lower == "us" o pais_lower == "usa" entonces
+            # Estados Unidos: 5 dígitos (o 9 con guion: 12345-6789)
+            si longitud_texto(codigo_limpio) == 5 entonces
+                retornar es_numero(codigo_limpio)
+            sino si longitud_texto(codigo_limpio) == 9 entonces
+                retornar es_numero(extraer_subtexto(codigo_limpio, 0, 5)) y 
+                       es_numero(extraer_subtexto(codigo_limpio, 5, 4))
+            fin_si
+        sino si pais_lower == "fr" o pais_lower == "francia" entonces
+            # Francia: 5 dígitos
+            retornar longitud_texto(codigo_limpio) == 5 y es_numero(codigo_limpio)
+        sino si pais_lower == "de" o pais_lower == "alemania" entonces
+            # Alemania: 5 dígitos
+            retornar longitud_texto(codigo_limpio) == 5 y es_numero(codigo_limpio)
+        fin_si
+        
+        # Por defecto, aceptar si tiene entre 3 y 10 caracteres alfanuméricos
+        retornar longitud_texto(codigo_limpio) >= 3 y longitud_texto(codigo_limpio) <= 10
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: es_numero (privada)
+    # =============================================================================
+    # Propósito: Verifica si un texto contiene solo dígitos
+    # Parámetros:
+    #   - texto (texto): Texto a verificar
+    # Retorna:
+    #   - bool: verdadero si solo contiene dígitos
+    # =============================================================================
+    funcion es_numero(texto _texto) retorna bool
+        entero i = 0
+        entero tam = longitud_texto(_texto)
+        
+        mientras i < tam hacer
+            texto char = extraer_subtexto(_texto, i, 1)
+            entero codigo = codigo_caracter(char)
+            
+            si codigo < 48 o codigo > 57 entonces
+                retornar falso
+            fin_si
+            
+            i = i + 1
+        fin_mientras
+        
+        retornar verdadero
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: empieza_con (privada)
+    # =============================================================================
+    # Propósito: Verifica si un texto empieza con un prefijo dado
+    # Parámetros:
+    #   - texto (texto): Texto a verificar
+    #   - prefijo (texto): Prefijo a buscar
+    # Retorna:
+    #   - bool: verdadero si el texto empieza con el prefijo
+    # =============================================================================
+    funcion empieza_con(texto _texto, texto prefijo) retorna bool
+        entero tam_texto = longitud_texto(_texto)
+        entero tam_prefijo = longitud_texto(prefijo)
+        
+        si tam_prefijo > tam_texto entonces
+            retornar falso
+        fin_si
+        
+        texto inicio = extraer_subtexto(_texto, 0, tam_prefijo)
+        retornar inicio == prefijo
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: trim_completo (privada)
+    # =============================================================================
+    # Propósito: Elimina espacios al inicio y final de un texto
+    # Parámetros:
+    #   - texto (texto): Texto a limpiar
+    # Retorna:
+    #   - texto: Texto sin espacios en los extremos
+    # =============================================================================
+    funcion trim_completo(texto texto) retorna texto
+        # Implementación simple de trim
+        entero inicio = 0
+        entero fin = longitud_texto(texto) - 1
+        
+        # Eliminar espacios al inicio
+        mientras inicio <= fin hacer
+            texto char = extraer_subtexto(texto, inicio, 1)
+            si char == " " entonces
+                inicio = inicio + 1
+            sino
+                romper
+            fin_si
+        fin_mientras
+        
+        # Eliminar espacios al final
+        mientras fin >= inicio hacer
+            texto char = extraer_subtexto(texto, fin, 1)
+            si char == " " entonces
+                fin = fin - 1
+            sino
+                romper
+            fin_si
+        fin_mientras
+        
+        si inicio > fin entonces
+            retornar ""
+        sino
+            retornar extraer_subtexto(texto, inicio, fin - inicio + 1)
+        fin_si
+    fin_funcion
+
+fin_clase

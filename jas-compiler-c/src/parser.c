@@ -179,40 +179,56 @@ static int expect(Parser *p, TokenType tt, const char *val, const char *msg) {
     return 0;
 }
 
-static const char *tok_str(const Token *t) {
-    if (!t) return "EOF";
-    if (t->type == TOK_STRING || t->type == TOK_IDENTIFIER || t->type == TOK_KEYWORD || t->type == TOK_OPERATOR)
-        return t->value.str ? t->value.str : "";
-    if (t->type == TOK_NUMBER) {
-        static char buf[64];
-        if (t->is_float) snprintf(buf, sizeof buf, "%g", t->value.f);
-        else snprintf(buf, sizeof buf, "%lld", (long long)t->value.i);
-        return buf;
-    }
-    return "?";
-}
-
 static char *strdup_safe(const char *s) {
     return s ? strdup(s) : NULL;
 }
 
-/* Palabras que el lexer marca como TOK_KEYWORD pero se permiten como nombre de variable/identificador
-   por compatibilidad historica (p. ej. "a" en formulas) o constructores vec/mat. Las llamadas sistema
+/* value.str solo es valido cuando el tipo de token almacena puntero en la union;
+ * para TOK_NUMBER/TOK_EOF/TOK_NEWLINE el lexer usa value.i/value.f y leer .str es UB. */
+static const char *token_union_str(const Token *t) {
+    if (!t) return NULL;
+    switch (t->type) {
+    case TOK_KEYWORD:
+    case TOK_IDENTIFIER:
+    case TOK_OPERATOR:
+    case TOK_STRING:
+    case TOK_CONCEPT:
+        return t->value.str;
+    default:
+        return NULL;
+    }
+}
+
+/* por compatibilidad historica (p. ej. "a" en formulas) o constructores vec/mat. Las llamadas sistema
    se escriben como identificador-primario en parse_primary. */
 static int keyword_ok_as_user_identifier(const char *s) {
     if (!s) return 0;
     size_t L = strlen(s);
     return (strcmp(s, "vec2") == 0 || strcmp(s, "vec3") == 0 ||
             strcmp(s, "vec4") == 0 || strcmp(s, "mat4") == 0 || strcmp(s, "mat3") == 0 ||
+            strcmp(s, "entrada") == 0 || strcmp(s, "texto") == 0 ||
+            strcmp(s, "caracter") == 0 || strcmp(s, "bool") == 0 ||
+            strcmp(s, "lista") == 0 || strcmp(s, "mapa") == 0 ||
             is_sistema_llamada(s, L));
 }
 
 /* Variable, parametro, constante, campo: no usar KEYWORDS salvo excepciones anteriores. */
 static int validate_user_defined_name_tok(Parser *p, const Token *tok) {
-    if (!tok || !tok->value.str) return 1;
+    if (!tok) return 1;
+    if (tok->type == TOK_NULL) {
+        if (p->source_path && p->source_path[0])
+            set_error_at(p, tok->line, tok->column,
+                      "Archivo %s, linea %d, columna %d: 'nulo' es una palabra reservada del lenguaje: aqui se esperaba un nombre elegido por usted.",
+                      p->source_path, tok->line, tok->column);
+        else
+            set_error_at(p, tok->line, tok->column,
+                      "linea %d, columna %d: 'nulo' es una palabra reservada del lenguaje: aqui se esperaba un nombre elegido por usted.",
+                      tok->line, tok->column);
+        return 0;
+    }
+    if (!tok->value.str) return 1;
     const char *s = tok->value.str;
-    size_t L = strlen(s);
-    if (is_keyword(s, L) && !keyword_ok_as_user_identifier(s)) {
+    if (tok->type == TOK_KEYWORD && !keyword_ok_as_user_identifier(s)) {
         if (p->source_path && p->source_path[0])
             set_error_at(p, tok->line, tok->column,
                       "Archivo %s, linea %d, columna %d: '%s' es palabra reservada del lenguaje: aqui se esperaba un "
@@ -229,8 +245,8 @@ static int validate_user_defined_name_tok(Parser *p, const Token *tok) {
 }
 
 static int is_decl_type_token(const Token *t) {
-    if (!t || !t->value.str) return 0;
-    const char *s = t->value.str;
+    const char *s = token_union_str(t);
+    if (!s) return 0;
     return (strcmp(s, "entero") == 0 || strcmp(s, "texto") == 0 ||
             strcmp(s, "flotante") == 0 || strcmp(s, "caracter") == 0 ||
             strcmp(s, "bool") == 0 || strcmp(s, "lista") == 0 ||
@@ -260,7 +276,7 @@ static char *parse_optional_lista_element_type(Parser *p) {
                        "En `lista<T>` se esperaba un tipo T (entero, flotante, texto, bool) despues de '<'.");
         return NULL;
     }
-    static const char *ok[] = {"entero", "flotante", "texto", "bool", "byte", "bytes", NULL};
+    static const char *ok[] = {"entero", "flotante", "texto", "bool", "byte", "bytes", "mapa", "lista", NULL};
     int good = 0;
     for (int i = 0; ok[i]; i++)
         if (strcmp(inner->value.str, ok[i]) == 0) good = 1;
@@ -355,6 +371,17 @@ static ASTNode *make_identifier(const char *s, int line, int col) {
     return (ASTNode*)n;
 }
 
+static ASTNode *make_export_directive(char **names, size_t n_names, int line, int col) {
+    ExportDirectiveNode *n = calloc(1, sizeof(ExportDirectiveNode));
+    if (!n) return NULL;
+    n->base.type = NODE_EXPORT_DIRECTIVE;
+    n->base.line = line;
+    n->base.col = col;
+    n->names = names;
+    n->n_names = n_names;
+    return (ASTNode *)n;
+}
+
 /* Copia profunda del identificador para x = x + rhs sin double-free en ast_free */
 static ASTNode *clone_identifier_for_compound(IdentifierNode *id) {
     IdentifierNode *n = calloc(1, sizeof(IdentifierNode));
@@ -413,9 +440,7 @@ static ASTNode *make_if_stmt(ASTNode *cond, ASTNode *body, ASTNode *else_body, i
 static ASTNode *make_var_decl_simple(const char *type_name, const char *name, ASTNode *value, int line, int col);
 static ASTNode *make_function_node_simple(const char *name, const char *return_type, ASTNode **params, size_t n_params, ASTNode *body, int line, int col);
 static ASTNode *make_concat_expr(ASTNode *left, ASTNode *right, int line, int col);
-static ASTNode *make_wrap_expr(const char *prefix, ASTNode *middle, const char *suffix, int line, int col);
 static const char *literal_text_value(ASTNode *node);
-static ASTNode *make_literal_fmt(const char *prefix, const char *middle, const char *suffix);
 static ASTNode *join_markup_exprs(ASTNode **exprs, size_t n, int line, int col);
 static ASTNode *make_route_match_expr(ASTNode *route_expr, int line, int col);
 static ASTNode *clone_expr_basic(const ASTNode *node);
@@ -423,12 +448,6 @@ static char *make_named_string(const char *a, const char *b, const char *c);
 static int ensure_estructura_runtime_imports(Parser *p, NodeVec *globals, int *imports_added, int line, int col);
 static int estructura_window_vec_push(EstructaWindowVec *v, EstructaWindowDef def);
 static void estructura_window_vec_free(EstructaWindowVec *v);
-
-static ASTNode *parse_args(Parser *p) {
-    /* Solo para parse_primary - retorna primer arg. Usamos parse_expression en bucle. */
-    (void)p;
-    return NULL;
-}
 
 static char *parse_estructura_name(Parser *p, const char *contexto) {
     const Token *t = peek(p, 0);
@@ -830,7 +849,8 @@ static int parse_estructura_params(Parser *p, NodeVec *params) {
         const Token *maybe_type = peek(p, 0);
         char *type_name = NULL;
         char *list_el = NULL;
-        if (maybe_type && maybe_type->value.str && strcmp(maybe_type->value.str, "lista") == 0) {
+        if (maybe_type && maybe_type->type == TOK_KEYWORD && maybe_type->value.str &&
+            strcmp(maybe_type->value.str, "lista") == 0) {
             advance(p);
             type_name = strdup_safe("lista");
             list_el = parse_optional_lista_element_type(p);
@@ -1430,8 +1450,9 @@ static void estructura_window_vec_free(EstructaWindowVec *v) {
 }
 
 static int token_is_word(const Token *t, const char *word) {
-    if (!t || !word || !t->value.str) return 0;
+    if (!t || !word) return 0;
     if (t->type != TOK_KEYWORD && t->type != TOK_IDENTIFIER) return 0;
+    if (!t->value.str) return 0;
     return strcmp(t->value.str, word) == 0;
 }
 
@@ -1547,31 +1568,11 @@ static ASTNode *make_concat_expr(ASTNode *left, ASTNode *right, int line, int co
     return make_call_named("concatenar", args, 2, line, col);
 }
 
-static ASTNode *make_wrap_expr(const char *prefix, ASTNode *middle, const char *suffix, int line, int col) {
-    ASTNode *left = make_concat_expr(make_literal_str(prefix), middle, line, col);
-    if (!left) return NULL;
-    return make_concat_expr(left, make_literal_str(suffix), line, col);
-}
-
 static const char *literal_text_value(ASTNode *node) {
     if (!node || node->type != NODE_LITERAL) return NULL;
     LiteralNode *lit = (LiteralNode *)node;
     if (!lit->type_name || strcmp(lit->type_name, "texto") != 0) return NULL;
     return lit->value.str ? lit->value.str : "";
-}
-
-static ASTNode *make_literal_fmt(const char *prefix, const char *middle, const char *suffix) {
-    size_t a = prefix ? strlen(prefix) : 0;
-    size_t b = middle ? strlen(middle) : 0;
-    size_t c = suffix ? strlen(suffix) : 0;
-    char *buf = calloc(a + b + c + 1, 1);
-    if (!buf) return NULL;
-    if (prefix) memcpy(buf, prefix, a);
-    if (middle) memcpy(buf + a, middle, b);
-    if (suffix) memcpy(buf + a + b, suffix, c);
-    ASTNode *out = make_literal_str(buf);
-    free(buf);
-    return out;
 }
 
 static ASTNode *join_markup_exprs(ASTNode **exprs, size_t n, int line, int col) {
@@ -1660,9 +1661,12 @@ static int ensure_estructura_runtime_imports(Parser *p, NodeVec *globals, int *i
 }
 
 static int is_ident_token_for_lambda(const Token *t) {
-    if (!t || !t->value.str) return 0;
-    if (t->type == TOK_IDENTIFIER) return 1;
-    return (t->type == TOK_KEYWORD && keyword_ok_as_user_identifier(t->value.str));
+    if (!t) return 0;
+    if (t->type == TOK_IDENTIFIER)
+        return t->value.str != NULL;
+    if (t->type == TOK_KEYWORD && t->value.str)
+        return keyword_ok_as_user_identifier(t->value.str);
+    return 0;
 }
 
 /* Parametro invalido en `( ... ) =>`: reservada u otro token; deja last_error si falta. */
@@ -1909,6 +1913,18 @@ static ASTNode *parse_primary(Parser *p) {
             return make_literal_float(t->value.f);
         return make_literal_int(t->value.i);
     }
+    if (t->type == TOK_NULL) {
+        advance(p);
+        LiteralNode *ln = calloc(1, sizeof(LiteralNode));
+        if (!ln) return NULL;
+        ln->base.type = NODE_LITERAL;
+        ln->type_name = strdup("nulo");
+        ln->value.i = 0;
+        ln->is_float = 0;
+        ln->base.line = t->line;
+        ln->base.col = t->column;
+        return (ASTNode*)ln;
+    }
     if (t->type == TOK_STRING) {
         advance(p);
         return make_literal_str(t->value.str);
@@ -2122,7 +2138,10 @@ static ASTNode *parse_primary(Parser *p) {
     if (t->type == TOK_OPERATOR && t->value.str && strcmp(t->value.str, "[") == 0) {
         advance(p);
         NodeVec el = {0};
-        while (peek(p, 0) && (!peek(p, 0)->value.str || strcmp(peek(p, 0)->value.str, "]") != 0)) {
+        for (;;) {
+            const Token *pk = peek(p, 0);
+            if (!pk) break;
+            if (pk->type == TOK_OPERATOR && pk->value.str && strcmp(pk->value.str, "]") == 0) break;
             ASTNode *e = parse_expression(p);
             if (!e) break;
             node_vec_push(&el, e);
@@ -2139,7 +2158,10 @@ static ASTNode *parse_primary(Parser *p) {
     if (t->type == TOK_OPERATOR && t->value.str && strcmp(t->value.str, "{") == 0) {
         advance(p);
         NodeVec keys = {0}, vals = {0};
-        while (peek(p, 0) && (!peek(p, 0)->value.str || strcmp(peek(p, 0)->value.str, "}") != 0)) {
+        for (;;) {
+            const Token *pk = peek(p, 0);
+            if (!pk) break;
+            if (pk->type == TOK_OPERATOR && pk->value.str && strcmp(pk->value.str, "}") == 0) break;
             ASTNode *k = parse_expression(p);
             if (!k) break;
             expect(p, TOK_OPERATOR, ":", "Se esperaba ':'");
@@ -2528,10 +2550,31 @@ static ASTNode *parse_logical_and(Parser *p) {
 static ASTNode *parse_logical_or(Parser *p) {
     ASTNode *left = parse_logical_and(p);
     if (!left) return NULL;
+    
+    // Limitar el número de operadores 'o' para evitar bucles infinitos
+    int max_o_ops = 100;
+    int o_count = 0;
+    
     while (match(p, TOK_KEYWORD, "o")) {
+        if (++o_count > max_o_ops) {
+            set_error_here(p, peek(p, 0), "Demasiados operadores 'o' anidados - posible bucle infinito");
+            ast_free(left);
+            return NULL;
+        }
+        
         ASTNode *right = parse_logical_and(p);
-        if (!right) { ast_free(left); return NULL; }
+        if (!right) { 
+            ast_free(left); 
+            return NULL; 
+        }
+        
         BinaryOpNode *b = calloc(1, sizeof(BinaryOpNode));
+        if (!b) {
+            ast_free(left);
+            ast_free(right);
+            return NULL;
+        }
+        
         b->base.type = NODE_BINARY_OP;
         b->left = left;
         b->operator = strdup("o");
@@ -2945,18 +2988,19 @@ static ASTNode *parse_statement(Parser *p) {
         if (strcmp(t->value.str, "constante") == 0) {
             advance(p);
             const Token *ty = peek(p, 0);
-            if (!ty || !ty->value.str ||
-                (strcmp(ty->value.str, "entero") != 0 && strcmp(ty->value.str, "texto") != 0 &&
-                 strcmp(ty->value.str, "flotante") != 0 && strcmp(ty->value.str, "caracter") != 0 &&
-                 strcmp(ty->value.str, "bool") != 0 && strcmp(ty->value.str, "u32") != 0 &&
-                 strcmp(ty->value.str, "u64") != 0 && strcmp(ty->value.str, "u8") != 0 &&
-                 strcmp(ty->value.str, "byte") != 0 && strcmp(ty->value.str, "vec2") != 0 &&
-                 strcmp(ty->value.str, "vec3") != 0 && strcmp(ty->value.str, "vec4") != 0 && strcmp(ty->value.str, "mat4") != 0 && strcmp(ty->value.str, "mat3") != 0)) {
+            const char *tys = token_union_str(ty);
+            if (!ty || !tys ||
+                (strcmp(tys, "entero") != 0 && strcmp(tys, "texto") != 0 &&
+                 strcmp(tys, "flotante") != 0 && strcmp(tys, "caracter") != 0 &&
+                 strcmp(tys, "bool") != 0 && strcmp(tys, "u32") != 0 &&
+                 strcmp(tys, "u64") != 0 && strcmp(tys, "u8") != 0 &&
+                 strcmp(tys, "byte") != 0 && strcmp(tys, "vec2") != 0 &&
+                 strcmp(tys, "vec3") != 0 && strcmp(tys, "vec4") != 0 && strcmp(tys, "mat4") != 0 && strcmp(tys, "mat3") != 0)) {
                 set_error_here(p, ty ? ty : peek(p, 0),
                     "constante requiere un tipo (entero, texto, flotante, caracter, bool, u32, u64, u8, byte, vec2, vec3, vec4, mat4, mat3).");
                 return NULL;
             }
-            char *tyn = strdup(ty->value.str);
+            char *tyn = strdup(tys);
             advance(p);
             const Token *nt = peek(p, 0);
             if (!validate_user_defined_name_tok(p, nt)) {
@@ -3028,9 +3072,21 @@ static ASTNode *parse_statement(Parser *p) {
             strcmp(t->value.str, "byte") == 0 || strcmp(t->value.str, "vec2") == 0 ||
             strcmp(t->value.str, "vec3") == 0 || strcmp(t->value.str, "vec4") == 0 || strcmp(t->value.str, "mat4") == 0 || strcmp(t->value.str, "mat3") == 0 ||
             strcmp(t->value.str, "bytes") == 0 || strcmp(t->value.str, "socket") == 0 || strcmp(t->value.str, "tls") == 0 ||
-            strcmp(t->value.str, "http_solicitud") == 0 || strcmp(t->value.str, "http_respuesta") == 0 || strcmp(t->value.str, "http_servidor") == 0) {
+            strcmp(t->value.str, "http_solicitud") == 0 || strcmp(t->value.str, "http_respuesta") == 0 || strcmp(t->value.str, "http_servidor") == 0 ||
+            strcmp(t->value.str, "mapa") == 0) {
             char *ty = strdup(t->value.str);
             advance(p);
+
+            /* Suffix opcional '?' para tipos opcionales */
+            const Token *q = peek(p, 0);
+            if (q && q->type == TOK_OPERATOR && q->value.str && strcmp(q->value.str, "?") == 0) {
+                char *new_type = malloc(strlen(ty) + 2);
+                sprintf(new_type, "%s?", ty);
+                free(ty);
+                ty = new_type;
+                advance(p);
+            }
+
             const Token *nt = peek(p, 0);
             if (!validate_user_defined_name_tok(p, nt)) {
                 free(ty);
@@ -3054,6 +3110,17 @@ static ASTNode *parse_statement(Parser *p) {
         if (strcmp(t->value.str, "lista") == 0) {
             char *ty = strdup("lista");
             advance(p);
+            
+            /* Suffix opcional '?' para tipos opcionales */
+            const Token *q = peek(p, 0);
+            if (q && q->type == TOK_OPERATOR && q->value.str && strcmp(q->value.str, "?") == 0) {
+                char *new_type = malloc(strlen(ty) + 2);
+                sprintf(new_type, "%s?", ty);
+                free(ty);
+                ty = new_type;
+                advance(p);
+            }
+
             char *lista_el = parse_optional_lista_element_type(p);
             if (p->last_error) {
                 free(ty);
@@ -3084,6 +3151,17 @@ static ASTNode *parse_statement(Parser *p) {
         if (strcmp(t->value.str, "tarea") == 0) {
             char *ty = strdup("tarea");
             advance(p);
+
+            /* Suffix opcional '?' para tipos opcionales */
+            const Token *q = peek(p, 0);
+            if (q && q->type == TOK_OPERATOR && q->value.str && strcmp(q->value.str, "?") == 0) {
+                char *new_type = malloc(strlen(ty) + 2);
+                sprintf(new_type, "%s?", ty);
+                free(ty);
+                ty = new_type;
+                advance(p);
+            }
+
             char *tarea_el = NULL;
             if (!parse_optional_tarea_inner_type_after_tarea_keyword(p, &tarea_el)) {
                 free(ty);
@@ -3486,16 +3564,97 @@ static ASTNode *parse_statement(Parser *p) {
                     return NULL;
                 }
             }
-            const char *ends[] = {"fin_cuando", "fin_si", "sino"};
-            ASTNode *body = parse_block(p, ends, 3);
+            const char *ends[] = {"caso", "defecto", "fin_cuando", "fin_si", "sino"};
+            ASTNode *body = parse_block(p, ends, 5);
             
             // Check if error occurred inside block
             if (p->last_error) return NULL;
 
+            // Si es un 'cuando' con casos
+            const Token *nt = peek(p, 0);
+            if (strcmp(si_tok->value.str, "cuando") == 0 && nt && nt->type == TOK_KEYWORD && 
+                (strcmp(nt->value.str, "caso") == 0 || strcmp(nt->value.str, "defecto") == 0)) {
+                
+                SelectCaseVec cases = {0};
+                ASTNode *default_body = NULL;
+                
+                while (1) {
+                    const Token *t2 = peek(p, 0);
+                    if (!t2 || t2->type == TOK_EOF) break;
+                    if (t2->type == TOK_KEYWORD && t2->value.str) {
+                        if (strcmp(t2->value.str, "caso") == 0) {
+                            advance(p);
+                            NodeVec current_case_exprs = {0};
+                            while (1) {
+                                ASTNode *ce = parse_expression(p);
+                                if (!ce) break;
+                                node_vec_push(&current_case_exprs, ce);
+                                if (!match(p, TOK_OPERATOR, ",")) break;
+                            }
+                            if (!expect(p, TOK_KEYWORD, "entonces", "Se esperaba 'entonces' tras la lista de valores de 'caso'")) {
+                                for (size_t i = 0; i < current_case_exprs.n; i++) ast_free(current_case_exprs.arr[i]);
+                                free(current_case_exprs.arr);
+                                goto switch_fail;
+                            }
+                            
+                            const char *case_ends[] = {"caso", "defecto", "fin_cuando"};
+                            ASTNode *b = parse_block(p, case_ends, 3);
+                            
+                            SelectCase sc = {0};
+                            sc.values = current_case_exprs.arr;
+                            sc.n_values = current_case_exprs.n;
+                            sc.body = b;
+                            sc.is_range = 0;
+                            sc.range_end = NULL;
+                            
+                            select_case_vec_push(&cases, sc);
+                            continue;
+                        }
+                        if (strcmp(t2->value.str, "defecto") == 0) {
+                            advance(p);
+                            if (default_body) {
+                                set_error_here(p, t2, "Solo puede haber un bloque 'defecto' en 'cuando'");
+                                goto switch_fail;
+                            }
+                            const char *def_ends[] = {"fin_cuando"};
+                            default_body = parse_block(p, def_ends, 1);
+                            continue;
+                        }
+                        if (strcmp(t2->value.str, "fin_cuando") == 0) {
+                            advance(p);
+                            break;
+                        }
+                    }
+                    set_error_here(p, t2, "Se esperaba 'caso', 'defecto' o 'fin_cuando'");
+                    goto switch_fail;
+                }
+                
+                SelectNode *sn = calloc(1, sizeof(SelectNode));
+                sn->base.type = NODE_SELECT;
+                sn->selector = cond;
+                sn->cases = cases.arr;
+                sn->n_cases = cases.n;
+                sn->default_body = default_body;
+                sn->base.line = si_tok->line;
+                sn->base.col = si_tok->column;
+                if (body) ast_free(body);
+                return (ASTNode*)sn;
+
+            switch_fail:
+                if (cond) ast_free(cond);
+                if (body) ast_free(body);
+                for (size_t i = 0; i < cases.n; i++) {
+                    for (size_t j = 0; j < cases.arr[i].n_values; j++) ast_free(cases.arr[i].values[j]);
+                    free(cases.arr[i].values);
+                    ast_free(cases.arr[i].body);
+                }
+                if (default_body) ast_free(default_body);
+                free(cases.arr);
+                return NULL;
+            }
+
             ASTNode *else_b = NULL;
-            int found_sino = 0;
             if (match(p, TOK_KEYWORD, "sino")) {
-                found_sino = 1;
                 if (peek(p, 0) && peek(p, 0)->value.str && 
                    (strcmp(peek(p, 0)->value.str, "si") == 0 || strcmp(peek(p, 0)->value.str, "cuando") == 0)) {
                     else_b = parse_statement(p);
@@ -4020,14 +4179,26 @@ static ASTNode *parse_statement(Parser *p) {
                  strcmp(t->value.str, "funcion") == 0 || strcmp(t->value.str, "tarea") == 0)) {
                 char *ty = strdup(t->value.str);
                 advance(p);
+
+                /* Suffix opcional '?' para tipos opcionales (ej: mapa?) */
+                const Token *q_var = peek(p, 0);
+                if (q_var && q_var->type == TOK_OPERATOR && q_var->value.str && strcmp(q_var->value.str, "?") == 0) {
+                    char *new_ty = malloc(strlen(ty) + 2);
+                    sprintf(new_ty, "%s?", ty);
+                    free(ty);
+                    ty = new_ty;
+                    advance(p);
+                }
+
                 char *lista_el = NULL;
-                if (ty && strcmp(ty, "lista") == 0) {
+                if (ty && (strcmp(ty, "lista") == 0 || strcmp(ty, "lista?") == 0 ||
+                           strcmp(ty, "mapa") == 0 || strcmp(ty, "mapa?") == 0)) {
                     lista_el = parse_optional_lista_element_type(p);
                     if (p->last_error) {
                         free(ty);
                         return NULL;
                     }
-                } else if (ty && strcmp(ty, "tarea") == 0) {
+                } else if (ty && (strcmp(ty, "tarea") == 0 || strcmp(ty, "tarea?") == 0)) {
                     if (!parse_optional_tarea_inner_type_after_tarea_keyword(p, &lista_el)) {
                         free(ty);
                         return NULL;
@@ -4211,9 +4382,10 @@ static ASTNode *parse_function(Parser *p, int is_exported, int is_async) {
             const Token *ty_err = peek(p, 0);
             char *type_str = NULL;
             char *lista_el = NULL;
-            if (ty_err && ty_err->type == TOK_KEYWORD && ty_err->value.str && strcmp(ty_err->value.str, "lista") == 0) {
+            if (ty_err && ty_err->type == TOK_KEYWORD && ty_err->value.str && 
+                (strcmp(ty_err->value.str, "lista") == 0 || strcmp(ty_err->value.str, "mapa") == 0)) {
+                type_str = strdup(ty_err->value.str);
                 advance(p);
-                type_str = strdup("lista");
                 lista_el = parse_optional_lista_element_type(p);
                 if (p->last_error) {
                     free(type_str);
@@ -4242,6 +4414,16 @@ static ASTNode *parse_function(Parser *p, int is_exported, int is_async) {
                     return NULL;
                 }
                 type_str = ty && ty->value.str ? strdup(ty->value.str) : NULL;
+            }
+            
+            /* Suffix opcional '?' para tipos opcionales */
+            const Token *q = peek(p, 0);
+            if (q && q->type == TOK_OPERATOR && q->value.str && strcmp(q->value.str, "?") == 0) {
+                char *new_type = malloc(strlen(type_str) + 2);
+                sprintf(new_type, "%s?", type_str);
+                free(type_str);
+                type_str = new_type;
+                advance(p);
             }
             const Token *pn = peek(p, 0);
             if (!pn || pn->type == TOK_EOF ||
@@ -4321,27 +4503,47 @@ static ASTNode *parse_function(Parser *p, int is_exported, int is_async) {
             return NULL;
         }
     }
-    if (!match(p, TOK_KEYWORD, "retorna") && peek(p, 0) && peek(p, 0)->value.str && strcmp(peek(p, 0)->value.str, "retorna") == 0)
-        advance(p);  /* consumir "retorna" si match fallo (p.ej. lexed como ID) */
+    {
+        const Token *pk_ret = peek(p, 0);
+        const char *rts = token_union_str(pk_ret);
+        if (!match(p, TOK_KEYWORD, "retorna") && rts && strcmp(rts, "retorna") == 0)
+            advance(p);  /* consumir "retorna" si match fallo (p.ej. lexed como ID) */
+    }
     char *ret_type = strdup("entero");
     char *return_task_elem = NULL;
     /* Solo consumir tipo de retorno si acabamos de ver "retorna" Y el siguiente token es un tipo válido */
     const Token *rt = peek(p, 0);
-    if (rt && rt->value.str && strcmp(rt->value.str, "fin_funcion") != 0 &&
-        (strcmp(rt->value.str, "entero") == 0 || strcmp(rt->value.str, "texto") == 0 ||
-         strcmp(rt->value.str, "flotante") == 0 || strcmp(rt->value.str, "caracter") == 0 ||
-         strcmp(rt->value.str, "bool") == 0 || strcmp(rt->value.str, "lista") == 0 ||
-         strcmp(rt->value.str, "mapa") == 0 || strcmp(rt->value.str, "u32") == 0 ||
-         strcmp(rt->value.str, "u64") == 0 || strcmp(rt->value.str, "u8") == 0 ||
-         strcmp(rt->value.str, "byte") == 0 || strcmp(rt->value.str, "vec2") == 0 ||
-         strcmp(rt->value.str, "vec3") == 0 || strcmp(rt->value.str, "vec4") == 0 || strcmp(rt->value.str, "mat4") == 0 || strcmp(rt->value.str, "mat3") == 0 ||
-         strcmp(rt->value.str, "bytes") == 0 || strcmp(rt->value.str, "socket") == 0 || strcmp(rt->value.str, "tls") == 0 ||
-         strcmp(rt->value.str, "http_solicitud") == 0 || strcmp(rt->value.str, "http_respuesta") == 0 || strcmp(rt->value.str, "http_servidor") == 0 ||
-         strcmp(rt->value.str, "tarea") == 0)) {
+    const char *rts_rt = token_union_str(rt);
+    if (rts_rt && strcmp(rts_rt, "fin_funcion") != 0 &&
+        (strcmp(rts_rt, "entero") == 0 || strcmp(rts_rt, "texto") == 0 ||
+         strcmp(rts_rt, "flotante") == 0 || strcmp(rts_rt, "caracter") == 0 ||
+         strcmp(rts_rt, "bool") == 0 || strcmp(rts_rt, "lista") == 0 ||
+         strcmp(rts_rt, "mapa") == 0 || strcmp(rts_rt, "u32") == 0 ||
+         strcmp(rts_rt, "u64") == 0 || strcmp(rts_rt, "u8") == 0 ||
+         strcmp(rts_rt, "byte") == 0 || strcmp(rts_rt, "vec2") == 0 ||
+         strcmp(rts_rt, "vec3") == 0 || strcmp(rts_rt, "vec4") == 0 || strcmp(rts_rt, "mat4") == 0 || strcmp(rts_rt, "mat3") == 0 ||
+         strcmp(rts_rt, "bytes") == 0 || strcmp(rts_rt, "socket") == 0 || strcmp(rts_rt, "tls") == 0 ||
+         strcmp(rts_rt, "http_solicitud") == 0 || strcmp(rts_rt, "http_respuesta") == 0 || strcmp(rts_rt, "http_servidor") == 0 ||
+         strcmp(rts_rt, "tarea") == 0)) {
         free(ret_type);
-        ret_type = strdup_safe(rt->value.str);
+        ret_type = strdup_safe(rts_rt);
         advance(p);
-        if (ret_type && strcmp(ret_type, "tarea") == 0) {
+        
+        /* Suffix opcional '?' para tipos de retorno opcionales */
+        const Token *q_ret = peek(p, 0);
+        if (q_ret && q_ret->type == TOK_OPERATOR && q_ret->value.str && strcmp(q_ret->value.str, "?") == 0) {
+            char *new_ret = malloc(strlen(ret_type) + 2);
+            sprintf(new_ret, "%s?", ret_type);
+            free(ret_type);
+            ret_type = new_ret;
+            advance(p);
+        }
+
+        if (ret_type && (strcmp(ret_type, "lista") == 0 || strcmp(ret_type, "lista?") == 0)) {
+            return_task_elem = parse_optional_lista_element_type(p);
+        } else if (ret_type && (strcmp(ret_type, "mapa") == 0 || strcmp(ret_type, "mapa?") == 0)) {
+            return_task_elem = parse_optional_lista_element_type(p); /* Para mapa<T> si se desea */
+        } else if (ret_type && strcmp(ret_type, "tarea") == 0) {
             if (!parse_optional_tarea_inner_type_after_tarea_keyword(p, &return_task_elem)) {
                 free(ret_type);
                 for (size_t k = 0; k < params.n; k++) ast_free((ASTNode*)params.arr[k]);
@@ -4356,7 +4558,6 @@ static ASTNode *parse_function(Parser *p, int is_exported, int is_async) {
     
     // Check if we encountered an error while parsing the body and didn't find fin_funcion
     if (!match(p, TOK_KEYWORD, "fin_funcion")) {
-        const Token *err_t = peek(p, 0);
         if (p->source_path && p->source_path[0])
             set_error_at(p, func_tok ? func_tok->line : 0, func_tok ? func_tok->column : 0,
                       "Archivo %s, linea %d, columna %d: bloque de `funcion` sin cierre. Falta `fin_funcion`.",
@@ -4399,7 +4600,7 @@ static int struct_kw_is_closer(const char *kw, int is_clase) {
 }
 
 /* Tras consumir `registro` o `clase` desde el nivel superior. */
-static ASTNode *parse_struct_body(Parser *p, int is_clase) {
+static ASTNode *parse_struct_body(Parser *p, int is_clase, int is_exported) {
     const Token *nt = peek(p, 0);
     if (!validate_user_defined_name_tok(p, nt)) return NULL;
     advance(p);
@@ -4417,100 +4618,144 @@ static ASTNode *parse_struct_body(Parser *p, int is_clase) {
         advance(p);
     }
     char **ft = NULL, **fn = NULL;
-    size_t nf = 0, cap = 0;
-    while (peek(p, 0) && peek(p, 0)->value.str && !struct_kw_is_closer(peek(p, 0)->value.str, is_clase)) {
+    int *fv = NULL;
+    size_t nf = 0, fcap = 0;
+    
+    ASTNode **methods = NULL;
+    int *mv = NULL;
+    size_t nm = 0, mcap = 0;
+
+    while (peek(p, 0)) {
+        const Token *phead = peek(p, 0);
+        const char *kws = token_union_str(phead);
+        if (!kws || struct_kw_is_closer(kws, is_clase)) break;
+        
+        int visibility = 0; /* 0 = publico, 1 = privado */
+        if (phead->type == TOK_KEYWORD && strcmp(phead->value.str, "privado") == 0) {
+            visibility = 1;
+            advance(p);
+            phead = peek(p, 0);
+        }
+
         const Token *tblk = peek(p, 0);
         if (tblk && tblk->type == TOK_KEYWORD && tblk->value.str) {
             const char *kw = tblk->value.str;
             if (strcmp(kw, "funcion") == 0) {
-                const Token *p1 = peek(p, 1);
-                const Token *p2 = peek(p, 2);
-                if (p1 && p1->type == TOK_IDENTIFIER && p2 && p2->type == TOK_OPERATOR &&
-                    p2->value.str && strcmp(p2->value.str, "(") == 0) {
-                    if (p->source_path && p->source_path[0])
-                        set_error_at(p, tblk->line, tblk->column,
-                            "Archivo %s, linea %d, columna %d: dentro de %s '%s' no se pueden declarar funciones anidadas; use un campo `funcion nombre` para puntero a metodo.",
-                            p->source_path, tblk->line, tblk->column, is_clase ? "clase" : "registro", name ? name : "?");
-                    else
-                        set_error_at(p, tblk->line, tblk->column,
-                            "linea %d, columna %d: no se permiten funciones anidadas en %s; use campo tipo funcion.",
-                            tblk->line, tblk->column, is_clase ? "clase" : "registro");
+                if (!is_clase) {
+                    set_error_at(p, tblk->line, tblk->column, "No se permiten funciones en registros; use una clase.");
                     goto parse_struct_body_fail;
                 }
+                ASTNode *method = parse_function(p, 0, 0);
+                if (!method) goto parse_struct_body_fail;
+                
+                if (nm >= mcap) {
+                    mcap = mcap ? mcap * 2 : 4;
+                    methods = realloc(methods, mcap * sizeof(ASTNode*));
+                    mv = realloc(mv, mcap * sizeof(int));
+                }
+                methods[nm] = method;
+                mv[nm] = visibility;
+                nm++;
+                continue;
             }
             if (is_clase && strcmp(kw, "fin_registro") == 0) {
-                if (p->source_path && p->source_path[0])
-                    set_error_at(p, tblk->line, tblk->column,
-                        "Archivo %s, linea %d, columna %d: cierre de `clase '%s'` debe ser `fin_clase`, no `fin_registro`.",
-                        p->source_path, tblk->line, tblk->column, name ? name : "?");
-                else
-                    set_error_at(p, tblk->line, tblk->column,
-                        "linea %d, columna %d: use `fin_clase` para cerrar la clase '%s'.",
-                        tblk->line, tblk->column, name ? name : "?");
+                set_error_at(p, tblk->line, tblk->column, "Cierre de clase '%s' debe ser `fin_clase`.", name);
                 goto parse_struct_body_fail;
             }
             if (!is_clase && strcmp(kw, "fin_clase") == 0) {
-                if (p->source_path && p->source_path[0])
-                    set_error_at(p, tblk->line, tblk->column,
-                        "Archivo %s, linea %d, columna %d: cierre de `registro '%s'` debe ser `fin_registro`, no `fin_clase`.",
-                        p->source_path, tblk->line, tblk->column, name ? name : "?");
-                else
-                    set_error_at(p, tblk->line, tblk->column,
-                        "linea %d, columna %d: use `fin_registro` para cerrar el registro '%s'.",
-                        tblk->line, tblk->column, name ? name : "?");
+                set_error_at(p, tblk->line, tblk->column, "Cierre de registro '%s' debe ser `fin_registro`.", name);
                 goto parse_struct_body_fail;
             }
             if (strcmp(kw, "principal") == 0 || strcmp(kw, "asincrono") == 0 ||
                 strcmp(kw, "registro") == 0 || strcmp(kw, "clase") == 0 ||
                 strcmp(kw, "extiende") == 0 ||
                 strcmp(kw, "activar_modulo") == 0 || strcmp(kw, "usar") == 0 || strcmp(kw, "fin_principal") == 0) {
-                const char *finw = is_clase ? "fin_clase" : "fin_registro";
-                if (p->source_path && p->source_path[0])
-                    set_error_at(p, tblk->line, tblk->column,
-                        "Archivo %s, linea %d, columna %d: el %s '%s' no esta cerrado: aparece `%s` antes de `%s`.",
-                        p->source_path, tblk->line, tblk->column, is_clase ? "clase" : "registro", name ? name : "?", kw, finw);
-                else
-                    set_error_at(p, tblk->line, tblk->column,
-                        "linea %d, columna %d: %s '%s' sin cerrar; anada `%s` tras los campos.",
-                        tblk->line, tblk->column, is_clase ? "clase" : "registro", name ? name : "?", finw);
                 goto parse_struct_body_fail;
             }
         }
-        const Token *ty = advance(p);
-        const Token *fld = peek(p, 0);
-        if (!ty || !fld) break;
-        if (!validate_user_defined_name_tok(p, fld)) {
-            for (size_t i = 0; i < nf; i++) {
-                free(ft[i]);
-                free(fn[i]);
+        
+        const Token *ty_tok = peek(p, 0);
+        char *type_name = NULL;
+        if (ty_tok && ty_tok->type == TOK_KEYWORD && ty_tok->value.str && 
+            (strcmp(ty_tok->value.str, "lista") == 0 || strcmp(ty_tok->value.str, "mapa") == 0)) {
+            advance(p);
+            type_name = strdup(ty_tok->value.str);
+            /* Suffix opcional '?' */
+            const Token *q = peek(p, 0);
+            if (q && q->type == TOK_OPERATOR && q->value.str && strcmp(q->value.str, "?") == 0) {
+                char *new_type = malloc(strlen(type_name) + 2);
+                sprintf(new_type, "%s?", type_name);
+                free(type_name);
+                type_name = new_type;
+                advance(p);
             }
-            free(ft);
-            free(fn);
-            free(name);
-            free(extends_name);
-            return NULL;
+            char *elem_type = parse_optional_lista_element_type(p);
+            if (elem_type) {
+                char *new_type = malloc(strlen(type_name) + strlen(elem_type) + 3);
+                sprintf(new_type, "%s<%s>", type_name, elem_type);
+                free(type_name);
+                type_name = new_type;
+                free(elem_type);
+            }
+        } else if (ty_tok && ty_tok->type == TOK_KEYWORD && ty_tok->value.str && strcmp(ty_tok->value.str, "tarea") == 0) {
+            advance(p);
+            type_name = strdup("tarea");
+            /* Suffix opcional '?' */
+            const Token *q = peek(p, 0);
+            if (q && q->type == TOK_OPERATOR && q->value.str && strcmp(q->value.str, "?") == 0) {
+                char *new_type = malloc(strlen(type_name) + 2);
+                sprintf(new_type, "%s?", type_name);
+                free(type_name);
+                type_name = new_type;
+                advance(p);
+            }
+            char *tarea_el = NULL;
+            if (parse_optional_tarea_inner_type_after_tarea_keyword(p, &tarea_el) && tarea_el) {
+                char *new_type = malloc(strlen(type_name) + strlen(tarea_el) + 3);
+                sprintf(new_type, "%s<%s>", type_name, tarea_el);
+                free(type_name);
+                type_name = new_type;
+                free(tarea_el);
+            }
+        } else {
+            const Token *ty = peek(p, 0);
+            if (!ty) goto parse_struct_body_fail;
+            advance(p);
+            type_name = ty->value.str ? strdup(ty->value.str) : NULL;
+            /* Suffix opcional '?' */
+            const Token *q = peek(p, 0);
+            if (q && q->type == TOK_OPERATOR && q->value.str && strcmp(q->value.str, "?") == 0) {
+                char *new_type = malloc((type_name ? strlen(type_name) : 0) + 2);
+                sprintf(new_type, "%s?", type_name ? type_name : "");
+                if (type_name) free(type_name);
+                type_name = new_type;
+                advance(p);
+            }
+        }
+
+        const Token *fld = peek(p, 0);
+        if (!fld || !validate_user_defined_name_tok(p, fld)) {
+            free(type_name);
+            goto parse_struct_body_fail;
         }
         advance(p);
-        if (nf >= cap) {
-            cap = cap ? cap * 2 : 4;
-            char **pft = realloc(ft, cap * sizeof(char*));
-            char **pfn = realloc(fn, cap * sizeof(char*));
-            if (!pft || !pfn) break;
-            ft = pft;
-            fn = pfn;
+        
+        if (nf >= fcap) {
+            fcap = fcap ? fcap * 2 : 4;
+            ft = realloc(ft, fcap * sizeof(char*));
+            fn = realloc(fn, fcap * sizeof(char*));
+            fv = realloc(fv, fcap * sizeof(int));
         }
-        ft[nf] = ty->value.str ? strdup(ty->value.str) : NULL;
+        ft[nf] = type_name;
         fn[nf] = fld->value.str ? strdup(fld->value.str) : NULL;
+        fv[nf] = visibility;
         nf++;
     }
-    {
-        char finmsg[320];
-        snprintf(finmsg, sizeof finmsg, "se esperaba `%s` para cerrar %s '%s'",
-                 is_clase ? "fin_clase" : "fin_registro", is_clase ? "clase" : "registro", name ? name : "?");
-        const char *fkw = is_clase ? "fin_clase" : "fin_registro";
-        if (!expect(p, TOK_KEYWORD, fkw, finmsg))
-            goto parse_struct_body_fail;
-    }
+    
+    const char *fkw = is_clase ? "fin_clase" : "fin_registro";
+    if (!expect(p, TOK_KEYWORD, fkw, "Cierre de clase/registro esperado"))
+        goto parse_struct_body_fail;
+
     StructDefNode *sn = calloc(1, sizeof(StructDefNode));
     sn->base.type = NODE_STRUCT_DEF;
     sn->base.line = nt ? nt->line : 0;
@@ -4519,17 +4764,20 @@ static ASTNode *parse_struct_body(Parser *p, int is_clase) {
     sn->extends_name = extends_name;
     sn->field_types = ft;
     sn->field_names = fn;
+    sn->field_visibilities = fv;
     sn->n_fields = nf;
+    sn->methods = methods;
+    sn->method_visibilities = mv;
+    sn->n_methods = nm;
+    sn->is_exported = is_exported;
     return (ASTNode*)sn;
+
 parse_struct_body_fail:
-    for (size_t i = 0; i < nf; i++) {
-        free(ft[i]);
-        free(fn[i]);
-    }
-    free(ft);
-    free(fn);
-    free(name);
-    free(extends_name);
+    for (size_t i = 0; i < nf; i++) { free(ft[i]); free(fn[i]); }
+    free(ft); free(fn); free(fv);
+    for (size_t i = 0; i < nm; i++) ast_free(methods[i]);
+    free(methods); free(mv);
+    free(name); free(extends_name);
     return NULL;
 }
 
@@ -4773,20 +5021,80 @@ ASTNode *parser_parse(Parser *p) {
             if (strcmp(t->value.str, "enviar") == 0) {
                 advance(p);
                 const Token *nx = peek(p, 0);
-                if (nx && nx->type == TOK_KEYWORD && nx->value.str && strcmp(nx->value.str, "funcion") == 0) {
-                    ASTNode *fn = parse_function(p, 1, 0);
-                    if (!fn) {
-                        if (p->last_error) {
-                            parser_accumulate_error(p, p->last_error);
-                            free(p->last_error);
-                            p->last_error = NULL;
+                if (nx && nx->value.str) {
+                    if (nx->type == TOK_KEYWORD) {
+                        if (strcmp(nx->value.str, "funcion") == 0) {
+                            ASTNode *fn = parse_function(p, 1, 0);
+                            if (!fn) {
+                                if (p->last_error) {
+                                    parser_accumulate_error(p, p->last_error);
+                                    free(p->last_error);
+                                    p->last_error = NULL;
+                                    parser_synchronize(p);
+                                    continue;
+                                }
+                                break;
+                            }
+                            node_vec_push(&funcs, fn);
+                            continue;
+                        }
+                        if (strcmp(nx->value.str, "clase") == 0) {
+                            advance(p);
+                            ASTNode *sd = parse_struct_body(p, 1, 1);
+                            if (sd) {
+                                node_vec_push(&globals, sd);
+                            } else if (p->last_error) {
+                                parser_accumulate_error(p, p->last_error);
+                                free(p->last_error);
+                                p->last_error = NULL;
+                                parser_synchronize(p);
+                            }
+                            continue;
+                        }
+                        if (strcmp(nx->value.str, "registro") == 0) {
+                            advance(p);
+                            ASTNode *sd = parse_struct_body(p, 0, 1);
+                            if (sd) {
+                                node_vec_push(&globals, sd);
+                            } else if (p->last_error) {
+                                parser_accumulate_error(p, p->last_error);
+                                free(p->last_error);
+                                p->last_error = NULL;
+                                parser_synchronize(p);
+                            }
+                            continue;
+                        }
+                    }
+                    if (nx->type == TOK_OPERATOR && strcmp(nx->value.str, "{") == 0) {
+                        int eline = nx->line, ecol = nx->column;
+                        advance(p);
+                        char **names = NULL;
+                        size_t nn = 0, cap = 0;
+                        while (p->pos < token_vec_size(p->tokens)) {
+                            const Token *id = peek(p, 0);
+                            if (!id || (id->type == TOK_OPERATOR && id->value.str && strcmp(id->value.str, "}") == 0))
+                                break;
+                            if (!validate_user_defined_name_tok(p, id)) break;
+                            if (nn >= cap) {
+                                cap = cap ? cap * 2 : 4;
+                                char **n2 = realloc(names, cap * sizeof(char *));
+                                if (!n2) break;
+                                names = n2;
+                            }
+                            names[nn++] = strdup_safe(id->value.str);
+                            advance(p);
+                            if (!match(p, TOK_OPERATOR, ",")) break;
+                        }
+                        if (!expect(p, TOK_OPERATOR, "}", "Falta `}` para cerrar `enviar { ... }`.")) {
+                            for (size_t k = 0; k < nn; k++) free(names[k]);
+                            free(names);
                             parser_synchronize(p);
                             continue;
                         }
-                        break;
+                        ASTNode *en = make_export_directive(names, nn, eline, ecol);
+                        node_vec_push(&globals, en);
+                        continue;
                     }
-                    node_vec_push(&funcs, fn);
-                    continue;
                 }
                 ASTNode *s = parse_statement(p);
                 if (!s) {
@@ -4872,7 +5180,7 @@ ASTNode *parser_parse(Parser *p) {
             }
             if (strcmp(t->value.str, "registro") == 0) {
                 advance(p);
-                ASTNode *sd = parse_struct_body(p, 0);
+                ASTNode *sd = parse_struct_body(p, 0, 0);
                 if (sd) {
                     node_vec_push(&globals, sd);
                 } else if (p->last_error) {
@@ -4887,7 +5195,7 @@ ASTNode *parser_parse(Parser *p) {
             }
             if (strcmp(t->value.str, "clase") == 0) {
                 advance(p);
-                ASTNode *sd = parse_struct_body(p, 1);
+                ASTNode *sd = parse_struct_body(p, 1, 0);
                 if (sd) {
                     node_vec_push(&globals, sd);
                 } else if (p->last_error) {

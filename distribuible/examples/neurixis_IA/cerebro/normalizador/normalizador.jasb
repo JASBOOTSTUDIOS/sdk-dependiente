@@ -1,0 +1,15 @@
+# =============================================================================
+# NORMALIZADOR - FUNCIONES BÁSICAS
+# =============================================================================
+
+enviar clase Normalizador
+
+    funcion normalizar_acentos(texto _texto) retorna texto
+        retornar _texto # Implementación simplificada
+    fin_funcion
+
+    funcion limpiar_puntuacion(texto _texto) retorna texto
+        retornar _texto # Implementación simplificada
+    fin_funcion
+
+fin_clase

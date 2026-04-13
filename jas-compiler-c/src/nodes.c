@@ -52,6 +52,12 @@ void ast_free(ASTNode *node) {
             }
             free(n->field_types);
             free(n->field_names);
+            for (size_t i = 0; i < n->n_methods; i++) {
+                ast_free(n->methods[i]);
+            }
+            if (n->methods) free(n->methods);
+            if (n->field_visibilities) free(n->field_visibilities);
+            if (n->method_visibilities) free(n->method_visibilities);
             break;
         }
         case NODE_BINARY_OP:
@@ -252,6 +258,14 @@ void ast_free(ASTNode *node) {
                 if (n->types) free(n->types);
             }
             if (n->body) ast_free(n->body);
+            break;
+        }
+        case NODE_EXPORT_DIRECTIVE: {
+            ExportDirectiveNode *n = (ExportDirectiveNode*)node;
+            for (size_t i = 0; i < n->n_names; i++) {
+                free(n->names[i]);
+            }
+            free(n->names);
             break;
         }
         case NODE_BREAK:

@@ -1,0 +1,28 @@
+# apps/neurixis/demo_neurixis.jasb - Demo interactiva de Neurixis IA
+
+usar {Neurixis} de "neurixis.jasb"
+
+principal
+    Neurixis ia
+    
+    imprimir "=========================================="
+    imprimir "   DEMOSTRACION DE NEURIXIS IA COGNITIVA  "
+    imprimir "=========================================="
+    
+    # 0. Abrir memoria manualmente para evitar restricciones de scope de la VM
+    crear_memoria("build/demo_neurixis.jmn", 256, 1024)
+    
+    # 1. Inicializar sistema
+    ia.memoria.inicializar("build/demo_neurixis.jmn")
+    ia.encendido = verdadero
+    ia.configurar_base()
+    
+    imprimir "Sistema inicializado. Escribe 'salir' para terminar."
+    
+    # 2. Iniciar conversacion
+    ia.conversar()
+    
+    # 3. Finalizar
+    cerrar_memoria()
+    imprimir "=========================================="
+fin_principal

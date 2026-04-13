@@ -1,0 +1,47 @@
+# core/interfaz.jasb - Interfaz de alto nivel para conceptos Neurixis
+
+usar {Neurona} de "neurona.jasb"
+
+clase InterfazConceptos
+    
+    funcion inicializar_neurona(Neurona n, texto nombre, texto val)
+        n.inicializar(nombre)
+        n.establecer_valor(val)
+    fin_funcion
+    
+    funcion nombre_de(Neurona neurona) retorna texto
+        retornar neurona.obtener_nombre()
+    fin_funcion
+    
+    funcion valor_de(Neurona neurona) retorna texto
+        retornar neurona.obtener_valor()
+    fin_funcion
+    
+    funcion asociar_conceptos(Neurona neurona1, Neurona neurona2, entero fuerza)
+        neurona1.crear_asociacion(neurona2, fuerza)
+    fin_funcion
+    
+    funcion estan_asociados(Neurona neurona1, Neurona neurona2) retorna bool
+        retornar neurona1.esta_asociado_con(neurona2)
+    fin_funcion
+    
+    funcion pensar_sobre(texto consulta) retorna texto
+        pensar consulta
+        buscar consulta
+        retornar resultado
+    fin_funcion
+    
+    funcion aprender_texto(texto nombre, entero nivel)
+        aprender nombre con peso nivel
+    fin_funcion
+    
+    funcion buscar_contextual(texto consulta) retorna lista
+        # Búsqueda contextual: pensar en el concepto antes de buscar asociaciones
+        imprimir "Buscando contextual para: " + consulta
+        pensar consulta
+        retornar obtener_relacionados(consulta)
+    fin_funcion
+    
+fin_clase
+
+enviar {InterfazConceptos}

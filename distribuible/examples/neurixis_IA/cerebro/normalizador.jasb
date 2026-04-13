@@ -1,0 +1,742 @@
+# =============================================================================
+# CLASE: NORMALIZADOR
+# =============================================================================
+# Propósito: Sistema completo de normalización de texto para Jasboot
+# Funcionalidades: Limpieza, validación, transformación y análisis de texto
+# Autor: Neurixis IA Development Team
+# =============================================================================
+
+clase Normalizador
+
+# =============================================================================
+    # MÉTODO: div_txt_por_car
+    # =============================================================================
+    # Propósito: Dividir un texto en partes usando un carácter divisor
+    # Parámetros:
+    #   - _texto (texto): Texto original a dividir
+    #   - divisor (texto): Carácter usado como separador
+    # Retorna:
+    #   - lista<texto>: Lista de partes del texto dividido
+    # =============================================================================
+    // División de texto por caracteres
+    funcion div_txt_por_car(texto _texto, texto divisor) retorna lista<texto>
+        lista<texto> _resultado = mem_lista_crear()
+        texto temp = ""
+        entero i = 0
+        entero tam = longitud_texto(_texto)
+        
+        mientras i < tam hacer
+            texto char = extraer_subtexto(_texto, i, 1)
+            si char == divisor entonces
+                si longitud_texto(temp) > 0 entonces
+                    mem_lista_agregar(_resultado, temp)
+                fin_si
+                temp = ""
+            sino
+                temp = temp + char
+            fin_si
+            i = i + 1
+        fin_mientras
+        
+        si longitud_texto(temp) > 0 entonces
+            mem_lista_agregar(_resultado, temp)
+        fin_si
+        
+        retornar _resultado
+    fin_funcion
+
+# =============================================================================
+    # MÉTODO: extraer_palabras
+    # =============================================================================
+    # Propósito: Extraer palabras individuales de un texto
+    # Parámetros:
+    #   - _entrada (texto): Texto del cual se extraerán las palabras
+    # Retorna:
+    #   - lista<texto>: Lista de palabras encontradas en el texto
+    # =============================================================================
+    // funcion para extraer palabras de un texto
+    funcion extraer_palabras(texto _entrada) retorna lista<texto>
+        retornar este.div_txt_por_car(_entrada, " ")
+    fin_funcion
+
+# =============================================================================
+    # MÉTODO: normalizar_de_textos
+    # =============================================================================
+    # Propósito: Normalizar una lista de palabras eliminando acentos y puntuación
+    # Parámetros:
+    #   - _palabras (lista<texto>): Lista de palabras a normalizar
+    # Retorna:
+    #   - lista<texto>: Lista de palabras normalizadas
+    # =============================================================================
+    // funcion para normalizar palabras con acentos y puntuación
+    funcion normalizar_de_textos(lista<texto> _palabras) retorna lista<texto>
+        lista<texto> _resultado = mem_lista_crear()
+        entero i = 0
+        entero tam = mem_lista_tamano(_palabras)
+        
+        mientras i < tam hacer
+            texto p = mem_lista_obtener(_palabras, i)
+            texto p_norm = este.normalizar_acentos(p)
+            p_norm = este.limpiar_puntuacion(p_norm)
+            mem_lista_agregar(_resultado, p_norm)
+            i = i + 1
+        fin_mientras
+        
+        retornar _resultado
+    fin_funcion
+
+# =============================================================================
+    # MÉTODO: capitalizar_primera_letra
+    # =============================================================================
+    # Propósito: Convertir la primera letra de una palabra a mayúscula
+    # Parámetros:
+    #   - palabra (texto): Palabra a capitalizar
+    # Retorna:
+    #   - texto: Palabra con primera letra en mayúscula
+    # =============================================================================
+    // funcion para capitalizar la primera letra de una palabra poniendola en mayúscula
+    funcion capitalizar_primera_letra(texto palabra) retorna texto
+
+        cuando longitud_texto(palabra) > 0 entonces
+            texto primera = extraer_subtexto(palabra, 0, 1)
+            entero cod = codigo_caracter(primera)
+            cuando cod >= 97 y cod <= 122 entonces
+                cod = cod - 32
+            fin_cuando
+            texto primera_mayus = caracter_a_texto(cod)
+            texto resto = extraer_subtexto(palabra, 1, longitud_texto(palabra) - 1)
+            retornar primera_mayus + resto
+        sino
+            retornar palabra
+        fin_cuando
+    fin_funcion
+
+    # =============================================================================
+    # MÉTODO: limpiar_puntuacion
+    # =============================================================================
+    # Propósito: Eliminar todos los signos de puntuación de un texto
+    # Parámetros:
+    #   - _texto (texto): Texto del cual se eliminará la puntuación
+    # Retorna:
+    #   - texto: Texto sin signos de puntuación
+    # =============================================================================
+    // funcion para limpiar la puntuación de un texto
+    funcion limpiar_puntuacion(texto _texto) retorna texto
+        texto _resultado = ""
+        entero i = 0
+        entero tam = longitud_texto(_texto)
+        
+        mientras i < tam hacer
+            texto char = extraer_subtexto(_texto, i, 1)
+            entero codigo = codigo_caracter(char)
+            
+            # Manejar caracteres UTF-8 multibyte
+            si codigo == 194 entonces
+                # Primer byte de carácter UTF-8 de 2 bytes (como ¡, ¿)
+                si i + 1 < tam entonces
+                    texto segundo_byte = extraer_subtexto(_texto, i + 1, 1)
+                    entero codigo2 = codigo_caracter(segundo_byte)
+                    
+                    # ¡ = 194 + 161, ¿ = 194 + 191
+                    si codigo2 == 161 o codigo2 == 191 entonces
+                        # Saltar ambos bytes (¡ o ¿)
+                        i = i + 2
+                        continuar
+                    fin_si
+                fin_si
+                _resultado = _resultado + char
+            sino si codigo >= 194 y codigo <= 196 entonces
+                # Caracteres UTF-8 con acentos (á, é, í, ó, ú, etc.)
+                # Preservar todos los caracteres con acentos
+                _resultado = _resultado + char
+            sino si char == "." o char == "," o char == ";" o char == ":" o char == "!" o char == "?" o char == "(" o char == ")" o char == "\"" o char == "'" entonces
+                # No agregar puntuación, solo continuar al siguiente carácter
+            sino
+                _resultado = _resultado + char
+            fin_si
+            i = i + 1
+        fin_mientras
+        
+        retornar _resultado
+    fin_funcion
+
+    # =============================================================================
+    # MÉTODO: quitar_espacios_extra
+    # =============================================================================
+    # Propósito: Eliminar espacios múltiples consecutivos dejando solo uno
+    # Parámetros:
+    #   - _texto (texto): Texto con espacios extra a normalizar
+    # Retorna:
+    #   - texto: Texto con espacios normalizados
+    # =============================================================================
+    // funcion para quitar espacios extra de un texto
+    funcion quitar_espacios_extra(texto _texto) retorna texto
+        texto _resultado = ""
+        entero i = 0
+        entero tam = longitud_texto(_texto)
+        bool ultimo_fue_espacio = falso
+        
+        mientras i < tam hacer
+            texto char = extraer_subtexto(_texto, i, 1)
+            si char == " " entonces
+                si ultimo_fue_espacio == falso entonces
+                    _resultado = _resultado + " "
+                    ultimo_fue_espacio = verdadero
+                fin_si
+            sino
+                _resultado = _resultado + char
+                ultimo_fue_espacio = falso
+            fin_si
+            i = i + 1
+        fin_mientras
+        
+        retornar _resultado
+    fin_funcion
+
+    # =============================================================================
+    # MÉTODO: remover_caracteres_especiales
+    # =============================================================================
+    # Propósito: Eliminar caracteres no alfanuméricos dejando solo letras y números
+    # Parámetros:
+    #   - _texto (texto): Texto del cual se eliminarán caracteres especiales
+    # Retorna:
+    #   - texto: Texto limpio con solo letras y números
+    # =============================================================================
+    // funcion para remover caracteres especiales de un texto
+    funcion remover_caracteres_especiales(texto _texto) retorna texto
+        texto _resultado = ""
+        entero i = 0
+        entero tam = longitud_texto(_texto)
+        
+        mientras i < tam hacer
+            texto char = extraer_subtexto(_texto, i, 1)
+            entero codigo = codigo_caracter(char)
+            // Permitir letras (A-Z, a-z), números (0-9) y espacios (32)
+            si (codigo >= 65 y codigo <= 90) o (codigo >= 97 y codigo <= 122) o (codigo >= 48 y codigo <= 57) o codigo == 32 entonces
+                _resultado = _resultado + char
+            fin_si
+            i = i + 1
+        fin_mientras
+        
+        retornar _resultado
+    fin_funcion
+
+    # =============================================================================
+    # MÉTODO: eliminar_palabras_vacias
+    # =============================================================================
+    # Propósito: Eliminar palabras vacías o nulas de una lista de palabras
+    # Parámetros:
+    #   - _palabras (lista<texto>): Lista de palabras a filtrar
+    # Retorna:
+    #   - lista<texto>: Lista sin palabras vacías
+    # =============================================================================
+    // funcion para eliminar palabras vacías de una lista
+    funcion eliminar_palabras_vacias(lista<texto> _palabras) retorna lista<texto>
+        lista<texto> _resultado = mem_lista_crear()
+        entero i = 0
+        entero tam = mem_lista_tamano(_palabras)
+        
+        mientras i < tam hacer
+            texto p = mem_lista_obtener(_palabras, i)
+            si longitud_texto(p) > 0 entonces
+                mem_lista_agregar(_resultado, p)
+            fin_si
+            i = i + 1
+        fin_mientras
+        
+        retornar _resultado
+    fin_funcion
+
+    # =============================================================================
+    # MÉTODO: normalizar_acentos
+    # =============================================================================
+    # Propósito: Convertir caracteres con acentos a sus equivalentes sin acentos
+    # Parámetros:
+    #   - _texto (texto): Texto con caracteres acentuados
+    # Retorna:
+    #   - texto: Texto con acentos normalizados
+    # =============================================================================
+    // funcion para normalizar acentos
+    funcion normalizar_acentos(texto _texto) retorna texto
+        texto _resultado = ""
+        entero i = 0
+        entero tam = longitud_texto(_texto)
+        
+        mientras i < tam hacer
+            texto char = extraer_subtexto(_texto, i, 1)
+            entero codigo = codigo_caracter(char)
+            
+            # Manejar caracteres UTF-8 multibyte con acentos
+            si codigo == 195 entonces
+                # Primer byte de carácter UTF-8 con acento
+                si i + 1 < tam entonces
+                    texto segundo_byte = extraer_subtexto(_texto, i + 1, 1)
+                    entero codigo2 = codigo_caracter(segundo_byte)
+                    
+                    # á = 195 + 161, é = 195 + 169, í = 195 + 173
+                    # ó = 195 + 179, ú = 195 + 186
+                    # Á = 195 + 129, É = 195 + 137, Í = 195 + 141
+                    # Ó = 195 + 147, Ú = 195 + 154
+                    seleccionar codigo2 hacer
+                    caso 161 
+                        _resultado = _resultado + "a"  # á
+                    caso 169 
+                        _resultado = _resultado + "e"  # é
+                    caso 173 
+                        _resultado = _resultado + "i"  # í
+                    caso 179 
+                        _resultado = _resultado + "o"  # ó
+                    caso 186 
+                        _resultado = _resultado + "u"  # ú
+                    caso 129 
+                        _resultado = _resultado + "A"  # Á
+                    caso 137 
+                        _resultado = _resultado + "E"  # É
+                    caso 141 
+                        _resultado = _resultado + "I"  # Í
+                    caso 147 
+                        _resultado = _resultado + "O"  # Ó
+                    caso 154 
+                        _resultado = _resultado + "U"  # Ú
+                    defecto
+                        _resultado = _resultado + char + segundo_byte  # Otros caracteres UTF-8
+                    fin_seleccionar
+                    
+                    i = i + 2  # Saltar ambos bytes
+                    continuar
+                fin_si
+            sino
+                # Caracteres ASCII normales
+                seleccionar char hacer
+                caso "á"
+                    _resultado = _resultado + "a"
+                caso "é"
+                    _resultado = _resultado + "e"
+                caso "í"
+                    _resultado = _resultado + "i"
+                caso "ó"
+                    _resultado = _resultado + "o"
+                caso "ú"
+                    _resultado = _resultado + "u"
+                caso "Á"
+                    _resultado = _resultado + "A"
+                caso "É"
+                    _resultado = _resultado + "E"
+                caso "Í"
+                    _resultado = _resultado + "I"
+                caso "Ó"
+                    _resultado = _resultado + "O"
+                caso "Ú"
+                    _resultado = _resultado + "U"
+                defecto
+                    _resultado = _resultado + char
+                fin_seleccionar
+            fin_si
+            
+            i = i + 1
+        fin_mientras
+        
+        retornar _resultado
+    fin_funcion
+
+# =============================================================================
+    # MÉTODO: estandarizar_numeros
+    # =============================================================================
+    # Propósito: Estandarizar formato de números en texto
+    # Parámetros:
+    #   - _texto (texto): Texto con números a estandarizar
+    # Retorna:
+    #   - texto: Texto con números en formato estándar
+    # =============================================================================
+    // funcion para estandarizar números
+    funcion estandarizar_numeros(texto _texto) retorna texto
+        texto _resultado = ""
+        entero i = 0
+        entero tam = longitud_texto(_texto)
+        
+        mientras i < tam hacer
+            texto char = extraer_subtexto(_texto, i, 1)
+            entero codigo = codigo_caracter(char)
+            si codigo >= 48 y codigo <= 57 entonces
+                _resultado = _resultado + "#"
+            sino
+                _resultado = _resultado + char
+            fin_si
+            i = i + 1
+        fin_mientras
+        
+        retornar _resultado
+    fin_funcion
+    # =============================================================================
+    # MÉTODO: contar_palabras
+    # =============================================================================
+    # Propósito: Contar el número de palabras en una lista
+    # Parámetros:
+    #   - _palabras (lista<texto>): Lista de palabras a contar
+    # Retorna:
+    #   - entero: Número total de palabras
+    # =============================================================================
+    // funciones de estadísticas de palabras con lista
+    funcion contar_palabras(lista _palabras) retorna entero
+        retornar mem_lista_tamano(_palabras)
+    fin_funcion
+    # =============================================================================
+    # MÉTODO: palabra_mas_larga
+    # =============================================================================
+    # Propósito: Encontrar la palabra más larga en una lista
+    # Parámetros:
+    #   - _palabras (lista<texto>): Lista de palabras a analizar
+    # Retorna:
+    #   - texto: Palabra más larga encontrada
+    # =============================================================================
+    // funcion para obtener la palabra mas larga
+    funcion palabra_mas_larga(lista<texto> _palabras) retorna texto    
+        texto max_p = ""
+        entero i = 0
+        entero tam = mem_lista_tamano(_palabras)
+        
+        mientras i < tam hacer
+            texto p = mem_lista_obtener(_palabras, i)
+            si longitud_texto(p) > longitud_texto(max_p) entonces
+                max_p = p
+            fin_si
+            i = i + 1
+        fin_mientras
+        
+        retornar max_p
+    fin_funcion
+
+    # =============================================================================
+    # MÉTODO: palabras_unicas
+    # =============================================================================
+    # Propósito: Obtener palabras únicas eliminando duplicados
+    # Parámetros:
+    #   - _palabras (lista<texto>): Lista de palabras con posibles duplicados
+    # Retorna:
+    #   - lista<texto>: Lista de palabras únicas
+    # =============================================================================
+    // funcion para obtener palabras únicas
+    funcion palabras_unicas(lista<texto> _palabras) retorna lista<texto>
+        lista<texto> unicas = mem_lista_crear()
+        entero i = 0
+        entero tam = mem_lista_tamano(_palabras)
+        
+        mientras i < tam hacer
+            texto p = mem_lista_obtener(_palabras, i)
+            bool ya_existe = falso
+            entero j = 0
+            entero n_res = mem_lista_tamano(unicas)
+            
+            mientras j < n_res hacer
+                si p == mem_lista_obtener(unicas, j) entonces
+                    ya_existe = verdadero
+                fin_si
+                j = j + 1
+            fin_mientras
+            
+            si ya_existe == falso entonces
+                mem_lista_agregar(unicas, p)
+            fin_si
+            i = i + 1
+        fin_mientras
+        
+        retornar unicas
+    fin_funcion
+
+    # =============================================================================
+    # MÉTODO: invertir_palabra
+    # =============================================================================
+    # Propósito: Invertir el orden de los caracteres de una palabra
+    # Parámetros:
+    #   - palabra (texto): Palabra a invertir
+    # Retorna:
+    #   - texto: Palabra invertida
+    # =============================================================================
+    // funcion para invertir una palabra
+    funcion invertir_palabra(texto palabra) retorna texto
+        texto _resultado = ""
+        entero i = longitud_texto(palabra) - 1
+        
+        mientras i >= 0 hacer
+            _resultado = _resultado + extraer_subtexto(palabra, i, 1)
+            i = i - 1
+        fin_mientras
+        
+        retornar _resultado
+    fin_funcion
+
+    # =============================================================================
+    # MÉTODO: es_palabra_valida
+    # =============================================================================
+    # Propósito: Verificar si una palabra solo contiene letras
+    # Parámetros:
+    #   - palabra (texto): Palabra a verificar
+    # Retorna:
+    #   - bool: Verdadero si la palabra es válida, falso de lo contrario
+    # =============================================================================
+    funcion es_palabra_valida(texto palabra) retorna bool
+        entero tam = longitud_texto(palabra)
+        si tam == 0 entonces retornar falso fin_si
+        
+        entero i = 0
+        mientras i < tam hacer
+            texto char = extraer_subtexto(palabra, i, 1)
+            entero codigo = codigo_caracter(char)
+            si (codigo < 65 o codigo > 90) y (codigo < 97 o codigo > 122) entonces
+                retornar falso
+            fin_si
+            i = i + 1
+        fin_mientras
+        
+        retornar verdadero
+    fin_funcion
+
+    # =============================================================================
+    # MÉTODO: contiene_numeros
+    # =============================================================================
+    # Propósito: Verificar si un texto contiene caracteres numéricos
+    # Parámetros:
+    #   - _texto (texto): Texto a verificar
+    # Retorna:
+    #   - bool: Verdadero si contiene números, falso de lo contrario
+    # =============================================================================
+    // funcion para verificar si un texto contiene números
+    funcion contiene_numeros(texto _texto) retorna bool
+        entero tam = longitud_texto(_texto)
+        entero i = 0
+        mientras i < tam hacer
+            texto char = extraer_subtexto(_texto, i, 1)
+            entero codigo = codigo_caracter(char)
+            si codigo >= 48 y codigo <= 57 entonces
+                retornar verdadero
+            fin_si
+            i = i + 1
+        fin_mientras
+        retornar falso
+    fin_funcion
+
+    # =============================================================================
+    # MÉTODO: contiene_solo_letras
+    # =============================================================================
+    # Propósito: Verificar si un texto contiene solo caracteres alfabéticos
+    # Parámetros:
+    #   - _texto (texto): Texto a verificar
+    # Retorna:
+    #   - bool: Verdadero si contiene solo letras, falso de lo contrario
+    # =============================================================================
+    // funcion para verificar si un texto contiene solo letras
+    funcion contiene_solo_letras(texto _texto) retorna bool
+        entero tam = longitud_texto(_texto)
+        entero i = 0
+        mientras i < tam hacer
+            texto char = extraer_subtexto(_texto, i, 1)
+            entero codigo = codigo_caracter(char)
+            si (codigo < 65 o codigo > 90) y (codigo < 97 o codigo > 122) y codigo != 32 entonces
+                retornar falso
+            fin_si
+            i = i + 1
+        fin_mientras
+        retornar verdadero
+    fin_funcion
+
+    # =============================================================================
+    # MÉTODO: titulo_caso
+    # =============================================================================
+    # Propósito: Convertir texto a formato Title Case (primera letra de cada palabra en mayúscula)
+    # Parámetros:
+    #   - _texto (texto): Texto a convertir
+    # Retorna:
+    #   - texto: Texto en formato Title Case
+    # =============================================================================
+    // Utilidades de formato
+    funcion titulo_caso(texto _texto) retorna texto
+        lista<texto> palabras = este.div_txt_por_car(_texto, " ")
+        lista<texto> _resultados = mem_lista_crear()
+        
+        entero i = 0
+        entero tam = mem_lista_tamano(palabras)
+        
+        mientras i < tam hacer
+            texto palabra = mem_lista_obtener(palabras, i)
+            //imprimir "capitalizando: " + este.capitalizar_primera_letra(palabra)
+            mem_lista_agregar(_resultados, este.capitalizar_primera_letra(palabra))
+            //imprimir "palabra agregada: " + mem_lista_obtener(_resultados, i)
+            i = i + 1
+        fin_mientras
+        
+        // Unir palabras
+        texto _resultado = ""
+        i = 0
+        tam = mem_lista_tamano(_resultados)
+        
+        mientras i < tam hacer
+            texto palabra_formateada = mem_lista_obtener(_resultados, i)
+            _resultado = _resultado + palabra_formateada
+            si i < tam - 1 entonces
+                _resultado = _resultado + " "
+            fin_si
+            i = i + 1
+        fin_mientras
+        
+        retornar _resultado
+    fin_funcion
+    # =============================================================================
+    # MÉTODO: oracion_caso
+    # =============================================================================
+    # Propósito: Convertir texto a formato de oración (primera letra en mayúscula, resto en minúsculas)
+    # Parámetros:
+    #   - _texto (texto): Texto a convertir
+    # Retorna:
+    #   - texto: Texto en formato de oración
+    # =============================================================================
+    // funcion para convertir texto a formato de oración
+    funcion oracion_caso(texto _texto) retorna texto
+        cuando longitud_texto(_texto) > 0 entonces
+            texto primera = este.capitalizar_primera_letra(extraer_subtexto(_texto, 0, 1))
+            texto resto = extraer_subtexto(_texto, 1, longitud_texto(_texto) - 1)
+            retornar primera + minusculas(resto)
+        sino
+            retornar _texto
+        fin_cuando
+    fin_funcion
+
+    # =============================================================================
+    # MÉTODO: camel_case
+    # =============================================================================
+    # Propósito: Convertir texto a formato CamelCase (palabras unidas sin espacios, primera letra mayúscula)
+    # Parámetros:
+    #   - _texto (texto): Texto a convertir
+    # Retorna:
+    #   - texto: Texto en formato CamelCase
+    # =============================================================================
+    // funcion para convertir texto a formato camel case
+    funcion camel_case(texto _texto) retorna texto
+        lista<texto> palabras = este.div_txt_por_car(_texto, " ")
+        texto _resultado = ""
+        
+        entero i = 0
+        entero tam = mem_lista_tamano(palabras)
+        
+        mientras i < tam hacer
+            texto palabra = mem_lista_obtener(palabras, i)
+            cuando i == 0 entonces
+                _resultado = _resultado + minusculas(palabra)
+            sino
+                _resultado = _resultado + este.capitalizar_primera_letra(palabra)
+            fin_cuando
+            i = i + 1
+        fin_mientras
+        
+        retornar _resultado
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: descomponer_texto
+    # =============================================================================
+    # Propósito: Descomponer un texto en palabras individuales
+    # Parámetros:
+    #   - texto (texto): Texto a descomponer
+    # Retorna:
+    #   - lista<texto>: Lista de palabras encontradas
+    # =============================================================================
+    funcion descomponer_texto(texto _texto) retorna lista<texto>
+        lista<texto> palabras = crear_lista()
+        texto palabra_actual = ""
+        entero i = 0
+        entero tam = longitud_texto(_texto)
+        
+        mientras i < tam hacer
+            texto char = extraer_subtexto(_texto, i, 1)
+            
+            # Si es espacio, agregar palabra actual a la lista
+            si char == " " entonces
+                si longitud_texto(palabra_actual) > 0 entonces
+                    lista_agregar(palabras, palabra_actual)
+                    palabra_actual = ""
+                fin_si
+            sino
+                # Si es letra o número, agregar a palabra actual
+                entero codigo = codigo_caracter(char)
+                si (codigo >= 65 y codigo <= 90) o (codigo >= 97 y codigo <= 122) o (codigo >= 48 y codigo <= 57) entonces
+                    palabra_actual = palabra_actual + char
+                sino
+                    # Si es otro caracter y hay palabra pendiente, agregarla
+                    si longitud_texto(palabra_actual) > 0 entonces
+                        lista_agregar(palabras, palabra_actual)
+                        palabra_actual = ""
+                    fin_si
+                # fin_si
+            fin_si
+            
+            i = i + 1
+        fin_mientras
+        
+        # Agregar última palabra si existe
+        si longitud_texto(palabra_actual) > 0 entonces
+            lista_agregar(palabras, palabra_actual)
+        fin_si
+        
+        retornar palabras
+    fin_funcion
+
+fin_clase
+
+// Función principal del programa donde se ejecuta la demostración
+principal
+    Normalizador normalizador
+    imprimir "\n1.=== SISTEMA DE NORMALIZACION DE TEXTO JASBOOT ==="
+
+    texto entrada_usuario = "¡Hola! Este es un 123 texto de PRUEBA con acentos: áéíóú."
+    imprimir "\n2.Texto original: " + entrada_usuario
+
+    // Limpieza
+    texto limpio = normalizador.limpiar_puntuacion(entrada_usuario)
+    imprimir "\n3.Normalizador de puntuación: " + limpio
+    limpio = normalizador.normalizar_acentos(limpio)
+    imprimir "\n4.Normalizador de acentos: " + limpio
+    limpio = normalizador.remover_caracteres_especiales(limpio)
+    imprimir "\n5.Normalizador de caracteres especiales: " + limpio
+    limpio = normalizador.quitar_espacios_extra(limpio)
+    imprimir "\n6.Texto limpio: " + limpio
+
+    // Tokenización
+    lista palabras = normalizador.extraer_palabras(limpio)
+    entero total = normalizador.contar_palabras(palabras)
+    imprimir "\n7.Total de palabras: " + total
+
+    // Normalización y Formato
+    imprimir "\n8.Palabra mas larga: " + normalizador.palabra_mas_larga(palabras)
+
+    imprimir "\n9.Texto en Titulo Caso: " + normalizador.titulo_caso(limpio)
+    
+    imprimir "\n10.Texto en Camel Case: " + normalizador.camel_case(limpio)
+
+    imprimir "\n11.=== PROCESO FINALIZADO CON EXITO ==="
+fin_principal
+
+enviar {
+    Normalizador,
+    Normalizador_div_txt_por_car,
+    Normalizador_extraer_palabras,
+    Normalizador_normalizar_de_textos,
+    Normalizador_capitalizar_primera_letra,
+    Normalizador_limpiar_puntuacion,
+    Normalizador_quitar_espacios_extra,
+    Normalizador_remover_caracteres_especiales,
+    Normalizador_eliminar_palabras_vacias,
+    Normalizador_normalizar_acentos,
+    Normalizador_estandarizar_numeros,
+    Normalizador_contar_palabras,
+    Normalizador_palabra_mas_larga,
+    Normalizador_palabras_unicas,
+    Normalizador_invertir_palabra,
+    Normalizador_es_palabra_valida,
+    Normalizador_contiene_numeros,
+    Normalizador_contiene_solo_letras,
+    Normalizador_titulo_caso,
+    Normalizador_oracion_caso,
+    Normalizador_camel_case,
+    descomponer_texto
+}
+
+

@@ -62,11 +62,19 @@ int resolve_program(ASTNode *ast, SymbolTable *st) {
         ASTNode *g = p->globals[i];
         if (g && g->type == NODE_STRUCT_DEF) {
             StructDefNode *sd = (StructDefNode *)g;
+            const char **mnames = sd->n_methods ? malloc(sd->n_methods * sizeof(char*)) : NULL;
+            void **masts = sd->n_methods ? malloc(sd->n_methods * sizeof(void*)) : NULL;
+            for (size_t j = 0; j < sd->n_methods; j++) {
+                mnames[j] = ((FunctionNode*)sd->methods[j])->name;
+                masts[j] = sd->methods[j];
+            }
+
             if (sd->extends_name && sd->extends_name[0]) {
-                int er = sym_register_struct_extends(st, sd->name, sd->extends_name,
-                    (const char **)sd->field_types, (const char **)sd->field_names, sd->n_fields);
+                int er = sym_register_class_extends(st, sd->name, sd->extends_name,
+                    (const char **)sd->field_types, (const char **)sd->field_names, sd->field_visibilities, sd->n_fields,
+                    masts, mnames, sd->method_visibilities, sd->n_methods, sd->is_exported);
                 if (er == -1) {
-                    fprintf(stderr, "Error semantico: la clase/registro '%s' extiende '%s', pero el tipo base no esta registrado (definalo antes en el archivo).\n",
+                    fprintf(stderr, "Error semantico: la clase/registro '%s' extiende '%s', pero el tipo base no esta registrado.\n",
                             sd->name ? sd->name : "?", sd->extends_name);
                     resolve_errs++;
                 } else if (er == -2) {
@@ -75,9 +83,12 @@ int resolve_program(ASTNode *ast, SymbolTable *st) {
                     resolve_errs++;
                 }
             } else {
-                sym_register_struct(st, sd->name, (const char **)sd->field_types,
-                                   (const char **)sd->field_names, sd->n_fields);
+                sym_register_class(st, sd->name, (const char **)sd->field_types,
+                                   (const char **)sd->field_names, sd->field_visibilities, sd->n_fields,
+                                   masts, mnames, sd->method_visibilities, sd->n_methods, sd->is_exported);
             }
+            if (mnames) free(mnames);
+            if (masts) free(masts);
         }
     }
 
@@ -110,6 +121,27 @@ int resolve_program(ASTNode *ast, SymbolTable *st) {
         resolve_block(fn->body, st);
         int func_unused = sym_exit_scope(st);
         if (func_unused > 0) {}
+    }
+
+    /* Metodos de clases */
+    for (size_t i = 0; i < p->n_globals; i++) {
+        ASTNode *g = p->globals[i];
+        if (g && g->type == NODE_STRUCT_DEF) {
+            StructDefNode *sd = (StructDefNode *)g;
+            for (size_t j = 0; j < sd->n_methods; j++) {
+                FunctionNode *fn = (FunctionNode *)sd->methods[j];
+                sym_enter_scope(st, 1);
+                /* 'este' apunta a la instancia de la clase */
+                sym_declare(st, "este", sd->name, 8, 1, 0, NULL);
+                for (size_t k = 0; k < fn->n_params; k++) {
+                    VarDeclNode *vd = (VarDeclNode *)fn->params[k];
+                    if (vd)
+                        sym_declare(st, vd->name, vd->type_name, 8, 1, 0, vd->list_element_type);
+                }
+                resolve_block(fn->body, st);
+                sym_exit_scope(st);
+            }
+        }
     }
     return resolve_errs;
 }
@@ -150,54 +182,39 @@ static void resolve_statement(ASTNode *node, SymbolTable *st) {
             break;
         }
         case NODE_WHILE: {
-            sym_enter_scope(st, 0);
-            resolve_block(((WhileNode *)node)->body, st);
-            sym_exit_scope(st);
+            WhileNode *wn = (WhileNode *)node;
+            resolve_block(wn->body, st);
             break;
         }
         case NODE_DO_WHILE: {
-            sym_enter_scope(st, 0);
-            resolve_block(((DoWhileNode *)node)->body, st);
-            sym_exit_scope(st);
+            DoWhileNode *dn = (DoWhileNode *)node;
+            resolve_block(dn->body, st);
             break;
         }
         case NODE_IF: {
-            sym_enter_scope(st, 0);
-            resolve_block(((IfNode *)node)->body, st);
-            if (((IfNode *)node)->else_body)
-                resolve_block(((IfNode *)node)->else_body, st);
-            sym_exit_scope(st);
+            IfNode *in = (IfNode *)node;
+            resolve_block(in->body, st);
+            if (in->else_body) resolve_block(in->else_body, st);
             break;
         }
         case NODE_SELECT: {
-            SelectNode *sn = (SelectNode*)node;
-            for (size_t i = 0; i < sn->n_cases; i++) {
-                sym_enter_scope(st, 0);
+            SelectNode *sn = (SelectNode *)node;
+            for (size_t i = 0; i < sn->n_cases; i++)
                 resolve_block(sn->cases[i].body, st);
-                sym_exit_scope(st);
-            }
-            if (sn->default_body) {
-                sym_enter_scope(st, 0);
-                resolve_block(sn->default_body, st);
-                sym_exit_scope(st);
-            }
+            if (sn->default_body) resolve_block(sn->default_body, st);
             break;
         }
         case NODE_TRY: {
-            TryNode *tn = (TryNode*)node;
-            sym_enter_scope(st, 0);
+            TryNode *tn = (TryNode *)node;
             resolve_block(tn->try_body, st);
-            sym_exit_scope(st);
-            if (tn->catch_body) {
-                sym_enter_scope(st, 0);
-                if (tn->catch_var) sym_declare(st, tn->catch_var, "texto", 8, 0, 0, NULL);
-                resolve_block(tn->catch_body, st);
-                sym_exit_scope(st);
-            }
-            if (tn->final_body) {
-                sym_enter_scope(st, 0);
-                resolve_block(tn->final_body, st);
-                sym_exit_scope(st);
+            if (tn->catch_body) resolve_block(tn->catch_body, st);
+            if (tn->final_body) resolve_block(tn->final_body, st);
+            break;
+        }
+        case NODE_EXPORT_DIRECTIVE: {
+            ExportDirectiveNode *en = (ExportDirectiveNode *)node;
+            for (size_t i = 0; i < en->n_names; i++) {
+                sym_set_exported(st, en->names[i]);
             }
             break;
         }

@@ -1,0 +1,22 @@
+// Prueba correcta de compilación v0.0.1
+principal
+    imprimir "=== PRUEBA JASBOOT v0.0.1 ==="
+    imprimir "Compilador: jbc.exe"
+    imprimir "Runtime: jasboot-ir-vm.exe"
+    imprimir "Estado: FUNCIONAL"
+    
+    // Probar variables
+    entero numero = 42
+    texto mensaje = "Jasboot SDK funciona correctamente"
+    
+    imprimir "Número: " + numero
+    imprimir "Mensaje: " + mensaje
+    
+    // Probar bucle
+    imprimir "Contando:"
+    mientrasi = 1 
+        imprimir "  " + i
+    fin_para
+    
+    imprimir "=== PRUEBA COMPLETADA ==="
+fin_principal

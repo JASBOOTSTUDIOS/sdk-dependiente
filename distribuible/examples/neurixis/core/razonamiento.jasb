@@ -1,0 +1,95 @@
+# core/razonamiento.jasb - Motor de razonamiento Neurixis
+
+clase MotorRazonamiento
+    
+    # Sistema de búsqueda contextual
+    # -----------------------------
+    
+    funcion buscar(texto consulta) retorna texto
+        # Búsqueda contextual: pensar en el concepto antes de buscar su valor
+        pensar consulta
+        buscar consulta
+        retornar resultado
+    fin_funcion
+    
+    funcion buscar_relacionados(texto consulta) retorna lista
+        # Búsqueda de asociaciones contextuales activadas por el pensamiento
+        pensar consulta
+        retornar obtener_relacionados(consulta)
+    fin_funcion
+    
+    funcion pensar_basico(texto consulta) retorna texto
+        pensar consulta
+        buscar consulta
+        retornar resultado
+    fin_funcion
+    
+    funcion generar_respuesta(texto pregunta) retorna texto
+        # 1. Razonamiento cognitivo (pensar activa el contexto)
+        pensar pregunta
+        
+        # 2. Intentar buscar una respuesta directa
+        buscar pregunta
+        texto respuesta = resultado
+        
+        # 3. Si no hay respuesta directa, intentar buscar sub-conceptos (heurística)
+        si respuesta == "" o respuesta == pregunta entonces
+            si contiene_texto(pregunta, "nombre") entonces
+                buscar "usuario_nombre"
+                respuesta = resultado
+            fin_si
+            
+            si contiene_texto(pregunta, "quien") entonces
+                buscar "quien eres"
+                respuesta = resultado
+            fin_si
+        fin_si
+        
+        # 4. Intentar buscar en asociados (manual con nombres conocidos)
+        si respuesta == "" o respuesta == pregunta entonces
+            lista relacionados = obtener_relacionados(pregunta)
+            entero n = lista_tamano(relacionados)
+            
+            si n > 0 entonces
+                entero i = 0
+                mientras i < n hacer
+                    entero id_rel = lista_obtener(relacionados, i)
+                    buscar id_rel
+                    si resultado != "" y resultado != pregunta entonces
+                        respuesta = resultado
+                        i = n
+                    fin_si
+                    i = i + 1
+                fin_mientras
+            fin_si
+        fin_si
+        
+        retornar respuesta
+    fin_funcion
+    
+    funcion pensar_asociado(texto tema, texto contexto) retorna texto
+        pensar tema
+        buscar tema
+        
+        cuando resultado == "" entonces
+            pensar contexto
+            buscar contexto
+        fin_cuando
+        
+        retornar resultado
+    fin_funcion
+    
+    funcion evaluar_pensamiento(texto consulta) retorna texto
+        pensar consulta
+        buscar consulta
+        
+        cuando resultado != "" entonces
+            retornar "Pensamiento exitoso: " + resultado
+        sino
+            retornar "Pensamiento fallido: no se encontró información para " + consulta
+        fin_cuando
+    fin_funcion
+    
+fin_clase
+
+enviar {MotorRazonamiento}

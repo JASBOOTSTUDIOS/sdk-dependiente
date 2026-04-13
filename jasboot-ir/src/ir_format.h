@@ -35,6 +35,7 @@
 #define IR_INST_FLAG_KERNEL_ONLY (1 << 5)
 #define IR_INST_FLAG_A_REGISTER (1 << 6)
 #define IR_INST_FLAG_B_REGISTER (1 << 7)
+#define IR_INST_FLAG_C_REGISTER 0x00 // No hay bits libres, pero se usa para legibilidad en el compilador
 
 // IA metadata (estructura extendida)
 #define IR_IA_MAGIC_0 'I'
@@ -134,6 +135,7 @@ typedef enum {
     OP_HEAP_RESERVAR = 0x45, // A <- reservar(B bytes) - heap
     OP_HEAP_LIBERAR = 0x46,  // liberar(A)
     OP_IR_ESCRIBIR = 0x47,   // Escribir IR actual a archivo (ruta: reg A = id concepto)
+    OP_ID_A_TEXTO = 0x48,    // A <- Texto del ID B
 
     // Conversión
     OP_CONV_I2F = 0x90,    // Conversión entero -> flotante
@@ -218,6 +220,7 @@ typedef enum {
     OP_MEM_MAPA_PONER = 0x62,        // SetMap(A:map_id, B:key_id, C:val_reg)
     OP_MEM_MAPA_OBTENER = 0x63,      // A <- GetMap(B:map_id, C:key_id)
     OP_MEM_MAPA_TAMANO = 0x7E,       // A <- count entries (B: map_id reg)
+    OP_MEM_MAPA_CONTIENE = 0x08,     // A <- 1 if key C exists in map B, else 0
     OP_FS_LEER_BYTE = 0x64,          // A <- fgetc(handle B)
     OP_FS_ESCRIBIR_U32 = 0x65,       // fwrite(u32 B, f handle A)
     OP_FS_LEER_ARCHIVO_REG = 0x66,   // A: path_reg, B: dest_id_reg
@@ -318,6 +321,7 @@ typedef enum {
     
     // Nuevos opcodes Fase 0
     OP_STR_MINUSCULAS = 0x50,        // A <- Convertir a minúsculas
+    OP_STR_MAYUSCULAS = 0x4F,        // A <- Convertir a mayúsculas
     OP_STR_COPIAR = 0x51,            // Copiar string
     OP_FS_ABRIR = 0x52,              // A <- Abrir archivo
     OP_FS_ESCRIBIR = 0x53,            // Escribir en archivo actual

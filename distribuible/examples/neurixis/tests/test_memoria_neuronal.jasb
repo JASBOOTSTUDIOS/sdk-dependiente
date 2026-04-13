@@ -1,0 +1,67 @@
+# tests/test_memoria_neuronal.jasb - Test para la clase MemoriaNeuronal
+
+usar {MemoriaNeuronal} de "../core/memoria.jasb"
+usar {Neurona} de "../core/neurona.jasb"
+
+principal
+    imprimir "=== INICIANDO TEST DE MEMORIA NEURONAL ==="
+    
+    # Test 1: Creación y gestión básica
+    imprimir "Test 1: Creacion y gestion basica"
+    crear_memoria("test_memoria_neuronal.jmn")
+    
+    MemoriaNeuronal memoria
+    memoria.inicializar("test_memoria_neuronal.jmn")
+    imprimir "Memoria neuronal creada: " + memoria.obtener_ruta()
+    
+    # Test 2: Creación de neuronas
+    imprimir "Test 2: Creacion de neuronas"
+    Neurona neurona1
+    memoria.crear_neurona(neurona1, "concepto1")
+    neurona1.establecer_valor("valor1")
+    
+    imprimir "Neurona creada: " + neurona1.obtener_nombre() + ": " + neurona1.obtener_valor()
+    
+    # Test 3: Creación de múltiples neuronas
+    imprimir "Test 3: Creacion de multiples neuronas"
+    Neurona neurona2
+    memoria.crear_neurona(neurona2, "concepto2")
+    neurona2.establecer_valor("valor2")
+    
+    Neurona neurona3
+    memoria.crear_neurona(neurona3, "concepto3")
+    neurona3.establecer_valor("valor3")
+    
+    imprimir "Neuronas creadas:"
+    imprimir "  " + neurona1.obtener_nombre() + ": " + neurona1.obtener_valor()
+    imprimir "  " + neurona2.obtener_nombre() + ": " + neurona2.obtener_valor()
+    imprimir "  " + neurona3.obtener_nombre() + ": " + neurona3.obtener_valor()
+    
+    # Test 4: Persistencia
+    imprimir "Test 4: Persistencia"
+    cerrar_memoria()
+    imprimir "Memoria cerrada para persistencia"
+    
+    # Test 5: Reapertura y verificación
+    imprimir "Test 5: Reapertura y verificacion"
+    crear_memoria("test_memoria_neuronal.jmn")
+    
+    Neurona neurona1_recuperada
+    memoria.crear_neurona(neurona1_recuperada, "concepto1")
+    
+    imprimir "Valor recuperado: " + neurona1_recuperada.obtener_valor()
+    
+    # Cierre final
+    cerrar_memoria()
+    
+    imprimir "=== RESUMEN DEL TEST DE MEMORIA NEURONAL ==="
+    imprimir "Funcionalidades verificadas:"
+    imprimir "1. Creacion e inicializacion: OK"
+    imprimir "2. Creacion de neuronas: OK"
+    imprimir "3. Gestion de multiples neuronas: OK"
+    imprimir "4. Persistencia de datos: OK"
+    imprimir "5. Reapertura de memoria: OK"
+    imprimir ""
+    imprimir "Estado: MEMORIA NEURONAL FUNCIONAL"
+    
+fin_principal

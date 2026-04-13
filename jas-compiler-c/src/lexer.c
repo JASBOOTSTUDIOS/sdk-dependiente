@@ -269,6 +269,15 @@ static int read_identifier(Lexer *lex, Token *out) {
         return -1;
     }
 
+    if (strcmp(buf, "nulo") == 0) {
+        free(buf);
+        out->type = TOK_NULL;
+        out->is_float = 0;
+        out->line = lex->line;
+        out->column = start_col;
+        return 0;
+    }
+
     if (strcmp(buf, "verdadero") == 0) {
         free(buf);
         out->type = TOK_NUMBER;

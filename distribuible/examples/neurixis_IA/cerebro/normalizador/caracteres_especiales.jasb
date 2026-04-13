@@ -1,0 +1,476 @@
+# =============================================================================
+# MÓDULO DE NORMALIZACIÓN DE CARACTERES ESPECIALES AVANZADOS
+# =============================================================================
+# Este módulo proporciona funciones para normalizar caracteres especiales,
+# símbolos tipográficos, comillas, guiones y otros caracteres avanzados.
+# Optimizado para procesamiento de textos profesionales y contenido multilingüe.
+# Autor: Sistema Jasboot IA
+# Versión: 1.0
+# =============================================================================
+
+enviar clase NormalizadorCaracteresEspeciales
+
+    # =============================================================================
+    # FUNCIÓN: normalizar_comillas
+    # =============================================================================
+    # Propósito: Convierte todos los tipos de comillas a comillas estándar ASCII
+    # Maneja comillas tipográficas, angulares, simples, dobles y otras variantes
+    # Parámetros:
+    #   - texto (texto): Texto con posibles comillas especiales
+    # Retorna:
+    #   - texto: Texto con comillas normalizadas a ASCII
+    # =============================================================================
+    funcion normalizar_comillas(texto _texto) retorna texto
+        texto resultado = ""
+        entero i = 0
+        entero tam = longitud_texto(_texto)
+        
+        mientras i < tam hacer
+            texto char = extraer_subtexto(_texto, i, 1)
+            entero codigo = codigo_caracter(char)
+            
+            # Mapeo de comillas especiales a ASCII
+            cuando codigo entonces
+                # Comillas dobles tipográficas
+                caso 8220, 8221 entonces  # " " (Unicode Left/Right Double Quote)
+                    resultado = resultado + "\""
+                # Comillas simples tipográficas
+                caso 8216, 8217 entonces  # ' ' (Unicode Left/Right Single Quote)
+                    resultado = resultado + "'"
+                # Comillas angulares (guillemets)
+                caso 171, 187 entonces  # « » (French/Spanish Quotes)
+                    resultado = resultado + "\""
+                # Carácter por defecto
+                defecto
+                    resultado = resultado + char
+            fin_cuando
+            
+            i = i + 1
+        fin_mientras
+        
+        retornar resultado
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: normalizar_guiones
+    # =============================================================================
+    # Propósito: Convierte todos los tipos de guiones a guión estándar ASCII
+    # Maneja guiones largos, medios, suaves, duros y otros variantes
+    # Parámetros:
+    #   - texto (texto): Texto con posibles guiones especiales
+    # Retorna:
+    #   - texto: Texto con guiones normalizados a guión corto (-)
+    # =============================================================================
+    funcion normalizar_guiones(texto _texto) retorna texto
+        texto resultado = ""
+        entero i = 0
+        entero tam = longitud_texto(_texto)
+        
+        mientras i < tam hacer
+            texto char = extraer_subtexto(_texto, i, 1)
+            entero codigo = codigo_caracter(char)
+            
+            # Mapeo de guiones especiales a ASCII
+            cuando codigo entonces
+                # Guion largo (em dash)
+                caso 8212 entonces  # - (Em Dash)
+                    resultado = resultado + "-"
+                # Guion medio (en dash)
+                caso 8211 entonces  # - (En Dash)
+                    resultado = resultado + "-"
+                # Guion suave (soft hyphen)
+                caso 173 entonces  # - (Soft Hyphen)
+                    # Eliminar guion suave (no visible)
+                    resultado = resultado
+                # Guion duro (non-breaking hyphen)
+                caso 8209 entonces  # - (Non-breaking Hyphen)
+                    resultado = resultado + "-"
+                # Guion menos (minus sign)
+                caso 8722 entonces  # - (Minus Sign)
+                    resultado = resultado + "-"
+                # Guión bajo (underscore)
+                caso 95 entonces  # _ (Underscore)
+                    resultado = resultado + "_"
+                # Barra diagonal (slash)
+                caso 47 entonces  # / (Forward Slash)
+                    resultado = resultado + "/"
+                # Barra invertida (backslash)
+                caso 92 entonces  # \ (Backslash)
+                    resultado = resultado + "\\"
+                # Carácter por defecto
+                defecto
+                    resultado = resultado + char
+            fin_cuando
+            
+            i = i + 1
+        fin_mientras
+        
+        retornar resultado
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: normalizar_ellipsis
+    # =============================================================================
+    # Propósito: Convierte diferentes representaciones de "..." a puntos estándar
+    # Maneja elipsis Unicode, combinaciones de espacios y puntos, etc.
+    # Parámetros:
+    #   - texto (texto): Texto con posibles elipsis
+    # Retorna:
+    #   - texto: Texto con elipsis normalizados a "..."
+    # =============================================================================
+    funcion normalizar_ellipsis(texto _texto) retorna texto
+        texto resultado = ""
+        entero i = 0
+        entero tam = longitud_texto(_texto)
+        
+        mientras i < tam hacer
+            texto char = extraer_subtexto(_texto, i, 1)
+            entero codigo = codigo_caracter(char)
+            
+            # Elipsis Unicode
+            si codigo == 8230 entonces  # ... (Horizontal Ellipsis)
+                resultado = resultado + "..."
+            # Elipsis vertical (raro pero posible)
+            sino si codigo == 8942 entonces  # ... (Vertical Ellipsis)
+                resultado = resultado + "..."
+            # Tres puntos consecutivos
+            sino si codigo == 46 entonces  # . (Period)
+                # Verificar si los siguientes dos caracteres también son puntos
+                si i + 2 < tam entonces
+                    texto char2 = extraer_subtexto(_texto, i + 1, 1)
+                    texto char3 = extraer_subtexto(_texto, i + 2, 1)
+                    entero codigo2 = codigo_caracter(char2)
+                    entero codigo3 = codigo_caracter(char3)
+                    
+                    si codigo2 == 46 y codigo3 == 46 entonces
+                        resultado = resultado + "..."
+                        i = i + 2  # Saltar los siguientes dos puntos
+                    sino
+                        resultado = resultado + char
+                    fin_si
+                sino
+                    resultado = resultado + char
+                fin_si
+            # Puntos con espacios (". . .")
+            sino si codigo == 46 entonces  # . (Period)
+                # Verificar patrón ". . ." con espacios
+                si i + 4 < tam entonces
+                    texto espacio1 = extraer_subtexto(_texto, i + 1, 1)
+                    texto punto2 = extraer_subtexto(_texto, i + 2, 1)
+                    texto espacio2 = extraer_subtexto(_texto, i + 3, 1)
+                    texto punto3 = extraer_subtexto(_texto, i + 4, 1)
+                    
+                    si espacio1 == " " y punto2 == "." y espacio2 == " " y punto3 == "." entonces
+                        resultado = resultado + "..."
+                        i = i + 4  # Saltar el patrón completo
+                    sino
+                        resultado = resultado + char
+                    fin_si
+                sino
+                    resultado = resultado + char
+                fin_si
+            sino
+                resultado = resultado + char
+            fin_si
+            
+            i = i + 1
+        fin_mientras
+        
+        retornar resultado
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: normalizar_puntuacion_tipografica
+    # =============================================================================
+    # Propósito: Normaliza símbolos de puntuación tipográfica avanzada
+    # Maneja puntos suspensivos, signos de apertura/cierre, etc.
+    # Parámetros:
+    #   - texto (texto): Texto con puntuación tipográfica
+    # Retorna:
+    #   - texto: Texto con puntuación normalizada
+    # =============================================================================
+    funcion normalizar_puntuacion_tipografica(texto _texto) retorna texto
+        texto resultado = ""
+        entero i = 0
+        entero tam = longitud_texto(_texto)
+        
+        mientras i < tam hacer
+            texto char = extraer_subtexto(_texto, i, 1)
+            entero codigo = codigo_caracter(char)
+            
+            # Mapeo de puntuación tipográfica a ASCII
+            cuando codigo entonces
+                # Signos de apertura/cierre españoles
+                caso 191 entonces  # ¿ (Inverted Question Mark)
+                    resultado = resultado + "?"
+                caso 161 entonces  # ¡ (Inverted Exclamation Mark)
+                    resultado = resultado + "!"
+                # Puntos suspensivos (ya manejado en normalizar_ellipsis)
+                caso 8230 entonces  # ... (Horizontal Ellipsis)
+                    resultado = resultado + "..."
+                # Signos de interrogación y exclamación especiales
+                caso 8252 entonces  # !! (Double Exclamation Mark)
+                    resultado = resultado + "!!"
+                caso 8263 entonces  # ?? (Double Question Mark)
+                    resultado = resultado + "??"
+                # Signos de apertura/cierre angulares
+                caso 171 entonces  # « (Left Pointing Double Angle Quote)
+                    resultado = resultado + "\""
+                caso 187 entonces  # » (Right Pointing Double Angle Quote)
+                    resultado = resultado + "\""
+                # Signos de apertura/cierre simples
+                caso 8249 entonces  # < (Left Pointing Single Angle Quote)
+                    resultado = resultado + "<"
+                caso 8250 entonces  # > (Right Pointing Single Angle Quote)
+                    resultado = resultado + ">"
+                # Punto y coma especial
+                caso 894 entonces  # ; (Greek Question Mark)
+                    resultado = resultado + ";"
+                # Carácter por defecto
+                defecto
+                    resultado = resultado + char
+            fin_cuando
+            
+            i = i + 1
+        fin_mientras
+        
+        retornar resultado
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: normalizar_simbolos_monetarios
+    # =============================================================================
+    # Propósito: Normaliza símbolos de moneda a representaciones estándar
+    # Parámetros:
+    #   - texto (texto): Texto con símbolos monetarios
+    # Retorna:
+    #   - texto: Texto con símbolos monetarios normalizados
+    # =============================================================================
+    funcion normalizar_simbolos_monetarios(texto _texto) retorna texto
+        texto resultado = ""
+        entero i = 0
+        entero tam = longitud_texto(_texto)
+        
+        mientras i < tam hacer
+            texto char = extraer_subtexto(_texto, i, 1)
+            entero codigo = codigo_caracter(char)
+            
+            # Mapeo de símbolos monetarios
+            cuando codigo entonces
+                # Dólar y variantes
+                caso 36 entonces  # $ (Dollar Sign)
+                    resultado = resultado + "$"
+                caso 8364 entonces  # ¬ (Euro Sign)
+                    resultado = resultado + "EUR"
+                # Libra esterlina
+                caso 163 entonces  # £ (Pound Sign)
+                    resultado = resultado + "GBP"
+                # Yen/Yuan
+                caso 165 entonces  # ¥ (Yen Sign)
+                    resultado = resultado + "JPY"
+                # Símbolos de centavo
+                caso 162 entonces  # ¢ (Cent Sign)
+                    resultado = resultado + "c"
+                # Símbolos de moneda general
+                caso 164 entonces  # ¤ (Currency Sign)
+                    resultado = resultado + "MON"
+                # Carácter por defecto
+                defecto
+                    resultado = resultado + char
+            fin_cuando
+            
+            i = i + 1
+        fin_mientras
+        
+        retornar resultado
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: normalizar_simbolos_matematicos
+    # =============================================================================
+    # Propósito: Convierte símbolos matemáticos a representaciones ASCII
+    # Parámetros:
+    #   - texto (texto): Texto con símbolos matemáticos
+    # Retorna:
+    #   - texto: Texto con símbolos matemáticos normalizados
+    # =============================================================================
+    funcion normalizar_simbolos_matematicos(texto _texto) retorna texto
+        texto resultado = ""
+        entero i = 0
+        entero tam = longitud_texto(_texto)
+        
+        mientras i < tam hacer
+            texto char = extraer_subtexto(_texto, i, 1)
+            entero codigo = codigo_caracter(char)
+            
+            # Mapeo de símbolos matemáticos
+            cuando codigo entonces
+                # Símbolos de multiplicación
+                caso 215 entonces  # × (Multiplication Sign)
+                    resultado = resultado + "x"
+                caso 8901 entonces  # · (Dot Operator)
+                    resultado = resultado + "."
+                # Símbolos de división
+                caso 247 entonces  # ÷ (Division Sign)
+                    resultado = resultado + "/"
+                # Símbolos de igualdad
+                caso 8800 entonces  # ¬ (Not Equal)
+                    resultado = resultado + "!="
+                caso 8776 entonces  #  (Approximately Equal)
+                    resultado = resultado + "~"
+                # Símbolos de comparación
+                caso 8804 entonces  # (Less Than or Equal)
+                    resultado = resultado + "<="
+                caso 8805 entonces  # (Greater Than or Equal)
+                    resultado = resultado + ">="
+                # Símbolos de infinito
+                caso 8734 entonces  # ¬ (Infinity)
+                    resultado = resultado + "inf"
+                # Símbolos de suma/resta
+                caso 8722 entonces  # - (Minus Sign)
+                    resultado = resultado + "-"
+                caso 8721 entonces  # ± (Plus-Minus Sign)
+                    resultado = resultado + "+/-"
+                # Carácter por defecto
+                defecto
+                    resultado = resultado + char
+            fin_cuando
+            
+            i = i + 1
+        fin_mientras
+        
+        retornar resultado
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: normalizar_flechas
+    # =============================================================================
+    # Propósito: Convierte flechas Unicode a representaciones ASCII
+    # Parámetros:
+    #   - texto (texto): Texto con posibles flechas
+    # Retorna:
+    #   - texto: Texto con flechas normalizadas
+    # =============================================================================
+    funcion normalizar_flechas(texto _texto) retorna texto
+        texto resultado = ""
+        entero i = 0
+        entero tam = longitud_texto(_texto)
+        
+        mientras i < tam hacer
+            texto char = extraer_subtexto(_texto, i, 1)
+            entero codigo = codigo_caracter(char)
+            
+            # Mapeo de flechas
+            cuando codigo entonces
+                # Flechas horizontales
+                caso 8592 entonces  # ¬ (Leftwards Arrow)
+                    resultado = resultado + "<-"
+                caso 8594 entonces  # -> (Rightwards Arrow)
+                    resultado = resultado + "->"
+                caso 8596 entonces  # ¬ (Left Right Arrow)
+                    resultado = resultado + "<->"
+                # Flechas verticales
+                caso 8593 entonces  # ¬ (Upwards Arrow)
+                    resultado = resultado + "^"
+                caso 8595 entonces  # ¬ (Downwards Arrow)
+                    resultado = resultado + "v"
+                # Flechas diagonales
+                caso 8599 entonces  # ¬ (North East Arrow)
+                    resultado = resultado + "/\\"
+                caso 8601 entonces  # ¬ (South East Arrow)
+                    resultado = resultado + "\\/"
+                # Carácter por defecto
+                defecto
+                    resultado = resultado + char
+            fin_cuando
+            
+            i = i + 1
+        fin_mientras
+        
+        retornar resultado
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: normalizar_completo
+    # =============================================================================
+    # Propósito: Aplica todas las normalizaciones de caracteres especiales
+    # Es una función de conveniencia que llama a todas las demás
+    # Parámetros:
+    #   - texto (texto): Texto a normalizar completamente
+    # Retorna:
+    #   - texto: Texto completamente normalizado
+    # =============================================================================
+    funcion normalizar_completo(texto _texto) retorna texto
+        # Aplicar todas las normalizaciones en orden
+        texto resultado = _texto
+        
+        # 1. Normalizar comillas
+        resultado = normalizar_comillas(resultado)
+        
+        # 2. Normalizar guiones
+        resultado = normalizar_guiones(resultado)
+        
+        # 3. Normalizar elipsis
+        resultado = normalizar_ellipsis(resultado)
+        
+        # 4. Normalizar puntuación tipográfica
+        resultado = normalizar_puntuacion_tipografica(resultado)
+        
+        # 5. Normalizar símbolos monetarios (opcional, comentado por ahora)
+        # resultado = normalizar_simbolos_monetarios(resultado)
+        
+        # 6. Normalizar símbolos matemáticos (opcional, comentado por ahora)
+        # resultado = normalizar_simbolos_matematicos(resultado)
+        
+        # 7. Normalizar flechas (opcional, comentado por ahora)
+        # resultado = normalizar_flechas(resultado)
+        
+        retornar resultado
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: detectar_caracteres_especiales
+    # =============================================================================
+    # Propósito: Detecta si un texto contiene caracteres especiales no ASCII
+    # Parámetros:
+    #   - texto (texto): Texto a analizar
+    # Retorna:
+    #   - lista<texto>: Lista de caracteres especiales encontrados
+    # =============================================================================
+    funcion detectar_caracteres_especiales(texto _texto) retorna lista<texto>
+        lista<texto> especiales = crear_lista()
+        entero i = 0
+        entero tam = longitud_texto(_texto)
+        
+        mientras i < tam hacer
+            texto char = extraer_subtexto(_texto, i, 1)
+            entero codigo = codigo_caracter(char)
+            
+            # Detectar si es un carácter no ASCII (fuera del rango 32-126)
+            si (codigo < 32 o codigo > 126) y codigo != 10 y codigo != 13 entonces
+                # Verificar que no esté ya en la lista
+                bool ya_existe = falso
+                entero j = 0
+                entero tam_especiales = lista_tamano(especiales)
+                
+                mientras j < tam_especiales hacer
+                    texto especial = lista_obtener(especiales, j)
+                    si especial == char entonces
+                        ya_existe = verdadero
+                        romper
+                    fin_si
+                    j = j + 1
+                fin_mientras
+                
+                si no ya_existe entonces
+                    lista_agregar(especiales, char)
+                fin_si
+            fin_si
+            
+            i = i + 1
+        fin_mientras
+        
+        retornar especiales
+    fin_funcion
+
+fin_clase

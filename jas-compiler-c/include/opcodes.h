@@ -21,6 +21,7 @@
 #define IR_INST_FLAG_RELATIVE    (1 << 3)
 #define IR_INST_FLAG_A_REGISTER  (1 << 6)
 #define IR_INST_FLAG_B_REGISTER  (1 << 7)
+#define IR_INST_FLAG_C_REGISTER  0x00
 
 #define OP_HALT           0x00
 #define OP_MOVER          0x01
@@ -130,7 +131,9 @@
 #define OP_MEM_MAPA_CREAR    0x61
 #define OP_MEM_MAPA_PONER    0x62
 #define OP_MEM_MAPA_OBTENER  0x63
+#define OP_MEM_MAPA_BORRAR   0xE3 /* A: map_id, B: key_id (penalizar se usa para borrar en mapas) */
 #define OP_MEM_MAPA_TAMANO   0x7E /* A <- numero de entradas (B: map_id reg) */
+#define OP_MEM_MAPA_CONTIENE 0x08 /* A <- 1 si clave C existe en mapa B, else 0 */
 
 #define OP_IR             0x40
 #define OP_SI             0x41
@@ -139,6 +142,7 @@
 #define OP_RESERVAR_PILA  0x44
 #define OP_HEAP_RESERVAR  0x45      /* A <- reservar(B bytes) */
 #define OP_HEAP_LIBERAR   0x46      /* liberar(A) */
+#define OP_ID_A_TEXTO     0x48      /* A <- Texto del ID B */
 
 #define OP_IMPRIMIR_TEXTO 0x5B
 #define OP_STR_REGISTRAR_LITERAL 0xE4
@@ -178,12 +182,17 @@
 #define OP_FS_EXISTE           0x56
 #define OP_FS_LEER_TEXTO       0xF6
 #define OP_FS_ESCRIBIR_BYTE    0x60
-#define OP_FS_LEER_BYTE        0x64
+#define OP_FS_LEER_BYTE      0x64 /* A <- fgetc(handle B) */
 #define OP_FS_LISTAR           0x2A
+#define OP_FS_BORRAR           0x2B
+#define OP_FS_COPIAR           0x2C
+#define OP_FS_MOVER            0x2D
+#define OP_FS_TAMANO           0x2E
 #define OP_CARGAR_BIBLIOTECA   0x2F  /* A <- handle; B|C = offset ruta en data */
 #define OP_MEM_CREAR           0xBC
 #define OP_MEM_CERRAR          0xBB
 #define OP_MEM_ASOCIAR_CONCEPTOS 0xF2
+#define OP_MEM_OBTENER_RELACION  0xF5
 #define OP_MEM_OBTENER_RELACIONADOS 0xE9
 #define OP_MEM_ES_VARIABLE_SISTEMA 0xEB
 #define OP_MEM_OBTENER_TODOS   0xFE
@@ -197,6 +206,7 @@
 #define OP_STR_A_ENTERO        0xBD
 #define OP_STR_A_FLOTANTE      0xBE
 #define OP_STR_MINUSCULAS      0x50
+#define OP_STR_MAYUSCULAS      0x4F
 #define OP_MEM_LISTA_LIMPIAR   0xB6
 #define OP_MEM_LISTA_LIBERAR   0x8D
 #define OP_TCP_ENVIAR          0x19

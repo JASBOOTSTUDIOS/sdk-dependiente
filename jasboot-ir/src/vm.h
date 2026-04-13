@@ -194,6 +194,11 @@ typedef struct {
     int current_line;                       // Línea actual en ejecución
     /* intentar/atrapar: manejador = offset dentro de la seccion de codigo (.jbo) */
     uint32_t try_code_off[VM_TRY_STACK_MAX];
+    uint32_t try_fp[VM_TRY_STACK_MAX];
+    uint32_t try_sp[VM_TRY_STACK_MAX];
+    size_t try_stack_ptr[VM_TRY_STACK_MAX];
+    uint32_t try_fp_stack_ptr[VM_TRY_STACK_MAX];
+    uint32_t try_closure_env[VM_TRY_STACK_MAX];
     int try_depth;
     int ir_validated;                      // 1 si el IR ya pasó validación estructural
     uint64_t opcode_hits[256];             // Perfil simple por opcode para guiar futuras rutas AOT/JIT

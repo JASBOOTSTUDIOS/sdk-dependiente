@@ -1,0 +1,50 @@
+usar {Entradas} de "./entrada.jasb"
+
+principal
+    imprimir "=== TEST DE DETECCIÓN CONTEXTUAL ==="
+    imprimir ""
+    
+    Entradas entradas
+    
+    lista<texto> contexto = crear_lista()
+    lista_agregar(contexto, "hola")
+    lista_agregar(contexto, "necesito ayuda")
+    
+    # Test 1: Pregunta
+    imprimir "TEST 1: Pregunta"
+    mapa resultado1 = entradas.detectar_sinonimos_contextual("¿cómo funciona el sistema?", contexto, 0.3)
+    imprimir "Frase: ¿cómo funciona el sistema?"
+    imprimir "Contexto: " + mapa_obtener(resultado1, "contexto_detectado")
+    imprimir "Confianza: " + str_desde_numero(mapa_obtener(resultado1, "confianza_contextual"))
+    imprimir "Palabras: " + str_desde_numero(mapa_obtener(resultado1, "total_palabras"))
+    imprimir ""
+    
+    # Test 2: Saludo
+    imprimir "TEST 2: Saludo"
+    mapa resultado2 = entradas.detectar_sinonimos_contextual("hola buenos días", contexto, 0.3)
+    imprimir "Frase: hola buenos días"
+    imprimir "Contexto: " + mapa_obtener(resultado2, "contexto_detectado")
+    imprimir "Confianza: " + str_desde_numero(mapa_obtener(resultado2, "confianza_contextual"))
+    imprimir "Palabras: " + str_desde_numero(mapa_obtener(resultado2, "total_palabras"))
+    imprimir ""
+    
+    # Test 3: Comando
+    imprimir "TEST 3: Comando"
+    mapa resultado3 = entradas.detectar_sinonimos_contextual("crea una función", contexto, 0.3)
+    imprimir "Frase: crea una función"
+    imprimir "Contexto: " + mapa_obtener(resultado3, "contexto_detectado")
+    imprimir "Confianza: " + str_desde_numero(mapa_obtener(resultado3, "confianza_contextual"))
+    imprimir "Palabras: " + str_desde_numero(mapa_obtener(resultado3, "total_palabras"))
+    imprimir ""
+    
+    # Test 4: Técnico
+    imprimir "TEST 4: Técnico"
+    mapa resultado4 = entradas.detectar_sinonimos_contextual("optimizar el algoritmo", contexto, 0.3)
+    imprimir "Frase: optimizar el algoritmo"
+    imprimir "Contexto: " + mapa_obtener(resultado4, "contexto_detectado")
+    imprimir "Confianza: " + str_desde_numero(mapa_obtener(resultado4, "confianza_contextual"))
+    imprimir "Palabras: " + str_desde_numero(mapa_obtener(resultado4, "total_palabras"))
+    imprimir ""
+    
+    imprimir "=== TEST COMPLETADO ==="
+fin_principal

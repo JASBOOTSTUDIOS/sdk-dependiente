@@ -198,6 +198,7 @@ IRValidationInfo ir_validate_memory(IRFile* ir) {
             inst.opcode != OP_CMP_GT && inst.opcode != OP_CMP_LE && inst.opcode != OP_CMP_GE &&
             inst.opcode != OP_CMP_LT_U && inst.opcode != OP_CMP_GT_U && inst.opcode != OP_CMP_LE_U && inst.opcode != OP_CMP_GE_U &&
             inst.opcode != OP_IR && inst.opcode != OP_SI && inst.opcode != OP_LLAMAR && inst.opcode != OP_RETORNAR &&
+            inst.opcode != OP_ID_A_TEXTO &&
             inst.opcode != OP_RESERVAR_PILA &&
             inst.opcode != OP_STR_DESDE_NUMERO &&
             inst.opcode != OP_STR_FLOTANTE_PREC &&
@@ -264,7 +265,9 @@ IRValidationInfo ir_validate_memory(IRFile* ir) {
             inst.opcode != OP_MEM_LISTA_UNIR &&
             inst.opcode != OP_MEM_MAPA_OBTENER &&
             inst.opcode != OP_MEM_MAPA_TAMANO &&
+            inst.opcode != OP_MEM_MAPA_CONTIENE &&
             inst.opcode != OP_STR_MINUSCULAS &&
+            inst.opcode != OP_STR_MAYUSCULAS &&
             inst.opcode != OP_STR_COPIAR &&
             inst.opcode != OP_FS_ABRIR &&
             inst.opcode != OP_FS_ESCRIBIR &&

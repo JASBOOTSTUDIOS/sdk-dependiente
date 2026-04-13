@@ -1,0 +1,102 @@
+usar {Salidas} de "salidas.jasb"
+
+enviar clase GeneradorLenguaje
+
+    # =============================================================================
+    # 1. generar
+    # =============================================================================
+    # Propósito: Generar y mostrar una respuesta básica
+    # Parámetros:
+    #   - _mensaje (texto): Mensaje de entrada del usuario
+    # Retorna:
+    #   - void: Muestra la respuesta directamente en consola
+    # =============================================================================
+    funcion generar(texto _mensaje)
+        Salidas salidas
+        salidas.salida_de_la_consola(_mensaje)
+    fin_funcion
+    
+    # =============================================================================
+    # 2. generar_respuesta_inteligente
+    # =============================================================================
+    # Propósito: Generar respuesta usando Neocortex y análisis semántico
+    # Parámetros:
+    #   - _entrada (texto): Mensaje de entrada del usuario
+    # Retorna:
+    #   - texto: Respuesta inteligente generada
+    # =============================================================================
+    # funcion generar_respuesta_inteligente(texto _entrada) retorna texto
+    
+    # =============================================================================
+    # 3. generar_con_neocortex
+    # =============================================================================
+    # Propósito: Generar respuesta usando procesamiento Neocortex
+    # Parámetros:
+    #   - _entrada (texto): Mensaje de entrada
+    #   - _usar_analisis_contextual (bool): Si usar análisis contextual
+    #   - _usar_reemplazo_sinonimos (bool): Si usar reemplazo de sinónimos
+    # Retorna:
+    #   - mapa: Respuesta con metadatos del procesamiento
+    # =============================================================================
+    # funcion generar_con_neocortex(texto _entrada, bool _usar_analisis_contextual, bool _usar_reemplazo_sinonimos) retorna mapa
+    
+    # =============================================================================
+    # 4. generar_respuesta_conceptual
+    # =============================================================================
+    # Propósito: Generar respuesta basada en conceptos detectados
+    # Parámetros:
+    #   - _conceptos (lista<mapa>): Lista de conceptos detectados
+    #   - _consulta_original (texto): Consulta original del usuario
+    # Retorna:
+    #   - texto: Respuesta conceptual generada
+    # =============================================================================
+    # funcion generar_respuesta_conceptual(lista<mapa> _conceptos, texto _consulta_original) retorna texto
+    
+    # =============================================================================
+    # 5. generar_con_palabras_clave
+    # =============================================================================
+    # Propósito: Generar respuesta basada en palabras clave detectadas
+    # Parámetros:
+    #   - _palabras_clave (lista<texto>): Lista de palabras clave
+    #   - _contexto (texto): Contexto original de la consulta
+    # Retorna:
+    #   - texto: Respuesta basada en palabras clave
+    # =============================================================================
+    # funcion generar_con_palabras_clave(lista<texto> _palabras_clave, texto _contexto) retorna texto
+    
+    # =============================================================================
+    # 6. generar_respuesta_personalizada
+    # =============================================================================
+    # Propósito: Generar respuesta personalizada según tipo de consulta
+    # Parámetros:
+    #   - _entrada (texto): Mensaje de entrada
+    #   - _tipo_respuesta (texto): Tipo de respuesta deseada
+    # Retorna:
+    #   - texto: Respuesta personalizada
+    # =============================================================================
+    # funcion generar_respuesta_personalizada(texto _entrada, texto _tipo_respuesta) retorna texto
+    
+    # =============================================================================
+    # 7. generar_con_estadisticas
+    # =============================================================================
+    # Propósito: Generar respuesta con estadísticas del procesamiento
+    # Parámetros:
+    #   - _entrada (texto): Mensaje de entrada
+    # Retorna:
+    #   - mapa: Respuesta con estadísticas detalladas
+    # =============================================================================
+    # funcion generar_con_estadisticas(texto _entrada) retorna mapa
+    
+    # =============================================================================
+    # 8. generar_respuesta_multinivel
+    # =============================================================================
+    # Propósito: Generar respuesta usando múltiples niveles de procesamiento
+    # Parámetros:
+    #   - _entrada (texto): Mensaje de entrada
+    #   - _niveles_procesamiento (lista<texto>): Niveles a aplicar
+    # Retorna:
+    #   - mapa: Respuesta multinivel con resultados por nivel
+    # =============================================================================
+    # funcion generar_respuesta_multinivel(texto _entrada, lista<texto> _niveles_procesamiento) retorna mapa
+
+fin_clase

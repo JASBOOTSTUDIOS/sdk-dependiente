@@ -1,0 +1,145 @@
+enviar {Memoria}
+clase Memoria
+
+    # =============================================================================
+    # 1. guardar
+    # =============================================================================
+    # Propósito: Guardar un valor en memoria con una clave específica
+    # Parámetros:
+    #   - clave_memoria (texto): Clave para identificar el valor
+    #   - valor_memoria (texto): Valor a almacenar en memoria
+    # Retorna:
+    #   - void: Almacena el valor en memoria
+    # =============================================================================
+    funcion guardar(texto clave_memoria, texto valor_memoria) retorna
+        recordar clave_memoria con valor valor_memoria
+    fin_funcion
+
+    # =============================================================================
+    # 2. obtener
+    # =============================================================================
+    # Propósito: Recuperar un valor de memoria usando su clave
+    # Parámetros:
+    #   - clave_memoria (texto): Clave del valor a recuperar
+    # Retorna:
+    #   - texto: Valor almacenado en memoria
+    # =============================================================================
+    funcion obtener(texto clave_memoria) retorna texto
+        buscar clave_memoria
+        retornar resultado
+    fin_funcion
+    
+    # =============================================================================
+    # 3. existe_clave
+    # =============================================================================
+    # Propósito: Verificar si una clave existe en memoria
+    # Parámetros:
+    #   - clave_memoria (texto): Clave a verificar
+    # Retorna:
+    #   - bool: Verdadero si la clave existe, falso de lo contrario
+    # =============================================================================
+    # funcion existe_clave(texto clave_memoria) retorna bool
+    
+    # =============================================================================
+    # 4. eliminar
+    # =============================================================================
+    # Propósito: Eliminar un valor de memoria usando su clave
+    # Parámetros:
+    #   - clave_memoria (texto): Clave del valor a eliminar
+    # Retorna:
+    #   - bool: Verdadero si se eliminó correctamente, falso de lo contrario
+    # =============================================================================
+    # funcion eliminar(texto clave_memoria) retorna bool
+    
+    # =============================================================================
+    # 5. limpiar_memoria
+    # =============================================================================
+    # Propósito: Limpiar toda la memoria eliminando todos los valores
+    # Parámetros:
+    #   - void: No requiere parámetros
+    # Retorna:
+    #   - void: Limpia toda la memoria
+    # =============================================================================
+    # funcion limpiar_memoria() retorna
+    
+    # =============================================================================
+    # 6. obtener_todas_claves
+    # =============================================================================
+    # Propósito: Obtener todas las claves almacenadas en memoria
+    # Parámetros:
+    #   - void: No requiere parámetros
+    # Retorna:
+    #   - lista<texto>: Lista con todas las claves almacenadas
+    # =============================================================================
+    # funcion obtener_todas_claves() retorna lista<texto>
+    
+    # =============================================================================
+    # 7. contar_valores
+    # =============================================================================
+    # Propósito: Contar cuántos valores están almacenados en memoria
+    # Parámetros:
+    #   - void: No requiere parámetros
+    # Retorna:
+    #   - entero: Número total de valores almacenados
+    # =============================================================================
+    # funcion contar_valores() retorna entero
+    
+    # =============================================================================
+    # 8. guardar_con_timestamp
+    # =============================================================================
+    # Propósito: Guardar un valor con marca de tiempo
+    # Parámetros:
+    #   - clave_memoria (texto): Clave para identificar el valor
+    #   - valor_memoria (texto): Valor a almacenar
+    #   - timestamp (texto): Marca de tiempo (opcional)
+    # Retorna:
+    #   - void: Almacena el valor con timestamp
+    # =============================================================================
+    # funcion guardar_con_timestamp(texto clave_memoria, texto valor_memoria, texto timestamp) retorna
+    
+    # =============================================================================
+    # 9. obtener_con_info
+    # =============================================================================
+    # Propósito: Obtener un valor con información adicional (timestamp, etc.)
+    # Parámetros:
+    #   - clave_memoria (texto): Clave del valor a recuperar
+    # Retorna:
+    #   - mapa: Valor con metadatos adicionales
+    # =============================================================================
+    # funcion obtener_con_info(texto clave_memoria) retorna mapa
+    
+    # =============================================================================
+    # 10. backup_memoria
+    # =============================================================================
+    # Propósito: Crear una copia de seguridad de toda la memoria
+    # Parámetros:
+    #   - void: No requiere parámetros
+    # Retorna:
+    #   - texto: Representación serializada de la memoria
+    # =============================================================================
+    # funcion backup_memoria() retorna texto
+    
+    # =============================================================================
+    # 11. restaurar_memoria
+    # =============================================================================
+    # Propósito: Restaurar memoria desde una copia de seguridad
+    # Parámetros:
+    #   - backup (texto): Copia de seguridad a restaurar
+    # Retorna:
+    #   - bool: Verdadero si se restauró correctamente
+    # =============================================================================
+    # funcion restaurar_memoria(texto backup) retorna bool
+    
+    # =============================================================================
+    # 12. buscar_valores
+    # =============================================================================
+    # Propósito: Buscar valores que coincidan con un patrón
+    # Parámetros:
+    #   - patron (texto): Patrón de búsqueda
+    #   - tipo_busqueda (texto): Tipo de búsqueda ("exacta", "parcial", "regex")
+    # Retorna:
+    #   - lista<mapa>: Lista de coincidencias encontradas
+    # =============================================================================
+    # funcion buscar_valores(texto patron, texto tipo_busqueda) retorna lista<mapa>
+
+fin_clase

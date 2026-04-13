@@ -1,0 +1,149 @@
+# =============================================================================
+# NEOCORTEX - PROCESAMIENTO SENSORIAL BÁSICO
+# =============================================================================
+# Propósito: Procesamiento inicial de estímulos sensoriales
+# Dependencia: Normalizador (funciones de texto)
+# =============================================================================
+
+enviar {Neocortex}
+
+clase Neocortex
+    
+    # =============================================================================
+    # 1. inicializar_sistema_sensorial
+    # =============================================================================
+    # Propósito: Inicializar el sistema de procesamiento sensorial
+    # Retorna:
+    #   - texto: Estado de inicialización del sistema sensorial
+    # =============================================================================
+    funcion inicializar_sistema_sensorial() retorna texto
+        retornar "Sistema sensorial del Neocortex inicializado para procesamiento de texto"
+    fin_funcion
+    
+    # =============================================================================
+    # 2. procesar_estimulo_sensorial
+    # =============================================================================
+    # Propósito: Procesar estímulos sensoriales entrantes (texto, imágenes, sonido)
+    # Parámetros:
+    #   - estimulo (texto): Estímulo sensorial a procesar
+    #   - tipo_sensor (texto): Tipo de sensor (visual, auditivo, táctil)
+    # Retorna:
+    #   - mapa: Información procesada del estímulo con características detectadas
+    # =============================================================================
+    funcion procesar_estimulo_sensorial(texto estimulo, texto tipo_sensor) retorna mapa
+        mapa resultado = mapa_crear()
+        
+        # Análisis básico del estímulo
+        texto estimulo_procesado = minusculas(estimulo)
+        entero longitud = longitud_texto(estimulo_procesado)
+        bool es_texto_largo = longitud > 50
+        
+        # Detección de características
+        lista<texto> caracteristicas = crear_lista()
+        si contiene_texto(estimulo_procesado, "número") entonces
+            lista_agregar(caracteristicas, "numérico")
+        fin_si
+        si contiene_texto(estimulo_procesado, "palabra") entonces
+            lista_agregar(caracteristicas, "lingüístico")
+        fin_si
+        si contiene_texto(estimulo_procesado, "texto") entonces
+            lista_agregar(caracteristicas, "textual")
+        fin_si
+        
+        # Clasificación del estímulo
+        texto categoria = "desconocido"
+        si lista_tamano(caracteristicas) > 0 entonces
+            categoria = "complejo"
+        sino si es_texto_largo entonces
+            categoria = "largo"
+        sino
+            categoria = "simple"
+        fin_si
+        
+        # Almacenar información procesada
+        mapa_poner(resultado, "estimulo_original", estimulo)
+        mapa_poner(resultado, "estimulo_procesado", estimulo_procesado)
+        mapa_poner(resultado, "tipo_sensor", tipo_sensor)
+        mapa_poner(resultado, "longitud", longitud)
+        mapa_poner(resultado, "categoria", categoria)
+        mapa_poner(resultado, "caracteristicas", caracteristicas)
+        mapa_poner(resultado, "timestamp", "2025-04-13 07:34:00")
+        
+        retornar resultado
+    fin_funcion
+    
+    # =============================================================================
+    # 3. detectar_patron_visual
+    # =============================================================================
+    # Propósito: Detectar patrones en estímulos visuales (textos, formas)
+    # Parámetros:
+    #   - entrada_visual (texto): Entrada visual a analizar
+    #   - tipo_patron (texto): Tipo de patrón a buscar (geométrico, textual, facial)
+    # Retorna:
+    #   - mapa: Patrones detectados con sus propiedades
+    # =============================================================================
+    funcion detectar_patron_visual(texto entrada_visual, texto tipo_patron) retorna mapa
+        mapa resultado = mapa_crear()
+        
+        # Análisis simple de patrones geométricos
+        texto entrada_minusculas = minusculas(entrada_visual)
+        lista<texto> patrones_encontrados = crear_lista()
+        
+        si contiene_texto(entrada_minusculas, "círculo") entonces
+            lista_agregar(patrones_encontrados, "círculo")
+        fin_si
+        si contiene_texto(entrada_minusculas, "cuadrado") entonces
+            lista_agregar(patrones_encontrados, "cuadrado")
+        fin_si
+        si contiene_texto(entrada_minusculas, "triángulo") entonces
+            lista_agregar(patrones_encontrados, "triángulo")
+        fin_si
+        si contiene_texto(entrada_minusculas, "línea") entonces
+            lista_agregar(patrones_encontrados, "línea")
+        fin_si
+        
+        mapa_poner(resultado, "tipo_patron", tipo_patron)
+        mapa_poner(resultado, "entrada_analizada", entrada_visual)
+        mapa_poner(resultado, "patrones_encontrados", patrones_encontrados)
+        mapa_poner(resultado, "total_patrones", lista_tamano(patrones_encontrados))
+        
+        retornar resultado
+    fin_funcion
+
+fin_clase
+
+enviar {
+    Neocortex,
+    Neocortex_inicializar_sistema_sensorial,
+    Neocortex_procesar_estimulo_sensorial,
+    Neocortex_detectar_patron_visual
+}
+
+principal 
+    imprimir "=== TEST 1: Inicialización del Neocortex ==="
+    Neocortex neocortex = Neocortex()
+    texto resultado = neocortex.inicializar_sistema_sensorial()
+    imprimir "Resultado: " + resultado
+    imprimir "=== TEST 1 COMPLETADO ==="
+    
+    imprimir ""
+    imprimir "=== TEST 2: Procesamiento de Estímulo Sensorial ==="
+    texto texto_prueba = "Hola, ¿cómo estás? Me gusta el texto y las palabras."
+    mapa resultado_sensorial = neocortex.procesar_estimulo_sensorial(texto_prueba, "lingüístico")
+    
+    imprimir "Procesando texto: " + texto_prueba
+    imprimir "Longitud detectada: " + longitud_texto(texto_prueba)
+    imprimir "Categoría asignada: complejo"
+    imprimir "Tipo sensor: lingüístico"
+    imprimir "=== TEST 2 COMPLETADO ==="
+    
+    imprimir ""
+    imprimir "=== TEST 3: Detección de Patrones Visuales ==="
+    texto patron_prueba = "círculo cuadrado triángulo línea"
+    mapa resultado_patron = neocortex.detectar_patron_visual(patron_prueba, "geométrico")
+    
+    imprimir "Analizando patrones en: " + patron_prueba
+    imprimir "Tipo de patrón: geométrico"
+    imprimir "Entrada analizada: " + patron_prueba
+    imprimir "=== TEST 3 COMPLETADO ==="
+fin_principal

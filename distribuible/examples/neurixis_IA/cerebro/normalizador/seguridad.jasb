@@ -1,0 +1,936 @@
+# =============================================================================
+# MÓDULO DE SEGURIDAD Y FILTRADO DE CONTENIDO
+# =============================================================================
+# Este módulo proporciona funciones para detectar y filtrar contenido potencialmente
+# peligroso, inapropiado o malicioso en entradas de usuario. Incluye detección
+# de spam, contenido ofensivo, datos sensibles y patrones de ataque.
+# Autor: Sistema Jasboot IA
+# Versión: 1.0
+# =============================================================================
+
+enviar clase FiltroSeguridad
+
+    # =============================================================================
+    # FUNCIÓN: filtrar_contenido_inapropiado
+    # =============================================================================
+    # Propósito: Detecta y filtra contenido inapropiado u ofensivo
+    # Utiliza listas de palabras y patrones comunes de contenido problemático
+    # Parámetros:
+    #   - texto (texto): Texto a analizar y filtrar
+    # Retorna:
+    #   - texto: Texto filtrado (con contenido ofensivo reemplazado)
+    # =============================================================================
+    funcion filtrar_contenido_inapropiado(texto _texto) retorna texto
+        texto texto_lower = str_minusculas(_texto)
+        texto resultado = _texto
+        
+        # Lista de palabras inapropiadas comunes (ejemplo simplificado)
+        lista<texto> palabras_inapropiadas = crear_lista()
+        
+        # Palabras ofensivas comunes (lista reducida para ejemplo)
+        lista_agregar(palabras_inapropiadas, "insulto1")
+        lista_agregar(palabras_inapropiadas, "insulto2")
+        lista_agregar(palabras_inapropiadas, "groseria1")
+        lista_agregar(palabras_inapropiadas, "groseria2")
+        
+        # Palabras relacionadas con contenido adulto
+        lista_agregar(palabras_inapropiadas, "adulto1")
+        lista_agregar(palabras_inapropiadas, "adulto2")
+        
+        # Palabras relacionadas con violencia
+        lista_agregar(palabras_inapropiadas, "violencia1")
+        lista_agregar(palabras_inapropiadas, "violencia2")
+        
+        # Buscar y reemplazar palabras inapropiadas
+        entero i = 0
+        entero tam = lista_tamano(palabras_inapropiadas)
+        
+        mientras i < tam hacer
+            texto palabra = lista_obtener(palabras_inapropiadas, i)
+            
+            # Buscar la palabra en el texto (como palabra completa)
+            si contiene_palabra_completa(texto_lower, palabra) entonces
+                # Reemplazar con asteriscos
+                texto reemplazo = crear_asteriscos(longitud_texto(palabra))
+                resultado = reemplazar_palabra_completa(resultado, palabra, reemplazo)
+            fin_si
+            
+            i = i + 1
+        fin_mientras
+        
+        retornar resultado
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: detectar_spam
+    # =============================================================================
+    # Propósito: Detecta patrones comunes de spam y contenido no deseado
+    # Analiza URLs repetitivas, palabras clave de spam, patrones de mayúsculas, etc.
+    # Parámetros:
+    #   - texto (texto): Texto a analizar
+    # Retorna:
+    #   - bool: verdadero si se detectan patrones de spam
+    # =============================================================================
+    funcion detectar_spam(texto _texto) retorna bool
+        texto texto_lower = str_minusculas(_texto)
+        entero puntuacion_spam = 0
+        
+        # 1. Demasiadas URLs
+        entero urls = contar_urls(_texto)
+        si urls > 3 entonces
+            puntuacion_spam = puntuacion_spam + 10
+        sino si urls > 1 entonces
+            puntuacion_spam = puntuacion_spam + 5
+        fin_si
+        
+        # 2. Palabras clave de spam
+        lista<texto> palabras_spam = crear_lista()
+        lista_agregar(palabras_spam, "gratis")
+        lista_agregar(palabras_spam, "oferta")
+        lista_agregar(palabras_spam, "promoción")
+        lista_agregar(palabras_spam, "descuento")
+        lista_agregar(palabras_spam, "ganador")
+        lista_agregar(palabras_spam, "premio")
+        lista_agregar(palabras_spam, "dinero")
+        lista_agregar(palabras_spam, "click aquí")
+        lista_agregar(palabras_spam, "compra ahora")
+        lista_agregar(palabras_spam, "urgente")
+        lista_agregar(palabras_spam, "limitado")
+        
+        entero i = 0
+        entero tam = lista_tamano(palabras_spam)
+        
+        mientras i < tam hacer
+            texto palabra = lista_obtener(palabras_spam, i)
+            si contiene_texto(texto_lower, palabra) entonces
+                puntuacion_spam = puntuacion_spam + 3
+            fin_si
+            i = i + 1
+        fin_mientras
+        
+        # 3. Demasiadas mayúsculas
+        flotante proporcion_mayusculas = calcular_proporcion_mayusculas(_texto)
+        si proporcion_mayusculas > 0.5 entonces
+            puntuacion_spam = puntuacion_spam + 8
+        sino si proporcion_mayusculas > 0.3 entonces
+            puntuacion_spam = puntuacion_spam + 4
+        fin_si
+        
+        # 4. Repetición excesiva de caracteres
+        si tiene_repeticion_excesiva(_texto) entonces
+            puntuacion_spam = puntuacion_spam + 6
+        fin_si
+        
+        # 5. Patrones de números telefónicos o emails múltiples
+        entero emails = contar_emails(_texto)
+        entero telefonos = contar_telefonos(_texto)
+        
+        si emails > 2 entonces
+            puntuacion_spam = puntuacion_spam + 7
+        fin_si
+        
+        si telefonos > 1 entonces
+            puntuacion_spam = puntuacion_spam + 5
+        fin_si
+        
+        # 6. Texto demasiado corto con URLs (indicativo de spam)
+        si longitud_texto(_texto) < 50 y urls > 0 entonces
+            puntuacion_spam = puntuacion_spam + 10
+        fin_si
+        
+        # Considerar spam si la puntuación es alta
+        retornar puntuacion_spam >= 15
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: enmascarar_datos_sensibles
+    # =============================================================================
+    # Propósito: Enmascara información sensible como emails, teléfonos, tarjetas, etc.
+    # Parámetros:
+    #   - texto (texto): Texto con posibles datos sensibles
+    # Retorna:
+    #   - texto: Texto con datos sensibles enmascarados
+    # =============================================================================
+    funcion enmascarar_datos_sensibles(texto _texto) retorna texto
+        texto resultado = _texto
+        
+        # 1. Enmascarar emails
+        resultado = enmascarar_emails(resultado)
+        
+        # 2. Enmascarar números de teléfono
+        resultado = enmascarar_telefonos(resultado)
+        
+        # 3. Enmascarar tarjetas de crédito
+        resultado = enmascarar_tarjetas_credito(resultado)
+        
+        # 4. Enmascarar números de documento (DNI, CUIT, etc.)
+        resultado = enmascarar_documentos(resultado)
+        
+        # 5. Enmascarar contraseñas (patrones comunes)
+        resultado = enmascarar_patrones_contrasena(resultado)
+        
+        retornar resultado
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: detectar_contenido_malicioso
+    # =============================================================================
+    # Propósito: Detecta patrones de código malicioso, XSS, inyecciones, etc.
+    # Parámetros:
+    #   - texto (texto): Texto a analizar
+    # Retorna:
+    #   - bool: verdadero si se detecta contenido potencialmente malicioso
+    # =============================================================================
+    funcion detectar_contenido_malicioso(texto _texto) retorna bool
+        texto texto_lower = str_minusculas(_texto)
+        
+        # Patrones de XSS (Cross-Site Scripting)
+        lista<texto> patrones_xss = crear_lista()
+        lista_agregar(patrones_xss, "<script")
+        lista_agregar(patrones_xss, "javascript:")
+        lista_agregar(patrones_xss, "vbscript:")
+        lista_agregar(patrones_xss, "onload=")
+        lista_agregar(patrones_xss, "onerror=")
+        lista_agregar(patrones_xss, "onclick=")
+        lista_agregar(patrones_xss, "onmouseover=")
+        lista_agregar(patrones_xss, "eval(")
+        lista_agregar(patrones_xss, "alert(")
+        lista_agregar(patrones_xss, "document.cookie")
+        lista_agregar(patrones_xss, "document.location")
+        lista_agregar(patrones_xss, "window.location")
+        
+        # Patrones de inyección SQL
+        lista<texto> patrones_sql = crear_lista()
+        lista_agregar(patrones_sql, "union select")
+        lista_agregar(patrones_sql, "drop table")
+        lista_agregar(patrones_sql, "insert into")
+        lista_agregar(patrones_sql, "delete from")
+        lista_agregar(patrones_sql, "update set")
+        lista_agregar(patrones_sql, "exec(")
+        lista_agregar(patrones_sql, "execute(")
+        lista_agregar(patrones_sql, "sp_")
+        lista_agregar(patrones_sql, "xp_")
+        lista_agregar(patrones_sql, "--")
+        lista_agregar(patrones_sql, "/*")
+        lista_agregar(patrones_sql, "*/")
+        lista_agregar(patrones_sql, "' or")
+        lista_agregar(patrones_sql, "\" or")
+        lista_agregar(patrones_sql, "1=1")
+        lista_agregar(patrones_sql, "true")
+        
+        # Patrones de inyección de comandos
+        lista<texto> patrones_comandos = crear_lista()
+        lista_agregar(patrones_comandos, ";rm")
+        lista_agregar(patrones_comandos, ";cat")
+        lista_agregar(patrones_comandos, ";ls")
+        lista_agregar(patrones_comandos, "|rm")
+        lista_agregar(patrones_comandos, "|cat")
+        lista_agregar(patrones_comandos, "|ls")
+        lista_agregar(patrones_comandos, "&&rm")
+        lista_agregar(patrones_comandos, "&&cat")
+        lista_agregar(patrones_comandos, "&&ls")
+        
+        # Patrones de Path Traversal
+        lista<texto> patrones_path = crear_lista()
+        lista_agregar(patrones_path, "../")
+        lista_agregar(patrones_path, "..\\")
+        lista_agregar(patrones_path, "%2e%2e%2f")
+        lista_agregar(patrones_path, "%2e%2e\\")
+        lista_agregar(patrones_path, "....//")
+        
+        # Verificar todos los patrones
+        si verificar_patrones(texto_lower, patrones_xss) entonces
+            retornar verdadero
+        fin_si
+        
+        si verificar_patrones(texto_lower, patrones_sql) entonces
+            retornar verdadero
+        fin_si
+        
+        si verificar_patrones(texto_lower, patrones_comandos) entonces
+            retornar verdadero
+        fin_si
+        
+        si verificar_patrones(texto_lower, patrones_path) entonces
+            retornar verdadero
+        fin_si
+        
+        retornar falso
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: sanitizar_html
+    # =============================================================================
+    # Propósito: Elimina o escapa etiquetas HTML y atributos peligrosos
+    # Parámetros:
+    #   - texto (texto): Texto HTML a sanear
+    # Retorna:
+    #   - texto: HTML saneado y seguro
+    # =============================================================================
+    funcion sanitizar_html(texto _texto) retorna texto
+        texto resultado = _texto
+        bool dentro_etiqueta = falso
+        texto etiqueta_actual = ""
+        texto contenido_seguro = ""
+        
+        entero i = 0
+        entero tam = longitud_texto(_texto)
+        
+        mientras i < tam hacer
+            texto char = extraer_subtexto(_texto, i, 1)
+            
+            si char == "<" entonces
+                dentro_etiqueta = verdadero
+                etiqueta_actual = ""
+            sino si char == ">" entonces
+                si dentro_etiqueta entonces
+                    # Procesar la etiqueta completa
+                    si es_etiqueta_permitida(etiqueta_actual) entonces
+                        contenido_seguro = contenido_seguro + "<" + etiqueta_actual + ">"
+                    fin_si
+                    dentro_etiqueta = falso
+                    etiqueta_actual = ""
+                fin_si
+            sino si dentro_etiqueta entonces
+                etiqueta_actual = etiqueta_actual + char
+            sino
+                contenido_seguro = contenido_seguro + char
+            fin_si
+            
+            i = i + 1
+        fin_mientras
+        
+        retornar contenido_seguro
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIONES AUXILIARES PRIVADAS
+    # =============================================================================
+
+    # =============================================================================
+    # FUNCIÓN: contiene_palabra_completa (privada)
+    # =============================================================================
+    funcion contiene_palabra_completa(texto _texto, texto palabra) retorna bool
+        # Implementación simple de búsqueda de palabra completa
+        texto texto_con_espacios = " " + _texto + " "
+        texto palabra_con_espacios = " " + palabra + " "
+        
+        retornar contiene_texto(texto_con_espacios, palabra_con_espacios)
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: reemplazar_palabra_completa (privada)
+    # =============================================================================
+    funcion reemplazar_palabra_completa(texto _texto, texto palabra, texto reemplazo) retorna texto
+        # Implementación simple de reemplazo de palabra completa
+        texto texto_con_espacios = " " + _texto + " "
+        texto palabra_con_espacios = " " + palabra + " "
+        texto reemplazo_con_espacios = " " + reemplazo + " "
+        
+        texto resultado = reemplazar_texto(texto_con_espacios, palabra_con_espacios, reemplazo_con_espacios)
+        
+        # Eliminar los espacios agregados al inicio y final
+        si longitud_texto(resultado) > 0 entonces
+            resultado = extraer_subtexto(resultado, 1, longitud_texto(resultado) - 2)
+        fin_si
+        
+        retornar resultado
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: crear_asteriscos (privada)
+    # =============================================================================
+    funcion crear_asteriscos(entero cantidad) retorna texto
+        texto resultado = ""
+        entero i = 0
+        
+        mientras i < cantidad hacer
+            resultado = resultado + "*"
+            i = i + 1
+        fin_mientras
+        
+        retornar resultado
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: contar_urls (privada)
+    # =============================================================================
+    funcion contar_urls(texto _texto) retorna entero
+        texto texto_lower = str_minusculas(_texto)
+        entero contador = 0
+        
+        lista<texto> prefijos_url = crear_lista()
+        lista_agregar(prefijos_url, "http://")
+        lista_agregar(prefijos_url, "https://")
+        lista_agregar(prefijos_url, "ftp://")
+        lista_agregar(prefijos_url, "www.")
+        
+        entero i = 0
+        entero tam = lista_tamano(prefijos_url)
+        
+        mientras i < tam hacer
+            texto prefijo = lista_obtener(prefijos_url, i)
+            si contiene_texto(texto_lower, prefijo) entonces
+                contador = contador + 1
+            fin_si
+            i = i + 1
+        fin_mientras
+        
+        retornar contador
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: calcular_proporcion_mayusculas (privada)
+    # =============================================================================
+    funcion calcular_proporcion_mayusculas(texto _texto) retorna flotante
+        entero total = 0
+        entero mayusculas = 0
+        entero i = 0
+        entero tam = longitud_texto(_texto)
+        
+        mientras i < tam hacer
+            texto char = extraer_subtexto(_texto, i, 1)
+            entero codigo = codigo_caracter(char)
+            
+            # Contar solo letras
+            si (codigo >= 65 y codigo <= 90) o (codigo >= 97 y codigo <= 122) entonces
+                total = total + 1
+                si codigo >= 65 y codigo <= 90 entonces
+                    mayusculas = mayusculas + 1
+                fin_si
+            fin_si
+            
+            i = i + 1
+        fin_mientras
+        
+        si total == 0 entonces
+            retornar 0.0
+        fin_si
+        
+        retornar mayusculas / total
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: tiene_repeticion_excesiva (privada)
+    # =============================================================================
+    funcion tiene_repeticion_excesiva(texto _texto) retorna bool
+        entero i = 0
+        entero tam = longitud_texto(_texto)
+        
+        mientras i < tam - 2 hacer
+            texto char1 = extraer_subtexto(_texto, i, 1)
+            texto char2 = extraer_subtexto(_texto, i + 1, 1)
+            texto char3 = extraer_subtexto(_texto, i + 2, 1)
+            
+            # Si hay 3 caracteres iguales consecutivos
+            si char1 == char2 y char2 == char3 entonces
+                retornar verdadero
+            fin_si
+            
+            i = i + 1
+        fin_mientras
+        
+        retornar falso
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: contar_emails (privada)
+    # =============================================================================
+    funcion contar_emails(texto _texto) retorna entero
+        entero contador = 0
+        entero i = 0
+        entero tam = longitud_texto(_texto)
+        
+        mientras i < tam hacer
+            texto char = extraer_subtexto(_texto, i, 1)
+            
+            si char == "@" entonces
+                # Verificar que haya algo antes y después del @
+                si i > 0 y i < tam - 1 entonces
+                    contador = contador + 1
+                fin_si
+            fin_si
+            
+            i = i + 1
+        fin_mientras
+        
+        retornar contador
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: contar_telefonos (privada)
+    # =============================================================================
+    funcion contar_telefonos(texto _texto) retorna entero
+        entero contador = 0
+        entero digitos_consecutivos = 0
+        entero i = 0
+        entero tam = longitud_texto(_texto)
+        
+        mientras i < tam hacer
+            texto char = extraer_subtexto(_texto, i, 1)
+            entero codigo = codigo_caracter(char)
+            
+            si codigo >= 48 y codigo <= 57 entonces
+                digitos_consecutivos = digitos_consecutivos + 1
+                
+                # Si hay 7 o más dígitos consecutivos, contar como teléfono
+                si digitos_consecutivos >= 7 entonces
+                    contador = contador + 1
+                    digitos_consecutivos = 0  # Reiniciar para evitar contar múltiples veces
+                fin_si
+            sino
+                digitos_consecutivos = 0
+            fin_si
+            
+            i = i + 1
+        fin_mientras
+        
+        retornar contador
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: enmascarar_emails (privada)
+    # =============================================================================
+    funcion enmascarar_emails(texto _texto) retorna texto
+        texto resultado = ""
+        entero i = 0
+        entero tam = longitud_texto(_texto)
+        
+        mientras i < tam hacer
+            texto char = extraer_subtexto(_texto, i, 1)
+            
+            si char == "@" entonces
+                # Encontrar inicio del email
+                entero inicio = i - 1
+                mientras inicio >= 0 hacer
+                    texto char_prev = extraer_subtexto(_texto, inicio, 1)
+                    entero codigo = codigo_caracter(char_prev)
+                    
+                    si (codigo >= 65 y codigo <= 90) o     # A-Z
+                       (codigo >= 97 y codigo <= 122) o    # a-z
+                       (codigo >= 48 y codigo <= 57) o     # 0-9
+                       codigo == 46 o codigo == 95 o codigo == 45 o codigo == 43 entonces  # . _ - +
+                        inicio = inicio - 1
+                    sino
+                        romper
+                    fin_si
+                fin_mientras
+                inicio = inicio + 1
+                
+                # Encontrar fin del email
+                entero fin = i + 1
+                mientras fin < tam hacer
+                    texto char_sig = extraer_subtexto(_texto, fin, 1)
+                    entero codigo = codigo_caracter(char_sig)
+                    
+                    si (codigo >= 65 y codigo <= 90) o     # A-Z
+                       (codigo >= 97 y codigo <= 122) o    # a-z
+                       (codigo >= 48 y codigo <= 57) o     # 0-9
+                       codigo == 46 o codigo == 45 entonces  # . -
+                        fin = fin + 1
+                    sino
+                        romper
+                    fin_si
+                fin_mientras
+                
+                # Extraer y enmascarar el email
+                si fin > inicio + 1 entonces
+                    texto email = extraer_subtexto(_texto, inicio, fin - inicio)
+                    texto enmascarado = enmascarar_email_individual(email)
+                    
+                    # Agregar texto antes del email
+                    resultado = resultado + extraer_subtexto(_texto, 0, inicio)
+                    resultado = resultado + enmascarado
+                    
+                    # Saltar el email original
+                    i = fin - 1
+                sino
+                    resultado = resultado + char
+                fin_si
+            sino
+                resultado = resultado + char
+            fin_si
+            
+            i = i + 1
+        fin_mientras
+        
+        retornar resultado
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: enmascarar_email_individual (privada)
+    # =============================================================================
+    funcion enmascarar_email_individual(texto email) retorna texto
+        texto resultado = ""
+        entero i = 0
+        entero tam = longitud_texto(email)
+        bool antes_arroba = verdadero
+        
+        mientras i < tam hacer
+            texto char = extraer_subtexto(email, i, 1)
+            
+            si char == "@" entonces
+                antes_arroba = falso
+                resultado = resultado + char
+            sino si antes_arroba entonces
+                # Enmascarar parte local (mostrar solo primeras 2 letras)
+                si i < 2 entonces
+                    resultado = resultado + char
+                sino
+                    resultado = resultado + "*"
+                fin_si
+            sino
+                # Enmascarar dominio (mostrar solo última parte)
+                entero pos_punto = encontrar_ultimo_punto(email)
+                si pos_punto > 0 y i >= pos_punto - 2 entonces
+                    resultado = resultado + char
+                sino si i >= tam - 3 entonces
+                    resultado = resultado + char
+                sino
+                    resultado = resultado + "*"
+                fin_si
+            fin_si
+            
+            i = i + 1
+        fin_mientras
+        
+        retornar resultado
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: encontrar_ultimo_punto (privada)
+    # =============================================================================
+    funcion encontrar_ultimo_punto(texto _texto) retorna entero
+        entero resultado = -1
+        entero i = 0
+        entero tam = longitud_texto(_texto)
+        
+        mientras i < tam hacer
+            texto char = extraer_subtexto(_texto, i, 1)
+            si char == "." entonces
+                resultado = i
+            fin_si
+            i = i + 1
+        fin_mientras
+        
+        retornar resultado
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: enmascarar_telefonos (privada)
+    # =============================================================================
+    funcion enmascarar_telefonos(texto _texto) retorna texto
+        # Implementación simple - busca secuencias de 7+ dígitos
+        texto resultado = ""
+        entero i = 0
+        entero tam = longitud_texto(_texto)
+        
+        mientras i < tam hacer
+            texto char = extraer_subtexto(_texto, i, 1)
+            entero codigo = codigo_caracter(char)
+            
+            si codigo >= 48 y codigo <= 57 entonces
+                # Posible inicio de teléfono
+                entero digitos = 1
+                entero j = i + 1
+                
+                mientras j < tam y digitos < 15 hacer
+                    texto char_sig = extraer_subtexto(_texto, j, 1)
+                    entero codigo_sig = codigo_caracter(char_sig)
+                    
+                    si codigo_sig >= 48 y codigo_sig <= 57 entonces
+                        digitos = digitos + 1
+                        j = j + 1
+                    sino
+                        romper
+                    fin_si
+                fin_mientras
+                
+                si digitos >= 7 entonces
+                    # Encontrar el teléfono
+                    texto telefono = extraer_subtexto(_texto, i, digitos)
+                    texto enmascarado = "***-***-" + extraer_subtexto(telefono, digitos - 4, 4)
+                    
+                    resultado = resultado + enmascarado
+                    i = i + digitos - 1
+                sino
+                    resultado = resultado + char
+                fin_si
+            sino
+                resultado = resultado + char
+            fin_si
+            
+            i = i + 1
+        fin_mientras
+        
+        retornar resultado
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: enmascarar_tarjetas_credito (privada)
+    # =============================================================================
+    funcion enmascarar_tarjetas_credito(texto _texto) retorna texto
+        # Buscar patrones de 16 dígitos (con posibles separadores)
+        texto resultado = ""
+        entero i = 0
+        entero tam = longitud_texto(_texto)
+        
+        mientras i < tam hacer
+            texto char = extraer_subtexto(_texto, i, 1)
+            entero codigo = codigo_caracter(char)
+            
+            si codigo >= 48 y codigo <= 57 entonces
+                # Posible inicio de tarjeta
+                entero digitos = 1
+                entero j = i + 1
+                
+                mientras j < tam y digitos < 19 hacer
+                    texto char_sig = extraer_subtexto(_texto, j, 1)
+                    entero codigo_sig = codigo_caracter(char_sig)
+                    
+                    si (codigo_sig >= 48 y codigo_sig <= 57) o codigo_sig == 45 o codigo_sig == 32 entonces
+                        si codigo_sig >= 48 y codigo_sig <= 57 entonces
+                            digitos = digitos + 1
+                        fin_si
+                        j = j + 1
+                    sino
+                        romper
+                    fin_si
+                fin_mientras
+                
+                si digitos >= 13 y digitos <= 19 entonces
+                    # Extraer solo los dígitos
+                    texto solo_digitos = ""
+                    entero k = i
+                    mientras k < j hacer
+                        texto char_k = extraer_subtexto(_texto, k, 1)
+                        entero codigo_k = codigo_caracter(char_k)
+                        
+                        si codigo_k >= 48 y codigo_k <= 57 entonces
+                            solo_digitos = solo_digitos + char_k
+                        fin_si
+                        k = k + 1
+                    fin_mientras
+                    
+                    si longitud_texto(solo_digitos) >= 13 y longitud_texto(solo_digitos) <= 19 entonces
+                        # Enmascarar tarjeta
+                        texto enmascarada = extraer_subtexto(solo_digitos, 0, 4) + "-****-****-" + extraer_subtexto(solo_digitos, longitud_texto(solo_digitos) - 4, 4)
+                        resultado = resultado + enmascarada
+                        i = j - 1
+                    sino
+                        resultado = resultado + char
+                    fin_si
+                sino
+                    resultado = resultado + char
+                fin_si
+            sino
+                resultado = resultado + char
+            fin_si
+            
+            i = i + 1
+        fin_mientras
+        
+        retornar resultado
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: enmascarar_documentos (privada)
+    # =============================================================================
+    funcion enmascarar_documentos(texto _texto) retorna texto
+        # Implementación simple para DNI (8 dígitos) y CUIT (11 dígitos)
+        texto resultado = ""
+        entero i = 0
+        entero tam = longitud_texto(_texto)
+        
+        mientras i < tam hacer
+            texto char = extraer_subtexto(_texto, i, 1)
+            entero codigo = codigo_caracter(char)
+            
+            si codigo >= 48 y codigo <= 57 entonces
+                # Posible inicio de documento
+                entero digitos = 1
+                entero j = i + 1
+                
+                mientras j < tam y digitos < 12 hacer
+                    texto char_sig = extraer_subtexto(_texto, j, 1)
+                    entero codigo_sig = codigo_caracter(char_sig)
+                    
+                    si codigo_sig >= 48 y codigo_sig <= 57 entonces
+                        digitos = digitos + 1
+                        j = j + 1
+                    sino
+                        romper
+                    fin_si
+                fin_mientras
+                
+                si digitos == 8 entonces
+                    # DNI
+                    resultado = resultado + "***-***-" + extraer_subtexto(_texto, j - 2, 2)
+                    i = j - 1
+                sino si digitos == 11 entonces
+                    # CUIT
+                    resultado = resultado + "**-********-" + extraer_subtexto(_texto, j - 2, 2)
+                    i = j - 1
+                sino
+                    resultado = resultado + char
+                fin_si
+            sino
+                resultado = resultado + char
+            fin_si
+            
+            i = i + 1
+        fin_mientras
+        
+        retornar resultado
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: enmascarar_patrones_contrasena (privada)
+    # =============================================================================
+    funcion enmascarar_patrones_contrasena(texto _texto) retorna texto
+        texto texto_lower = str_minusculas(_texto)
+        
+        # Patrones comunes de contraseñas
+        lista<texto> patrones = crear_lista()
+        lista_agregar(patrones, "password")
+        lista_agregar(patrones, "contraseña")
+        lista_agregar(patrones, "clave")
+        lista_agregar(patrones, "pass")
+        lista_agregar(patrones, "pwd")
+        
+        entero i = 0
+        entero tam = lista_tamano(patrones)
+        
+        mientras i < tam hacer
+            texto patron = lista_obtener(patrones, i)
+            si contiene_texto(texto_lower, patron) entonces
+                # Buscar el patrón y enmascarar lo que sigue
+                entero pos = encontrar_posicion_patron(texto_lower, patron)
+                si pos >= 0 entonces
+                    entero inicio_valor = pos + longitud_texto(patron)
+                    
+                    # Buscar el valor después del patrón
+                    entero j = inicio_valor
+                    mientras j < longitud_texto(_texto) y j < inicio_valor + 50 hacer
+                        texto char = extraer_subtexto(_texto, j, 1)
+                        entero codigo = codigo_caracter(char)
+                        
+                        si codigo == 32 o codigo == 10 o codigo == 13 o codigo == 9 entonces
+                            romper
+                        fin_si
+                        j = j + 1
+                    fin_mientras
+                    
+                    si j > inicio_valor entonces
+                        # Reemplazar el valor con asteriscos
+                        texto antes = extraer_subtexto(_texto, 0, inicio_valor)
+                        texto despues = extraer_subtexto(_texto, j, longitud_texto(_texto) - j)
+                        _texto = antes + " ******** " + despues
+                        texto_lower = str_minusculas(_texto)
+                    fin_si
+                fin_si
+            fin_si
+            i = i + 1
+        fin_mientras
+        
+        retornar _texto
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: verificar_patrones (privada)
+    # =============================================================================
+    funcion verificar_patrones(texto _texto, lista<texto> patrones) retorna bool
+        entero i = 0
+        entero tam = lista_tamano(patrones)
+        
+        mientras i < tam hacer
+            texto patron = lista_obtener(patrones, i)
+            si contiene_texto(_texto, patron) entonces
+                retornar verdadero
+            fin_si
+            i = i + 1
+        fin_mientras
+        
+        retornar falso
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: es_etiqueta_permitida (privada)
+    # =============================================================================
+    funcion es_etiqueta_permitida(texto _etiqueta) retorna bool
+        texto etiqueta_lower = str_minusculas(_etiqueta)
+        
+        # Lista de etiquetas HTML permitidas
+        lista<texto> permitidas = crear_lista()
+        lista_agregar(permitidas, "b")
+        lista_agregar(permitidas, "i")
+        lista_agregar(permitidas, "u")
+        lista_agregar(permitidas, "strong")
+        lista_agregar(permitidas, "em")
+        lista_agregar(permitidas, "p")
+        lista_agregar(permitidas, "br")
+        lista_agregar(permitidas, "span")
+        
+        entero i = 0
+        entero tam = lista_tamano(permitidas)
+        
+        mientras i < tam hacer
+            texto permitida = lista_obtener(permitidas, i)
+            si etiqueta_lower == permitida entonces
+                retornar verdadero
+            fin_si
+            i = i + 1
+        fin_mientras
+        
+        retornar falso
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: encontrar_posicion_patron (privada)
+    # =============================================================================
+    funcion encontrar_posicion_patron(texto _texto, texto _patron) retorna entero
+        entero i = 0
+        entero tam = longitud_texto(_texto)
+        entero tam_patron = longitud_texto(_patron)
+        
+        mientras i <= tam - tam_patron hacer
+            texto subtexto = extraer_subtexto(_texto, i, tam_patron)
+            si subtexto == _patron entonces
+                retornar i
+            fin_si
+            i = i + 1
+        fin_mientras
+        
+        retornar -1
+    fin_funcion
+
+    # =============================================================================
+    # FUNCIÓN: reemplazar_texto (privada)
+    # =============================================================================
+    funcion reemplazar_texto(texto _texto, texto _buscar, texto _reemplazar) retorna texto
+        # Implementación simple de reemplazo
+        texto resultado = ""
+        entero i = 0
+        entero tam = longitud_texto(_texto)
+        entero tam_buscar = longitud_texto(_buscar)
+        
+        mientras i <= tam - tam_buscar hacer
+            texto subtexto = extraer_subtexto(_texto, i, tam_buscar)
+            si subtexto == _buscar entonces
+                resultado = resultado + _reemplazar
+                i = i + tam_buscar
+            sino
+                resultado = resultado + extraer_subtexto(_texto, i, 1)
+                i = i + 1
+            fin_si
+        fin_mientras
+        
+        # Agregar los caracteres restantes
+        si i < tam entonces
+            resultado = resultado + extraer_subtexto(_texto, i, tam - i)
+        fin_si
+        
+        retornar resultado
+    fin_funcion
+
+fin_clase

@@ -1,0 +1,193 @@
+usar {Menues} de "../utils/menues.jasb"
+
+clase BucleMental
+
+
+    # =============================================================================
+    # 1. ejecutar
+    # =============================================================================
+    # Propósito: Ejecutar el bucle mental principal del sistema
+    # Parámetros:
+    #   - void: No requiere parámetros
+    # Retorna:
+    #   - void: Ejecuta el bucle mental
+    # =============================================================================
+    funcion ejecutar()
+        Menues menues 
+        entero opcion
+        opcion = menues.mostrar_menu_principal()
+        # imprimir "Opción seleccionada: ${opcion}"
+    fin_funcion
+    
+    # =============================================================================
+    # 2. iniciar_bucle_principal
+    # =============================================================================
+    # Propósito: Iniciar el bucle principal de procesamiento mental
+    # Parámetros:
+    #   - modo_ejecucion (texto): Modo de ejecución ("interactivo", "automatico", "debug")
+    #   - ciclos_maximos (entero): Número máximo de ciclos a ejecutar
+    # Retorna:
+    #   - mapa: Estado del bucle con estadísticas
+    # =============================================================================
+    # funcion iniciar_bucle_principal(texto modo_ejecucion, entero ciclos_maximos) retorna mapa
+    
+    # =============================================================================
+    # 3. procesar_ciclo_mental
+    # =============================================================================
+    # Propósito: Procesar un ciclo completo del bucle mental
+    # Parámetros:
+    #   - entrada_actual (texto): Entrada actual del ciclo
+    #   - contexto_ciclo (mapa): Contexto del ciclo actual
+    # Retorna:
+    #   - mapa: Resultado del ciclo con estado actualizado
+    # =============================================================================
+    # funcion procesar_ciclo_mental(texto entrada_actual, mapa contexto_ciclo) retorna mapa
+    
+    # =============================================================================
+    # 4. evaluar_estado_conciencia
+    # =============================================================================
+    # Propósito: Evaluar el estado de conciencia del sistema
+    # Parámetros:
+    #   - indicadores_conciencia (lista<texto>): Indicadores a evaluar
+    #   - umbral_alerta (flotante): Umbral para alertas de conciencia
+    # Retorna:
+    #   - mapa: Estado de conciencia con métricas
+    # =============================================================================
+    # funcion evaluar_estado_conciencia(lista<texto> indicadores_conciencia, flotante umbral_alerta) retorna mapa
+    
+    # =============================================================================
+    # 5. gestionar_atencion
+    # =============================================================================
+    # Propósito: Gestionar el foco de atención del sistema
+    # Parámetros:
+    #   - estimulos_prioritarios (lista<texto>): Estímulos prioritarios
+    #   - capacidad_atencion (entero): Capacidad máxima de atención
+    # Retorna:
+    #   - mapa: Estado de atención con focos asignados
+    # =============================================================================
+    # funcion gestionar_atencion(lista<texto> estimulos_prioritarios, entero capacidad_atencion) retorna mapa
+    
+    # =============================================================================
+    # 6. sincronizar_modulos_cognitivos
+    # =============================================================================
+    # Propósito: Sincronizar los módulos cognitivos del sistema
+    # Parámetros:
+    #   - modulos_activos (lista<texto>): Lista de módulos a sincronizar
+    #   - nivel_sincronizacion (flotante): Nivel de sincronización deseado
+    # Retorna:
+    #   - mapa: Estado de sincronización de módulos
+    # =============================================================================
+    # funcion sincronizar_modulos_cognitivos(lista<texto> modulos_activos, flotante nivel_sincronizacion) retorna mapa
+    
+    # =============================================================================
+    # 7. procesar_memoria_trabajo
+    # =============================================================================
+    # Propósito: Gestionar la memoria de trabajo del bucle mental
+    # Parámetros:
+    #   - informacion_actual (mapa): Información actual en memoria
+    #   - capacidad_memoria (entero): Capacidad de memoria de trabajo
+    # Retorna:
+    #   - mapa: Estado de memoria de trabajo
+    # =============================================================================
+    # funcion procesar_memoria_trabajo(mapa informacion_actual, entero capacidad_memoria) retorna mapa
+    
+    # =============================================================================
+    # 8. ejecutar_control_inhibitorio
+    # =============================================================================
+    # Propósito: Ejecutar mecanismos de control inhibitorio
+    # Parámetros:
+    #   - estimulos_inhibir (lista<texto>): Estímulos a inhibir
+    #   - nivel_inhibicion (flotante): Nivel de inhibición a aplicar
+    # Retorna:
+    #   - mapa: Resultado del control inhibitorio
+    # =============================================================================
+    # funcion ejecutar_control_inhibitorio(lista<texto> estimulos_inhibir, flotante nivel_inhibicion) retorna mapa
+    
+    # =============================================================================
+    # 9. gestionar_estado_emocional
+    # =============================================================================
+    # Propósito: Gestionar el estado emocional del sistema
+    # Parámetros:
+    #   - entradas_emocionales (lista<texto>): Entradas emocionales
+    #   - regulacion_emocional (bool): Si aplicar regulación emocional
+    # Retorna:
+    #   - mapa: Estado emocional regulado
+    # =============================================================================
+    # funcion gestionar_estado_emocional(lista<texto> entradas_emocionales, bool regulacion_emocional) retorna mapa
+    
+    # =============================================================================
+    # 10. optimizar_flujo_cognitivo
+    # =============================================================================
+    # Propósito: Optimizar el flujo de procesamiento cognitivo
+    # Parámetros:
+    #   - cuellos_botella (lista<texto>): Cuellos de botella identificados
+    #   - recursos_disponibles (mapa): Recursos cognitivos disponibles
+    # Retorna:
+    #   - mapa: Flujo cognitivo optimizado
+    # =============================================================================
+    # funcion optimizar_flujo_cognitivo(lista<texto> cuellos_botella, mapa recursos_disponibles) retorna mapa
+    
+    # =============================================================================
+    # 11. monitorear_sobrecarga_cognitiva
+    # =============================================================================
+    # Propósito: Monitorear la sobrecarga cognitiva del sistema
+    # Parámetros:
+    #   - indicadores_carga (mapa): Indicadores de carga cognitiva
+    #   - umbral_sobrecarga (flotante): Umbral de sobrecarga
+    # Retorna:
+    #   - mapa: Estado de carga con alertas
+    # =============================================================================
+    # funcion monitorear_sobrecarga_cognitiva(mapa indicadores_carga, flotante umbral_sobrecarga) retorna mapa
+    
+    # =============================================================================
+    # 12. ejecutar_recuperacion_estado
+    # =============================================================================
+    # Propósito: Ejecutar recuperación de estado del sistema
+    # Parámetros:
+    #   - punto_recuperacion (texto): Punto de recuperación
+    #   - preservar_aprendizaje (bool): Si preservar aprendizaje
+    # Retorna:
+    #   - mapa: Estado recuperado con información
+    # =============================================================================
+    # funcion ejecutar_recuperacion_estado(texto punto_recuperacion, bool preservar_aprendizaje) retorna mapa
+    
+    # =============================================================================
+    # 13. gestionar_transicion_estados
+    # =============================================================================
+    # Propósito: Gestionar transiciones entre estados mentales
+    # Parámetros:
+    #   - estado_actual (texto): Estado mental actual
+    #   - estado_objetivo (texto): Estado mental objetivo
+    #   - suavidad_transicion (flotante): Suavidad de la transición
+    # Retorna:
+    #   - mapa: Progreso de la transición
+    # =============================================================================
+    # funcion gestionar_transicion_estados(texto estado_actual, texto estado_objetivo, flotante suavidad_transicion) retorna mapa
+    
+    # =============================================================================
+    # 14. consolidar_aprendizaje_ciclo
+    # =============================================================================
+    # Propósito: Consolidar el aprendizaje de cada ciclo
+    # Parámetros:
+    #   - experiencias_ciclo (lista<mapa>): Experiencias del ciclo
+    #   - factor_consolidacion (flotante): Factor de consolidación
+    # Retorna:
+    #   - mapa: Aprendizaje consolidado
+    # =============================================================================
+    # funcion consolidar_aprendizaje_ciclo(lista<mapa> experiencias_ciclo, flotante factor_consolidacion) retorna mapa
+    
+    # =============================================================================
+    # 15. obtener_estadisticas_bucle
+    # =============================================================================
+    # Propósito: Obtener estadísticas del bucle mental
+    # Parámetros:
+    #   - periodo_analisis (texto): Período de análisis ("ciclo", "sesion", "total")
+    #   - nivel_detalle (texto): Nivel de detalle ("basico", "detallado", "completo")
+    # Retorna:
+    #   - mapa: Estadísticas detalladas del bucle
+    # =============================================================================
+    # funcion obtener_estadisticas_bucle(texto periodo_analisis, texto nivel_detalle) retorna mapa
+
+fin_clase
+
+enviar {BucleMental}

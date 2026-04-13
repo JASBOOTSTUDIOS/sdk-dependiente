@@ -1,0 +1,223 @@
+clase Autenticacion 
+
+    # Ruta del archivo de usuarios
+    texto archivo_usuarios 
+    
+    # Usuario actualmente autenticado (vacío si no hay nadie)
+    texto usuario_actual
+    
+    # Función para verificar si el archivo de usuarios existe
+    funcion existe_archivo_usuarios() retorna bool
+        retornar existe_archivo(este.archivo_usuarios)
+    fin_funcion
+    
+    # Función para crear el archivo de usuarios si no existe
+    funcion crear_archivo_usuarios()
+        si existe_archivo(este.archivo_usuarios) == 0 entonces
+            texto contenido_inicial = "{}"
+            entero archivo = abrir_archivo(este.archivo_usuarios, "wb")
+            si archivo != 0 entonces
+                escribir_archivo(contenido_inicial, archivo)
+                cerrar_archivo(archivo)
+            fin_si
+        fin_si
+    fin_funcion
+    
+    # Función para leer usuarios desde el archivo JSON
+    funcion leer_usuarios() retorna texto
+        si existe_archivo(este.archivo_usuarios) == 0 entonces
+            retornar "{}"
+        fin_si
+        
+        texto contenido = ""
+        entero fh = abrir_archivo(este.archivo_usuarios, "r")
+        si fh != 0 entonces
+            mientras 1 hacer
+                texto ln = leer_linea_archivo(fh)
+                si longitud_texto(ln) == 0 entonces
+                    si fin_archivo(fh) == 1 entonces
+                        romper
+                    fin_si
+                    continuar
+                fin_si
+                contenido = contenido + ln
+            fin_mientras
+            cerrar_archivo(fh)
+        fin_si
+        
+        si longitud_texto(contenido) < 2 entonces
+            retornar "{}"
+        fin_si
+        retornar contenido
+    fin_funcion
+    
+    # Función para guardar usuarios en el archivo JSON
+    funcion guardar_usuarios(texto contenido_json)
+        entero archivo = abrir_archivo(este.archivo_usuarios, "wb")
+        si archivo != 0 entonces
+            escribir_archivo(contenido_json, archivo)
+            cerrar_archivo(archivo)
+        fin_si
+    fin_funcion
+    
+    # Función para registrar un nuevo usuario
+    funcion registrar_usuario(texto nombre_usuario, texto contrasena) retorna bool
+        este.crear_archivo_usuarios()
+        
+        texto usuarios_json = este.leer_usuarios()
+        
+        # Verificar si el usuario ya existe (mejorado)
+        texto busqueda = "\"" + nombre_usuario + "\":"
+        si contiene_texto(usuarios_json, busqueda) entonces
+            imprimir "\rojo[Error] El usuario ya existe\norm"
+            retornar falso
+        fin_si
+        
+        # Agregar nuevo usuario (mejorado - manejando JSON)
+        texto nuevo_usuario = "\"" + nombre_usuario + "\": \"" + contrasena + "\""
+        texto usuarios_actualizado = ""
+        
+        si usuarios_json == "{}" entonces
+            usuarios_actualizado = "{" + nuevo_usuario + "}"
+        sino
+            # Insertar antes del último cierre }
+            entero len = longitud_texto(usuarios_json)
+            texto base = extraer_subtexto(usuarios_json, 0, len - 1)
+            # Asegurar que base no termine en coma si está vacío tras quitar }
+            usuarios_actualizado = base + ", " + nuevo_usuario + "}"
+        fin_si
+        
+        este.guardar_usuarios(usuarios_actualizado)
+        imprimir "\verd[Éxito] Usuario registrado correctamente\norm"
+        retornar verdadero
+    fin_funcion
+    
+    # Función para autenticar usuario
+    funcion autenticar(texto nombre_usuario, texto contrasena) retorna bool
+        # No necesitamos llamar crear_archivo_usuarios aquí si ya existe
+        texto usuarios_json = este.leer_usuarios()
+        
+        # Verificar credenciales (mejorado - buscando el par clave:valor)
+        texto par_auth = "\"" + nombre_usuario + "\": \"" + contrasena + "\""
+        si contiene_texto(usuarios_json, par_auth) entonces
+            imprimir "\verd[Éxito] Autenticación correcta\norm"
+            este.usuario_actual = nombre_usuario
+            retornar verdadero
+        sino
+            imprimir "\rojo[Error] Credenciales incorrectas\norm"
+            retornar falso
+        fin_si
+    fin_funcion
+    
+    # Función para cerrar sesión
+    funcion cerrar_sesion()
+        si este.usuario_actual != "" entonces
+            imprimir "\azul[Sesión] Cerrando sesión de: " + este.usuario_actual + "\norm"
+            este.usuario_actual = ""
+        sino
+            imprimir "\amar[Aviso] No hay ninguna sesión activa\norm"
+        fin_si
+    fin_funcion
+    
+    # Función para mostrar menú de registro
+    funcion menu_registro() retorna bool
+        imprimir "\cian=== Registro de Usuario ===\norm"
+        imprimir_sin_salto "Nombre de usuario: "
+        texto nombre_usuario
+        ingresar_texto nombre_usuario
+        
+        imprimir_sin_salto "Contraseña: "
+        texto contrasena
+        ingresar_texto contrasena
+        
+        retornar este.registrar_usuario(nombre_usuario, contrasena)
+    fin_funcion
+    
+    # Función para mostrar menú de login
+    funcion menu_login() retorna bool
+        imprimir "\cian=== Inicio de Sesión ===\norm"
+        imprimir_sin_salto "Nombre de usuario: "
+        texto nombre_usuario
+        ingresar_texto nombre_usuario
+        
+        imprimir_sin_salto "Contraseña: "
+        texto contrasena
+        ingresar_texto contrasena
+        
+        retornar este.autenticar(nombre_usuario, contrasena)
+    fin_funcion
+    
+    # Función para mostrar menú de cerrar sesión
+    funcion menu_cerrar_sesion()
+        imprimir "\cian¿Está seguro que desea cerrar sesión? (s/n)\norm"
+        texto confirmar
+        ingresar_texto confirmar
+        si confirmar == "s" o confirmar == "S" entonces
+            este.cerrar_sesion()
+        fin_si
+    fin_funcion
+    
+    # Función principal de gestión de autenticación
+    funcion gestion_de_archivos() retorna 
+    
+        mientras verdadero hacer
+            limpiar_consola()
+            
+            # Encabezado dinámico según estado de sesión
+            si este.usuario_actual != "" entonces
+                imprimir "\azul=== Sistema de Autenticación [Usuario: " + este.usuario_actual + "] ===\norm"
+                imprimir "1. Ir al sistema (continuar)"
+                imprimir "2. Cerrar sesión"
+                imprimir "3. Salir del programa"
+            sino
+                imprimir "\azul=== Sistema de Autenticación [Desconectado] ===\norm"
+                imprimir "1. Iniciar sesión"
+                imprimir "2. Registrarse"
+                imprimir "3. Salir"
+            fin_si
+            
+            imprimir_sin_salto "Seleccione una opción: "
+            
+            texto opcion_texto
+            ingresar_texto opcion_texto
+            
+            entero opcion
+            opcion = str_a_entero(opcion_texto)
+            
+            # Lógica dinámica según estado de sesión
+            si este.usuario_actual != "" entonces
+                si opcion == 1 entonces
+                    imprimir "\verd¡Bienvenido de nuevo, " + este.usuario_actual + "!\norm"
+                    retornar 1
+                sino si opcion == 2 entonces
+                    este.menu_cerrar_sesion()
+                sino si opcion == 3 entonces
+                    imprimir "\cianSaliendo del sistema...\norm"
+                    retornar 0
+                sino
+                    imprimir "\rojoOpción inválida. Intente de nuevo.\norm"
+                fin_si
+            sino
+                si opcion == 1 entonces
+                    si este.menu_login() entonces
+                        imprimir "\verd¡Bienvenido al sistema!\norm"
+                        retornar 1
+                    fin_si
+                sino si opcion == 2 entonces
+                    este.menu_registro()
+                sino si opcion == 3 entonces
+                    imprimir "\cianSaliendo del sistema...\norm"
+                    retornar 0
+                sino
+                    imprimir "\rojoOpción inválida. Intente de nuevo.\norm"
+                # fin_si
+            fin_si
+            
+            imprimir "\nPresione Enter para continuar..."
+            # ingresar_texto pausa
+        fin_mientras
+    fin_funcion
+
+fin_clase
+
+enviar {Autenticacion}

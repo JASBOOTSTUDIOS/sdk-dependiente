@@ -1,0 +1,6 @@
+principal
+    texto n = "casa"
+    entero id = n
+    imprimir "Nombre: " + n
+    imprimir "ID (entero): " + id
+fin_principal

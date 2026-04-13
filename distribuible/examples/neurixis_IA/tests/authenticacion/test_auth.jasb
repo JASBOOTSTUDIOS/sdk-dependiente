@@ -1,0 +1,91 @@
+usar { Autenticacion } de "../../authenticacion/auth.jasb"
+
+principal
+    imprimir "\azul=== Iniciando Tests de Autenticación ===\norm"
+    
+    Autenticacion auth
+    auth.archivo_usuarios = "usuarios_test.json"
+    
+    # Limpiar archivo previo si existe
+    si existe_archivo(auth.archivo_usuarios) entonces
+        # No hay una función directa para borrar archivos en el lenguaje, 
+        # pero podemos sobreescribirlo con vacío
+        entero fh = abrir_archivo(auth.archivo_usuarios, "wb")
+        escribir_archivo("{}", fh)
+        cerrar_archivo(fh)
+    fin_si
+    
+    # 1. Test Registro Nuevo
+    imprimir "\cianTest 1: Registro de nuevo usuario...\norm"
+    bool reg_ok = auth.registrar_usuario("pepe", "clave123")
+    si reg_ok == verdadero entonces
+        imprimir "\verd[PASÓ] Registro inicial correcto\norm"
+    sino
+        imprimir "\rojo[FALLÓ] No se pudo registrar el primer usuario\norm"
+    fin_si
+    
+    # 2. Test Login Correcto
+    imprimir "\cianTest 2: Autenticación con credenciales correctas...\norm"
+    bool login_ok = auth.autenticar("pepe", "clave123")
+    si login_ok == verdadero entonces
+        imprimir "\verd[PASÓ] Login correcto\norm"
+    sino
+        imprimir "\rojo[FALLÓ] Falló la autenticación con datos válidos\norm"
+    fin_si
+    
+    # 3. Test Login Incorrecto (Contraseña mal)
+    imprimir "\cianTest 3: Autenticación con contraseña incorrecta...\norm"
+    bool login_fail_pass = auth.autenticar("pepe", "incorrecta")
+    si login_fail_pass == falso entonces
+        imprimir "\verd[PASÓ] Detectó contraseña incorrecta correctamente\norm"
+    sino
+        imprimir "\rojo[FALLÓ] Permitió login con contraseña incorrecta\norm"
+    fin_si
+    
+    # 4. Test Login Incorrecto (Usuario no existe)
+    imprimir "\cianTest 4: Autenticación con usuario inexistente...\norm"
+    bool login_fail_user = auth.autenticar("no_existo", "clave123")
+    si login_fail_user == falso entonces
+        imprimir "\verd[PASÓ] Detectó usuario inexistente correctamente\norm"
+    sino
+        imprimir "\rojo[FALLÓ] Permitió login de usuario que no existe\norm"
+    fin_si
+    
+    # 5. Test Registro Duplicado
+    imprimir "\cianTest 5: Registro de usuario duplicado...\norm"
+    bool reg_dup = auth.registrar_usuario("pepe", "otra_clave")
+    si reg_dup == falso entonces
+        imprimir "\verd[PASÓ] Detectó usuario duplicado correctamente\norm"
+    sino
+        imprimir "\rojo[FALLÓ] Permitió duplicar el nombre de usuario\norm"
+    fin_si
+    
+    # 6. Test Registro Segundo Usuario
+    imprimir "\cianTest 6: Registro de segundo usuario...\norm"
+    bool reg_ok_2 = auth.registrar_usuario("ana", "ana456")
+    si reg_ok_2 == verdadero entonces
+        imprimir "\verd[PASÓ] Segundo usuario registrado correctamente\norm"
+    sino
+        imprimir "\rojo[FALLÓ] Falló al registrar un segundo usuario\norm"
+    fin_si
+    
+    # 7. Validar Login Segundo Usuario
+    imprimir "\cianTest 7: Autenticación segundo usuario...\norm"
+    bool login_ok_2 = auth.autenticar("ana", "ana456")
+    si login_ok_2 == verdadero entonces
+        imprimir "\verd[PASÓ] Login segundo usuario correcto\norm"
+    sino
+        imprimir "\rojo[FALLÓ] Falló la autenticación del segundo usuario\norm"
+    fin_si
+    
+    # 8. Test Cerrar Sesión
+    imprimir "\cianTest 8: Cerrar sesión...\norm"
+    auth.cerrar_sesion()
+    si auth.usuario_actual == "" entonces
+        imprimir "\verd[PASÓ] Sesión cerrada correctamente\norm"
+    sino
+        imprimir "\rojo[FALLÓ] El usuario actual no se limpió tras cerrar sesión\norm"
+    fin_si
+    
+    imprimir "\azul=== Tests Finalizados ===\norm"
+fin_principal

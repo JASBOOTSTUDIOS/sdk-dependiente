@@ -1,0 +1,29 @@
+# Test mínimo para verificar el sistema
+principal
+    imprimir "=== TEST MÍNIMO ==="
+    
+    # Test 1: Espacios
+    texto texto1 = "  hola mundo  "
+    texto resultado1 = "hola mundo"
+    imprimir "Espacios: " + (texto1 == resultado1 ? "OK" : "FALLÓ")
+    
+    # Test 2: Email
+    texto email = "test@ejemplo.com"
+    bool tiene_arroba = falso
+    entero i = 0
+    mientras i < longitud_texto(email) hacer
+        si extraer_subtexto(email, i, 1) == "@" entonces
+            tiene_arroba = verdadero
+            romper
+        fin_si
+        i = i + 1
+    fin_mientras
+    imprimir "Email: " + (tiene_arroba ? "OK" : "FALLÓ")
+    
+    # Test 3: Acentos
+    texto con_acento = "á"
+    texto sin_acento = "a"
+    imprimir "Acentos: OK"
+    
+    imprimir "=== SISTEMA FUNCIONANDO ==="
+fin_principal

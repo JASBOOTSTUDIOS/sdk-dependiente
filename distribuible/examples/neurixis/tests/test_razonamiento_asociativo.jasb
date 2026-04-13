@@ -1,0 +1,59 @@
+# tests/test_razonamiento_asociativo.jasb - Test de conocimiento por asociación
+
+usar {Neurixis} de "../neurixis.jasb"
+usar {Neurona} de "../core/neurona.jasb"
+
+principal
+    Neurixis ia
+    imprimir "=== TEST: RAZONAMIENTO ASOCIATIVO Y APRENDIZAJE ==="
+    
+    # 0. Preparar memoria
+    crear_memoria("build/test_asociativo.jmn", 256, 1024)
+    ia.memoria.inicializar("build/test_asociativo.jmn")
+    ia.encendido = verdadero
+    ia.configurar_base()
+    
+    # 1. Enseñando: 'El sol es una estrella'
+    imprimir "1. Enseñando: 'El sol es una estrella'..."
+    Neurona sol
+    sol.inicializar("sol")
+    sol.establecer_valor("Es la estrella mas cercana a la Tierra.")
+    
+    # 2. Simular una asociación: "calor" esta relacionado con "sol"
+    imprimir "2. Asociando 'calor' con 'sol'..."
+    Neurona calor
+    calor.inicializar("calor")
+    calor.establecer_valor("vacio")
+    
+    calor.crear_asociacion(sol, 90)
+    
+    # 3. Preguntar por algo que NO tiene respuesta directa pero sí asociada
+    imprimir "3. Preguntando por 'calor' (que no tiene valor propio)..."
+    # El motor debería: 
+    #   a) Buscar "calor" -> ""
+    #   b) Obtener relacionados de "calor" -> ["sol"]
+    #   c) Buscar "sol" -> "Es la estrella mas cercana..."
+    
+    texto respuesta = ia.razonamiento.generar_respuesta("calor")
+    imprimir "Respuesta de la IA: " + respuesta
+    
+    si respuesta == "Es la estrella mas cercana a la Tierra." entonces
+        imprimir "RAZONAMIENTO ASOCIATIVO: OK"
+    sino
+        imprimir "RAZONAMIENTO ASOCIATIVO: ERROR (se esperaba la definicion de sol)"
+    fin_si
+    
+    # 4. Probar detección de eco en interfaz
+    imprimir "4. Probando proteccion contra eco..."
+    texto r_eco = ia.interfaz.gestionar_dialogo("desconocido", "desconocido")
+    imprimir "Entrada eco -> Salida: " + r_eco
+    
+    si r_eco != "desconocido" entonces
+        imprimir "PROTECCION CONTRA ECO: OK"
+    sino
+        imprimir "PROTECCION CONTRA ECO: ERROR"
+    fin_si
+    
+    cerrar_memoria()
+    imprimir "=== TEST FINALIZADO ==="
+fin_principal

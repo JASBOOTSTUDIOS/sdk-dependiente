@@ -355,9 +355,27 @@ static void register_usar_fallback_regex(CodeGen *cg, char *mbuf) {
 }
 
 static int should_merge_function(const FunctionNode *f, const ProgramNode *mp, const ActivarModuloNode *spec) {
-    (void)mp;
-    if (!f || !spec) return 0;
-    if (!f->is_exported) return 0;
+    if (!f || !spec || !mp) return 0;
+    
+    int is_exported = f->is_exported;
+    if (!is_exported) {
+        /* Buscar en directivas enviar { ... } */
+        for (size_t i = 0; i < mp->n_globals; i++) {
+            ASTNode *g = mp->globals[i];
+            if (g && g->type == NODE_EXPORT_DIRECTIVE) {
+                ExportDirectiveNode *en = (ExportDirectiveNode *)g;
+                for (size_t k = 0; k < en->n_names; k++) {
+                    if (f->name && strcmp(en->names[k], f->name) == 0) {
+                        is_exported = 1;
+                        break;
+                    }
+                }
+            }
+            if (is_exported) break;
+        }
+    }
+
+    if (!is_exported) return 0;
     /* USAR_IMPORT_NAMES valida la lista en validate_named_imports_for_module, pero aqui se fusiona
      * todo lo exportado del modulo: cuerpos internos y estado comparten simbolos no listados;
      * ademas el primer `usar` que toca la ruta canonica debe dejar el modulo completo para
@@ -368,11 +386,65 @@ static int should_merge_function(const FunctionNode *f, const ProgramNode *mp, c
 }
 
 static int should_merge_global_var(const VarDeclNode *vd, const ProgramNode *mp, const ActivarModuloNode *spec) {
-    (void)mp;
-    if (!vd || !spec) return 0;
-    if (!vd->is_exported) return 0;
+    if (!vd || !spec || !mp) return 0;
+
+    int is_exported = vd->is_exported;
+    if (!is_exported) {
+        /* Buscar en directivas enviar { ... } */
+        for (size_t i = 0; i < mp->n_globals; i++) {
+            ASTNode *g = mp->globals[i];
+            if (g && g->type == NODE_EXPORT_DIRECTIVE) {
+                ExportDirectiveNode *en = (ExportDirectiveNode *)g;
+                for (size_t k = 0; k < en->n_names; k++) {
+                    if (vd->name && strcmp(en->names[k], vd->name) == 0) {
+                        is_exported = 1;
+                        break;
+                    }
+                }
+            }
+            if (is_exported) break;
+        }
+    }
+
+    if (!is_exported) return 0;
     if (spec->import_kind == USAR_IMPORT_TODO) return 1;
-    if (spec->import_kind == USAR_IMPORT_NAMES) return 1;
+    if (spec->import_kind == USAR_IMPORT_NAMES) {
+        for (size_t i = 0; i < spec->n_import_names; i++) {
+            if (strcmp(spec->import_names[i], vd->name) == 0) return 1;
+        }
+    }
+    return 0;
+}
+
+static int should_merge_struct(const ASTNode *g, const ProgramNode *mp, const ActivarModuloNode *spec) {
+    if (!g || g->type != NODE_STRUCT_DEF || !spec || !mp) return 0;
+    StructDefNode *sd = (StructDefNode*)g;
+
+    int is_exported = sd->is_exported;
+    if (!is_exported) {
+        /* Buscar en directivas enviar { ... } */
+        for (size_t i = 0; i < mp->n_globals; i++) {
+            ASTNode *gn = mp->globals[i];
+            if (gn && gn->type == NODE_EXPORT_DIRECTIVE) {
+                ExportDirectiveNode *en = (ExportDirectiveNode *)gn;
+                for (size_t k = 0; k < en->n_names; k++) {
+                    if (sd->name && strcmp(en->names[k], sd->name) == 0) {
+                        is_exported = 1;
+                        break;
+                    }
+                }
+            }
+            if (is_exported) break;
+        }
+    }
+
+    if (!is_exported) return 0;
+    if (spec->import_kind == USAR_IMPORT_TODO) return 1;
+    if (spec->import_kind == USAR_IMPORT_NAMES) {
+        for (size_t i = 0; i < spec->n_import_names; i++) {
+            if (strcmp(spec->import_names[i], sd->name) == 0) return 1;
+        }
+    }
     return 0;
 }
 
@@ -395,10 +467,57 @@ static int validate_named_imports_for_module(const ProgramNode *mp, const Activa
         free(mod_canon);
         return 1;
     }
+
     for (size_t i = 0; i < spec->n_import_names; i++) {
         const char *want = spec->import_names[i];
+        
+        /* ANTES DE BUSCAR, PROCESAR DIRECTIVAS ENVIAR { ... } DEL MODULO PARA ESTE NOMBRE */
+        for (size_t j = 0; j < mp->n_globals; j++) {
+            ASTNode *g = mp->globals[j];
+            if (g && g->type == NODE_EXPORT_DIRECTIVE) {
+                ExportDirectiveNode *en = (ExportDirectiveNode *)g;
+                for (size_t k = 0; k < en->n_names; k++) {
+                    const char *ename = en->names[k];
+                    char clean_name[128];
+                    size_t start = 0;
+                    while (ename[start] && (ename[start] == ' ' || ename[start] == '\t' || ename[start] == '\r' || ename[start] == '\n')) start++;
+                    size_t end = strlen(ename);
+                    while (end > start && (ename[end-1] == ' ' || ename[end-1] == '\t' || ename[end-1] == '\r' || ename[end-1] == '\n')) end--;
+                    size_t len = end - start;
+                    if (len >= sizeof(clean_name)) len = sizeof(clean_name) - 1;
+                    memcpy(clean_name, ename + start, len);
+                    clean_name[len] = '\0';
+
+                    if (strcmp(clean_name, want) == 0) {
+                        /* Marcar el simbolo correspondiente */
+                        for (size_t fidx = 0; fidx < mp->n_funcs; fidx++) {
+                            FunctionNode *fn = (FunctionNode *)mp->functions[fidx];
+                            if (fn && fn->name && strcmp(fn->name, want) == 0) {
+                                fn->is_exported = 1;
+                            }
+                        }
+                        for (size_t gidx = 0; gidx < mp->n_globals; gidx++) {
+                            ASTNode *gg = mp->globals[gidx];
+                            if (gg && gg->type == NODE_VAR_DECL) {
+                                VarDeclNode *vd = (VarDeclNode *)gg;
+                                if (vd->name && strcmp(vd->name, want) == 0) {
+                                    vd->is_exported = 1;
+                                }
+                            } else if (gg && gg->type == NODE_STRUCT_DEF) {
+                                StructDefNode *sd = (StructDefNode *)gg;
+                                if (sd->name && strcmp(sd->name, want) == 0) {
+                                    sd->is_exported = 1;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         FunctionNode *ff = NULL;
         VarDeclNode *vv = NULL;
+        StructDefNode *ss = NULL;
         for (size_t j = 0; j < mp->n_funcs; j++) {
             FunctionNode *cf = (FunctionNode *)mp->functions[j];
             if (cf && cf->name && strcmp(cf->name, want) == 0) {
@@ -414,9 +533,15 @@ static int validate_named_imports_for_module(const ProgramNode *mp, const Activa
                     vv = vvd;
                     break;
                 }
+            } else if (g && g->type == NODE_STRUCT_DEF) {
+                StructDefNode *ssd = (StructDefNode *)g;
+                if (ssd->name && strcmp(ssd->name, want) == 0) {
+                    ss = ssd;
+                    break;
+                }
             }
         }
-        if (!ff && !vv) {
+        if (!ff && !vv && !ss) {
             fprintf(stderr, "%s%s, linea %d, columna %d: error: `usar { ... }`: no se hallo `%s` entre las funciones y globales exportados (`enviar`) del modulo '%s'.%s\n",
                 ANSI_RED, import_site_path, il, ic, want, mod_show, ANSI_RESET);
             fprintf(stderr, "%s  Nota: si en el archivo del modulo \"deberia\" estar `%s`, suele deberse a que esa declaracion no llego al analizador (error de sintaxis, palabra reservada como nombre de parametro o variable, macro mal cerrada, etc.). Corrija primero el modulo; el nombre en `usar { ... }` debe coincidir exactamente con un simbolo `enviar` valido.%s\n",
@@ -424,8 +549,9 @@ static int validate_named_imports_for_module(const ProgramNode *mp, const Activa
             free(mod_canon);
             return 1;
         }
-        if (ff && vv) {
-            fprintf(stderr, "%s%s, linea %d, columna %d: error: en el modulo '%s' el nombre `%s` esta duplicado como funcion y como variable global.%s\n",
+        int found_count = (ff ? 1 : 0) + (vv ? 1 : 0) + (ss ? 1 : 0);
+        if (found_count > 1) {
+            fprintf(stderr, "%s%s, linea %d, columna %d: error: en el modulo '%s' el nombre `%s` esta duplicado.%s\n",
                 ANSI_RED, import_site_path, il, ic, mod_show, want, ANSI_RESET);
             free(mod_canon);
             return 1;
@@ -435,8 +561,8 @@ static int validate_named_imports_for_module(const ProgramNode *mp, const Activa
             int dc = ff->base.col >= 1 ? ff->base.col : 1;
             fprintf(stderr, "%s%s, linea %d, columna %d: error: `usar { ... }`: no se puede importar la funcion `%s` porque en el modulo no lleva `enviar`.%s\n",
                 ANSI_RED, import_site_path, il, ic, want, ANSI_RESET);
-            fprintf(stderr, "%s  Declaracion en el modulo: archivo '%s', linea %d, columna %d (anadir `enviar` antes de `funcion`).%s\n",
-                ANSI_RED, mod_show, dl, dc, ANSI_RESET);
+            fprintf(stderr, "%s  Declaracion en el modulo: archivo '%s', linea %d, columna %d (anadir `enviar` antes de `funcion` o use `enviar { %s }` al final del archivo).%s\n",
+                ANSI_RED, mod_show, dl, dc, want, ANSI_RESET);
             free(mod_canon);
             return 1;
         }
@@ -445,8 +571,18 @@ static int validate_named_imports_for_module(const ProgramNode *mp, const Activa
             int dc = vv->base.col >= 1 ? vv->base.col : 1;
             fprintf(stderr, "%s%s, linea %d, columna %d: error: `usar { ... }`: no se puede importar `%s` porque en el modulo no esta enviada con `enviar`.%s\n",
                 ANSI_RED, import_site_path, il, ic, want, ANSI_RESET);
-            fprintf(stderr, "%s  Declaracion en el modulo: archivo '%s', linea %d, columna %d (anadir `enviar` antes del tipo en la declaracion global).%s\n",
-                ANSI_RED, mod_show, dl, dc, ANSI_RESET);
+            fprintf(stderr, "%s  Declaracion en el modulo: archivo '%s', linea %d, columna %d (anadir `enviar` antes del tipo en la declaracion global o use `enviar { %s }` al final del archivo).%s\n",
+                ANSI_RED, mod_show, dl, dc, want, ANSI_RESET);
+            free(mod_canon);
+            return 1;
+        }
+        if (ss && !ss->is_exported) {
+            int dl = ss->base.line >= 1 ? ss->base.line : 1;
+            int dc = ss->base.col >= 1 ? ss->base.col : 1;
+            fprintf(stderr, "%s%s, linea %d, columna %d: error: `usar { ... }`: no se puede importar `%s` porque en el modulo no esta enviada con `enviar`.%s\n",
+                ANSI_RED, import_site_path, il, ic, want, ANSI_RESET);
+            fprintf(stderr, "%s  Declaracion en el modulo: archivo '%s', linea %d, columna %d (anadir `enviar` antes de `clase` o `registro` o use `enviar { %s }` al final del archivo).%s\n",
+                ANSI_RED, mod_show, dl, dc, want, ANSI_RESET);
             free(mod_canon);
             return 1;
         }
@@ -554,6 +690,48 @@ static int process_usar_module_recursive(ProgramNode *main_p, const char *full_o
     }
 
     ProgramNode *mp = (ProgramNode *)mast;
+
+    /* PROCESAR DIRECTIVAS ENVIAR { ... } ANTES DE CUALQUIER OTRA COSA */
+    for (size_t j = 0; j < mp->n_globals; j++) {
+        ASTNode *g = mp->globals[j];
+        if (g && g->type == NODE_EXPORT_DIRECTIVE) {
+            ExportDirectiveNode *en = (ExportDirectiveNode *)g;
+            for (size_t k = 0; k < en->n_names; k++) {
+                const char *ename = en->names[k];
+                char clean_name[128];
+                size_t start = 0;
+                while (ename[start] && (ename[start] == ' ' || ename[start] == '\t' || ename[start] == '\r' || ename[start] == '\n')) start++;
+                size_t end = strlen(ename);
+                while (end > start && (ename[end-1] == ' ' || ename[end-1] == '\t' || ename[end-1] == '\r' || ename[end-1] == '\n')) end--;
+                size_t len = end - start;
+                if (len >= sizeof(clean_name)) len = sizeof(clean_name) - 1;
+                memcpy(clean_name, ename + start, len);
+                clean_name[len] = '\0';
+
+                for (size_t fidx = 0; fidx < mp->n_funcs; fidx++) {
+                    FunctionNode *fn = (FunctionNode *)mp->functions[fidx];
+                    if (fn && fn->name && strcmp(fn->name, clean_name) == 0) {
+                        fn->is_exported = 1;
+                    }
+                }
+                for (size_t gidx = 0; gidx < mp->n_globals; gidx++) {
+                    ASTNode *gg = mp->globals[gidx];
+                    if (gg && gg->type == NODE_VAR_DECL) {
+                        VarDeclNode *vd = (VarDeclNode *)gg;
+                        if (vd->name && strcmp(vd->name, clean_name) == 0) {
+                            vd->is_exported = 1;
+                        }
+                    } else if (gg && gg->type == NODE_STRUCT_DEF) {
+                        StructDefNode *sd = (StructDefNode *)gg;
+                        if (sd->name && strcmp(sd->name, clean_name) == 0) {
+                            sd->is_exported = 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     char child_base[1024];
     usar_module_dirname(full_open_path, child_base, sizeof child_base);
 
@@ -591,6 +769,41 @@ static int process_usar_module_recursive(ProgramNode *main_p, const char *full_o
         }
     }
 
+    /* PROCESAR DIRECTIVAS ENVIAR { ... } ANTES DE FUSIONAR */
+    for (size_t j = 0; j < mp->n_globals; j++) {
+        ASTNode *g = mp->globals[j];
+        if (g && g->type == NODE_EXPORT_DIRECTIVE) {
+            ExportDirectiveNode *en = (ExportDirectiveNode *)g;
+            for (size_t k = 0; k < en->n_names; k++) {
+                const char *ename = en->names[k];
+                char clean_name[128];
+                size_t start = 0;
+                while (ename[start] && (ename[start] == ' ' || ename[start] == '\t' || ename[start] == '\r' || ename[start] == '\n')) start++;
+                size_t end = strlen(ename);
+                while (end > start && (ename[end-1] == ' ' || ename[end-1] == '\t' || ename[end-1] == '\r' || ename[end-1] == '\n')) end--;
+                size_t len = end - start;
+                if (len >= sizeof(clean_name)) len = sizeof(clean_name) - 1;
+                memcpy(clean_name, ename + start, len);
+                clean_name[len] = '\0';
+
+                for (size_t fidx = 0; fidx < mp->n_funcs; fidx++) {
+                    FunctionNode *fn = (FunctionNode *)mp->functions[fidx];
+                    if (fn && fn->name && strcmp(fn->name, clean_name) == 0) fn->is_exported = 1;
+                }
+                for (size_t gidx = 0; gidx < mp->n_globals; gidx++) {
+                    ASTNode *gg = mp->globals[gidx];
+                    if (gg && gg->type == NODE_VAR_DECL) {
+                        VarDeclNode *vd = (VarDeclNode *)gg;
+                        if (vd->name && strcmp(vd->name, clean_name) == 0) vd->is_exported = 1;
+                    } else if (gg && gg->type == NODE_STRUCT_DEF) {
+                        StructDefNode *sd = (StructDefNode *)gg;
+                        if (sd->name && strcmp(sd->name, clean_name) == 0) sd->is_exported = 1;
+                    }
+                }
+            }
+        }
+    }
+
         if (mp->n_funcs > 0) {
         size_t add = 0;
         for (size_t i = 0; i < mp->n_funcs; i++) {
@@ -620,14 +833,22 @@ static int process_usar_module_recursive(ProgramNode *main_p, const char *full_o
 
     for (size_t gi = 0; gi < mp->n_globals; gi++) {
         ASTNode *g = mp->globals[gi];
-        if (!g || g->type != NODE_VAR_DECL) continue;
-        VarDeclNode *vd = (VarDeclNode *)g;
-        if (!should_merge_global_var(vd, mp, import_spec)) continue;
+        if (!g) continue;
+        
+        int should_merge = 0;
+        if (g->type == NODE_VAR_DECL) {
+            should_merge = should_merge_global_var((VarDeclNode *)g, mp, import_spec);
+        } else if (g->type == NODE_STRUCT_DEF) {
+            should_merge = should_merge_struct(g, mp, import_spec);
+        }
+        
+        if (!should_merge) continue;
+
         size_t new_n = main_p->n_globals + 1;
         ASTNode **ng = realloc(main_p->globals, new_n * sizeof(ASTNode *));
         if (!ng) {
-        ast_free(mast);
-        free(mbuf);
+            ast_free(mast);
+            free(mbuf);
             usar_stack_pop(stack);
             return 1;
         }

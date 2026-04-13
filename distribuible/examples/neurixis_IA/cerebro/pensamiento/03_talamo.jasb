@@ -1,0 +1,122 @@
+# =============================================================================
+# TÁLAMO - INTEGRACIÓN SENSORIAL
+# =============================================================================
+# Propósito: Integración sensorial múltiple y conciencia
+# Dependencia: Normalizador, Neocortex
+# =============================================================================
+
+usar {Normalizador} de "./01_normalizador.jasb"
+usar {Neocortex} de "./02_neocortex.jasb"
+
+enviar {Talamo}
+
+clase Talamo
+    
+    # =============================================================================
+    # 1. inicializar_sistema_sensorial
+    # =============================================================================
+    # Propósito: Inicializar el sistema de integración sensorial
+    # Retorna:
+    #   - texto: Estado de inicialización del sistema sensorial
+    # =============================================================================
+    
+    # =============================================================================
+    # 2. integrar_estimulo_sensorial
+    # =============================================================================
+    # Propósito: Integrar múltiples estímulos sensoriales en una experiencia unificada
+    # Parámetros:
+    #   - estmulos (lista<mapa>): Lista de estímulos de diferentes sensores
+    #   - contexto (mapa): Contexto de los estímulos
+    # Retorna:
+    #   - mapa: Experiencia sensorial integrada
+    # =============================================================================
+    
+    # =============================================================================
+    # 3. procesar_estimulo_por_tipo
+    # =============================================================================
+    # Propósito: Procesar un estímulo según su tipo sensorial
+    # Parámetros:
+    #   - tipo_sensor (texto): Tipo de sensor (visual, auditivo, táctil, etc.)
+    #   - contenido (texto): Contenido del estímulo
+    #   - intensidad (flotante): Intensidad del estímulo (0.0 - 1.0)
+    # Retorna:
+    #   - mapa: Estímulo procesado con características específicas
+    # =============================================================================
+    
+    # =============================================================================
+    # 4. procesar_estimulo_visual
+    # =============================================================================
+    # Propósito: Procesar estímulos visuales (textos, imágenes, colores)
+    # Parámetros:
+    #   - contenido (texto): Contenido visual a procesar
+    #   - intensidad (flotante): Intensidad visual
+    # Retorna:
+    #   - mapa: Estímulo visual procesado
+    # =============================================================================
+    
+    # =============================================================================
+    # 5. procesar_estimulo_auditivo
+    # =============================================================================
+    # Propósito: Procesar estímulos auditivos (sonidos, música, voz)
+    # Parámetros:
+    #   - contenido (texto): Contenido auditivo a procesar
+    #   - intensidad (flotante): Intensidad auditiva
+    # Retorna:
+    #   - mapa: Estímulo auditivo procesado
+    # =============================================================================
+    
+    # =============================================================================
+    # 6. procesar_estimulo_tactil
+    # =============================================================================
+    # Propósito: Procesar estímulos táctiles (textura, temperatura, presión)
+    # Parámetros:
+    #   - contenido (texto): Contenido táctil a procesar
+    #   - intensidad (flotante): Intensidad táctil
+    # Retorna:
+    #   - mapa: Estímulo táctil procesado
+    # =============================================================================
+    
+    # =============================================================================
+    # 7. procesar_estimulo_gustativo
+    # =============================================================================
+    # Propósito: Procesar estímulos gustativos (sabores)
+    # Parámetros:
+    #   - contenido (texto): Contenido gustativo a procesar
+    #   - intensidad (flotante): Intensidad gustativa
+    # Retorna:
+    #   - mapa: Estímulo gustativo procesado
+    # =============================================================================
+    
+    # =============================================================================
+    # 8. procesar_estimulo_olfativo
+    # =============================================================================
+    # Propósito: Procesar estímulos olfativos (olores)
+    # Parámetros:
+    #   - contenido (texto): Contenido olfativo a procesar
+    #   - intensidad (flotante): Intensidad olfativa
+    # Retorna:
+    #   - mapa: Estímulo olfativo procesado
+    # =============================================================================
+    
+    # =============================================================================
+    # 9. calcular_experiencia_integrada
+    # =============================================================================
+    # Propósito: Calcular la experiencia sensorial integrada
+    # Parámetros:
+    #   - estmulos_procesados (lista<mapa>): Estímulos ya procesados
+    #   - contexto (mapa): Contexto de la experiencia
+    # Retorna:
+    #   - mapa: Experiencia integrada con características unificadas
+    # =============================================================================
+    
+    # =============================================================================
+    # 10. actualizar_estado_conciencia
+    # =============================================================================
+    # Propósito: Actualizar el estado de conciencia basado en la experiencia
+    # Parámetros:
+    #   - experiencia (mapa): Experiencia sensorial integrada
+    # Retorna:
+    #   - texto: Estado actualizado de conciencia
+    # =============================================================================
+
+fin_clase

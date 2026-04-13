@@ -1,0 +1,133 @@
+# =============================================================================
+# CORTEZA PREFRONTAL - PLANIFICACIÓN Y DECISIONES
+# =============================================================================
+# Propósito: Funciones ejecutivas, planificación y toma de decisiones
+# Dependencia: Normalizador
+# =============================================================================
+
+usar {Normalizador} de "./01_normalizador.jasb"
+
+enviar {CortezaPrefrontal}
+
+clase CortezaPrefrontal
+    
+    # =============================================================================
+    # 1. inicializar_sistema_ejecutivo
+    # =============================================================================
+    # Propósito: Inicializar el sistema de funciones ejecutivas
+    # Retorna:
+    #   - texto: Estado de inicialización del sistema ejecutivo
+    # =============================================================================
+    
+    # =============================================================================
+    # 2. crear_plan
+    # =============================================================================
+    # Propósito: Crear un plan estructurado para alcanzar un objetivo
+    # Parámetros:
+    #   - objetivo (texto): Objetivo principal del plan
+    #   - pasos (lista<texto>): Pasos necesarios para alcanzar el objetivo
+    #   - recursos (mapa): Recursos disponibles para el plan
+    #   - prioridad (texto): Prioridad del plan (alta, media, baja)
+    # Retorna:
+    #   - texto: Confirmación de creación del plan con ID
+    # =============================================================================
+    
+    # =============================================================================
+    # 3. evaluar_viabilidad_plan
+    # =============================================================================
+    # Propósito: Evaluar la viabilidad de un plan basado en recursos y complejidad
+    # Parámetros:
+    #   - plan (mapa): Plan a evaluar
+    # Retorna:
+    #   - mapa: Evaluación de viabilidad con recomendaciones
+    # =============================================================================
+    
+    # =============================================================================
+    # 4. ejecutar_plan
+    # =============================================================================
+    # Propósito: Ejecutar un plan paso a paso
+    # Parámetros:
+    #   - id_plan (entero): ID del plan a ejecutar
+    #   - contexto (mapa): Contexto de ejecución
+    # Retorna:
+    #   - mapa: Resultado de la ejecución del plan
+    # =============================================================================
+    
+    # =============================================================================
+    # 5. ejecutar_pasos_plan
+    # =============================================================================
+    # Propósito: Ejecutar los pasos de un plan
+    # Parámetros:
+    #   - plan (mapa): Plan a ejecutar
+    #   - contexto (mapa): Contexto de ejecución
+    # Retorna:
+    #   - mapa: Resultado de la ejecución de pasos
+    # =============================================================================
+    
+    # =============================================================================
+    # 6. ejecutar_paso_individual
+    # =============================================================================
+    # Propósito: Ejecutar un paso individual de un plan
+    # Parámetros:
+    #   - paso (texto): Descripción del paso a ejecutar
+    #   - contexto (mapa): Contexto de ejecución
+    # Retorna:
+    #   - mapa: Resultado de la ejecución del paso
+    # =============================================================================
+    
+    # =============================================================================
+    # 7. tomar_decision
+    # =============================================================================
+    # Propósito: Tomar una decisión basada en análisis y criterios
+    # Parámetros:
+    #   - situacion (texto): Situación que requiere decisión
+    #   - opciones (lista<texto>): Opciones disponibles
+    #   - criterios (mapa): Criterios para tomar la decisión
+    # Retorna:
+    #   - mapa: Decisión tomada con justificación
+    # =============================================================================
+    
+    # =============================================================================
+    # 8. evaluar_opcion
+    # =============================================================================
+    # Propósito: Evaluar una opción según criterios específicos
+    # Parámetros:
+    #   - opcion (texto): Opción a evaluar
+    #   - criterios (mapa): Criterios de evaluación
+    # Retorna:
+    #   - mapa: Evaluación de la opción
+    # =============================================================================
+    
+    # =============================================================================
+    # 9. calcular_puntuacion_criterio
+    # =============================================================================
+    # Propósito: Calcular puntuación para un criterio específico
+    # Parámetros:
+    #   - opcion (texto): Opción a evaluar
+    #   - criterio (texto): Criterio de evaluación
+    # Retorna:
+    #   - flotante: Puntuación del criterio (0.0 - 1.0)
+    # =============================================================================
+    
+    # =============================================================================
+    # 10. seleccionar_mejor_opcion
+    # =============================================================================
+    # Propósito: Seleccionar la mejor opción basada en evaluaciones
+    # Parámetros:
+    #   - evaluaciones (lista<mapa>): Evaluaciones de opciones
+    # Retorna:
+    #   - texto: Mejor opción seleccionada
+    # =============================================================================
+    
+    # =============================================================================
+    # 11. encontrar_evaluacion_por_opcion
+    # =============================================================================
+    # Propósito: Encontrar evaluación por nombre de opción
+    # Parámetros:
+    #   - evaluaciones (lista<mapa>): Evaluaciones de opciones
+    #   - opcion (texto): Opción a buscar
+    # Retorna:
+    #   - mapa: Evaluación encontrada o mapa vacío
+    # =============================================================================
+
+fin_clase

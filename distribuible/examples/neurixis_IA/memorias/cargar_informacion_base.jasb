@@ -1,0 +1,292 @@
+# =============================================================================
+# MÓDULO DE CARGA DE INFORMACIÓN BASE - NEURIXIS IA
+# =============================================================================
+# Propósito: Cargar información base (sinónimos, datos, configuración)
+# Funcionalidad: Carga solo si no está previamente cargada
+# =============================================================================
+
+usar {AlmacenamientoSemantico} de "../cerebro/almacenamiento/almacenamiento_semantico.jasb"
+
+clase CargadorInformacionBase
+    
+    # Variables de instancia
+    mapa estado_carga
+    texto ruta_memorias
+    texto archivo_jmn
+    
+    # =============================================================================
+    # 1. inicializar_cargador
+    # =============================================================================
+    # Propósito: Inicializar el cargador de información base
+    # Parámetros:
+    #   - ruta_base (texto): Ruta base de las memorias
+    #   - archivo_jmn (texto): Nombre del archivo JMN a usar
+    # Retorna:
+    #   - void: Inicializa el cargador
+    # =============================================================================
+    funcion inicializar_cargador(texto ruta_base, texto archivo_jmn) retorna
+        este.ruta_memorias = ruta_base
+        este.archivo_jmn = archivo_jmn
+        este.estado_carga = mapa_crear()
+        
+        // Inicializar estados de carga
+        mapa_poner(este.estado_carga, "sinonimos_cargados", falso)
+        mapa_poner(este.estado_carga, "antonimos_cargados", falso)
+        mapa_poner(este.estado_carga, "conceptos_base_cargados", falso)
+        mapa_poner(este.estado_carga, "configuracion_cargada", falso)
+        mapa_poner(este.estado_carga, "ultima_carga", "")
+        mapa_poner(este.estado_carga, "total_sinonimos", 0)
+        mapa_poner(este.estado_carga, "total_antonimos", 0)
+        mapa_poner(este.estado_carga, "total_conceptos", 0)
+    fin_funcion
+    
+    # =============================================================================
+    # 2. verificar_estado_carga
+    # =============================================================================
+    # Propósito: Verificar si la información ya está cargada
+    # Parámetros:
+    #   - void: No requiere parámetros
+    # Retorna:
+    #   - mapa: Estado actual de la carga
+    # =============================================================================
+    funcion verificar_estado_carga() retorna mapa
+        // Verificación directa sin estado interno para evitar errores
+        AlmacenamientoSemantico almacenamiento = AlmacenamientoSemantico()
+        almacenamiento.inicializar_almacenamiento(este.ruta_memorias, este.archivo_jmn)
+        
+        lista<texto> palabras_verificacion = crear_lista()
+        lista_agregar(palabras_verificacion, "hola")
+        lista_agregar(palabras_verificacion, "cómo")
+        
+        entero sinonimos_encontrados = 0
+        entero i = 0
+        mientras i < lista_tamano(palabras_verificacion) hacer
+            lista<texto> sinonimos = almacenamiento.cargar_sinonimos(lista_obtener(palabras_verificacion, i))
+            sinonimos_encontrados = sinonimos_encontrados + lista_tamano(sinonimos)
+            i = i + 1
+        fin_mientras
+        
+        almacenamiento.cerrar_almacenamiento()
+        
+        // Crear resultado simple sin errores
+        mapa resultado = mapa_crear()
+        booleano informacion_cargada = sinonimos_encontrados > 0
+        mapa_poner(resultado, "sinonimos_cargados", informacion_cargada)
+        mapa_poner(resultado, "total_sinonimos", sinonimos_encontrados)
+        
+        retornar resultado
+    fin_funcion
+    
+    # =============================================================================
+    # 3. cargar_sinonimos_base
+    # =============================================================================
+    # Propósito: Cargar sinónimos base para el sistema
+    # Parámetros:
+    #   - forzar_carga (bool): Si forzar la carga incluso si ya están cargados
+    # Retorna:
+    #   - mapa: Resultado de la carga
+    # =============================================================================
+    funcion cargar_sinonimos_base(bool forzar_carga) retorna mapa
+        mapa resultado = mapa_crear()
+        
+        // Verificar si ya están cargados usando estado optimizado
+        mapa estado_actual = este.verificar_estado_carga()
+        booleano ya_cargados = mapa_obtener(estado_actual, "sinonimos_cargados")
+        entero total_actual = mapa_obtener(estado_actual, "total_sinonimos")
+        
+        si ya_cargados y no forzar_carga entonces
+            mapa_poner(resultado, "cargado", falso)
+            mapa_poner(resultado, "mensaje", "Sinónimos ya cargados previamente")
+            mapa_poner(resultado, "total_sinonimos", total_actual)
+            retornar resultado
+        fin_si
+        
+        // Inicializar almacenamiento
+        AlmacenamientoSemantico almacenamiento = AlmacenamientoSemantico()
+        almacenamiento.inicializar_almacenamiento(este.ruta_memorias, este.archivo_jmn)
+        
+        // Inicializar contador de sinónimos cargados
+        
+        // Cargar sinónimos de preguntas usando carga directa
+        entero total_cargados = 0
+        
+        // Sinónimos de preguntas
+        almacenamiento.guardar_sinonimos("cómo", "como")
+        almacenamiento.guardar_sinonimos("cómo", "de qué manera")
+        almacenamiento.guardar_sinonimos("cómo", "en qué forma")
+        almacenamiento.guardar_sinonimos("qué", "que")
+        almacenamiento.guardar_sinonimos("qué", "cuál")
+        almacenamiento.guardar_sinonimos("qué", "cuales")
+        almacenamiento.guardar_sinonimos("dónde", "donde")
+        almacenamiento.guardar_sinonimos("dónde", "en qué lugar")
+        almacenamiento.guardar_sinonimos("dónde", "en qué sitio")
+        almacenamiento.guardar_sinonimos("cuándo", "cuando")
+        almacenamiento.guardar_sinonimos("cuándo", "en qué momento")
+        almacenamiento.guardar_sinonimos("cuándo", "a qué hora")
+        almacenamiento.guardar_sinonimos("por qué", "porque")
+        almacenamiento.guardar_sinonimos("por qué", "por cuál razón")
+        almacenamiento.guardar_sinonimos("por qué", "por qué motivo")
+        total_cargados = total_cargados + 15
+        
+        // Sinónimos de comandos
+        almacenamiento.guardar_sinonimos("haz", "hacer")
+        almacenamiento.guardar_sinonimos("haz", "realiza")
+        almacenamiento.guardar_sinonimos("haz", "ejecuta")
+        almacenamiento.guardar_sinonimos("hacer", "realizar")
+        almacenamiento.guardar_sinonimos("hacer", "ejecutar")
+        almacenamiento.guardar_sinonimos("hacer", "llevar a cabo")
+        almacenamiento.guardar_sinonimos("crea", "crear")
+        almacenamiento.guardar_sinonimos("crea", "fabrica")
+        almacenamiento.guardar_sinonimos("crea", "produce")
+        almacenamiento.guardar_sinonimos("crear", "fabricar")
+        almacenamiento.guardar_sinonimos("crear", "producir")
+        almacenamiento.guardar_sinonimos("crear", "desarrollar")
+        almacenamiento.guardar_sinonimos("genera", "generar")
+        almacenamiento.guardar_sinonimos("genera", "produce")
+        almacenamiento.guardar_sinonimos("genera", "crea")
+        almacenamiento.guardar_sinonimos("generar", "producir")
+        almacenamiento.guardar_sinonimos("generar", "crear")
+        almacenamiento.guardar_sinonimos("generar", "elaborar")
+        almacenamiento.guardar_sinonimos("desarrolla", "desarrollar")
+        almacenamiento.guardar_sinonimos("desarrolla", "crea")
+        almacenamiento.guardar_sinonimos("desarrolla", "construye")
+        almacenamiento.guardar_sinonimos("desarrollar", "construir")
+        almacenamiento.guardar_sinonimos("desarrollar", "edificar")
+        almacenamiento.guardar_sinonimos("desarrollar", "programar")
+        almacenamiento.guardar_sinonimos("implementa", "implementar")
+        almacenamiento.guardar_sinonimos("implementa", "aplica")
+        almacenamiento.guardar_sinonimos("implementa", "ejecuta")
+        almacenamiento.guardar_sinonimos("implementar", "aplicar")
+        almacenamiento.guardar_sinonimos("implementar", "ejecutar")
+        almacenamiento.guardar_sinonimos("implementar", "poner en práctica")
+        total_cargados = total_cargados + 30
+        
+        // Sinónimos de saludos
+        almacenamiento.guardar_sinonimos("hola", "buenos días")
+        almacenamiento.guardar_sinonimos("hola", "buenas tardes")
+        almacenamiento.guardar_sinonimos("hola", "buenas noches")
+        almacenamiento.guardar_sinonimos("hola", "saludos")
+        almacenamiento.guardar_sinonimos("hola", "hey")
+        almacenamiento.guardar_sinonimos("hola", "qué tal")
+        almacenamiento.guardar_sinonimos("buenos", "buenas")
+        almacenamiento.guardar_sinonimos("buenos días", "buen día")
+        almacenamiento.guardar_sinonimos("buenos días", "muy buenos días")
+        almacenamiento.guardar_sinonimos("buenas tardes", "buena tarde")
+        almacenamiento.guardar_sinonimos("buenas noches", "buena noche")
+        almacenamiento.guardar_sinonimos("saludos", "saludaciones")
+        almacenamiento.guardar_sinonimos("saludos", "cordial saludo")
+        almacenamiento.guardar_sinonimos("hey", "hey there")
+        almacenamiento.guardar_sinonimos("hey", "hola hey")
+        total_cargados = total_cargados + 15
+        
+        // Sinónimos de despedidas
+        almacenamiento.guardar_sinonimos("adios", "chao")
+        almacenamiento.guardar_sinonimos("adios", "hasta luego")
+        almacenamiento.guardar_sinonimos("adios", "nos vemos")
+        almacenamiento.guardar_sinonimos("adios", "hasta pronto")
+        almacenamiento.guardar_sinonimos("adios", "adiós")
+        almacenamiento.guardar_sinonimos("adios", "me despido")
+        almacenamiento.guardar_sinonimos("chao", "chau")
+        almacenamiento.guardar_sinonimos("chao", "bye")
+        almacenamiento.guardar_sinonimos("chao", "goodbye")
+        almacenamiento.guardar_sinonimos("salir", "terminar")
+        almacenamiento.guardar_sinonimos("salir", "finalizar")
+        almacenamiento.guardar_sinonimos("salir", "concluir")
+        almacenamiento.guardar_sinonimos("hasta luego", "hasta la próxima")
+        almacenamiento.guardar_sinonimos("hasta luego", "hasta la vista")
+        almacenamiento.guardar_sinonimos("nos vemos", "vernos")
+        almacenamiento.guardar_sinonimos("nos vemos", "encontrarnos")
+        almacenamiento.guardar_sinonimos("adiós", "adiós")
+        almacenamiento.guardar_sinonimos("hasta pronto", "hasta la próxima")
+        total_cargados = total_cargados + 20
+        
+        // Sinónimos técnicos clave
+        lista<texto> palabras_tecnicas = crear_lista()
+        lista_agregar(palabras_tecnicas, "algoritmo")
+        lista_agregar(palabras_tecnicas, "funcion")
+        lista_agregar(palabras_tecnicas, "variable")
+        lista_agregar(palabras_tecnicas, "sistema")
+        lista_agregar(palabras_tecnicas, "programación")
+        lista_agregar(palabras_tecnicas, "código")
+        lista_agregar(palabras_tecnicas, "datos")
+        lista_agregar(palabras_tecnicas, "análisis")
+        lista_agregar(palabras_tecnicas, "desarrollo")
+        lista_agregar(palabras_tecnicas, "software")
+        lista_agregar(palabras_tecnicas, "aplicación")
+        
+        // Cargar sinónimos técnicos básicos
+        entero i = 0
+        mientras i < lista_tamano(palabras_tecnicas) hacer
+            texto palabra = lista_obtener(palabras_tecnicas, i)
+            // Agregar plural y variaciones básicas
+            almacenamiento.guardar_sinonimos(palabra, palabra + "s")
+            total_cargados = total_cargados + 1
+            i = i + 1
+        fin_mientras
+        
+        // Cerrar almacenamiento
+        almacenamiento.cerrar_almacenamiento()
+        
+        // Actualizar estado
+        mapa_poner(este.estado_carga, "sinonimos_cargados", verdadero)
+        mapa_poner(este.estado_carga, "total_sinonimos", total_cargados)
+        mapa_poner(este.estado_carga, "ultima_carga", "sinónimos")
+        
+        // Ensamblar resultado
+        mapa_poner(resultado, "cargado", verdadero)
+        mapa_poner(resultado, "mensaje", "Sinónimos base cargados exitosamente")
+        mapa_poner(resultado, "total_sinonimos", total_cargados)
+        mapa_poner(resultado, "categorias_cargadas", 5)
+        
+        imprimir "[JMN] Almacenamiento finalizado."
+        retornar resultado
+    fin_funcion
+    
+    # =============================================================================
+    # 4. obtener_estado_completo
+    # =============================================================================
+    # Propósito: Obtener estado completo de la carga
+    # Parámetros:
+    #   - void: No requiere parámetros
+    # Retorna:
+    #   - mapa: Estado completo del sistema
+    # =============================================================================
+    funcion obtener_estado_completo() retorna mapa
+        mapa estado_completo = mapa_crear()
+        
+        // Verificar estado actual
+        mapa estado_actual = este.verificar_estado_carga()
+        
+        // Acceder a valores de forma segura
+        booleano sinonimos_cargados = falso
+        entero total_sinonimos = 0
+        texto ultima_carga = ""
+        
+        intentar
+            sinonimos_cargados = mapa_obtener(estado_actual, "sinonimos_cargados")
+            total_sinonimos = mapa_obtener(estado_actual, "total_sinonimos")
+        atrapar error
+            sinonimos_cargados = falso
+            total_sinonimos = 0
+        fin_intentar
+        
+        intentar
+            ultima_carga = mapa_obtener(este.estado_carga, "ultima_carga")
+        atrapar error
+            ultima_carga = ""
+        fin_intentar
+        
+        // Combinar información
+        mapa_poner(estado_completo, "sinonimos_cargados", sinonimos_cargados)
+        mapa_poner(estado_completo, "total_sinonimos", total_sinonimos)
+        mapa_poner(estado_completo, "ultima_carga", ultima_carga)
+        mapa_poner(estado_completo, "ruta_memorias", este.ruta_memorias)
+        mapa_poner(estado_completo, "archivo_jmn", este.archivo_jmn)
+        mapa_poner(estado_completo, "sistema_listo", sinonimos_cargados)
+        
+        retornar estado_completo
+    fin_funcion
+
+fin_clase
+
+enviar {CargadorInformacionBase}
