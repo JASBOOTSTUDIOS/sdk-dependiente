@@ -1312,6 +1312,62 @@ static void unused_scan_expr(ASTNode *node, UnusedDeclVec *decls, int depth) {
             for (size_t i = 0; i < cn->n_args; i++) unused_scan_expr(cn->args[i], decls, depth);
             break;
         }
+        case NODE_RECORDAR: {
+            RecordarNode *rn = (RecordarNode*)node;
+            unused_scan_expr(rn->key, decls, depth);
+            if (rn->value) unused_scan_expr(rn->value, decls, depth);
+            break;
+        }
+        case NODE_BUSCAR_PESO: {
+            BuscarPesoNode *bn = (BuscarPesoNode*)node;
+            unused_scan_expr(bn->concept, decls, depth);
+            break;
+        }
+        case NODE_RESPONDER: {
+            ResponderNode *rn = (ResponderNode*)node;
+            unused_scan_expr(rn->message, decls, depth);
+            break;
+        }
+        case NODE_DEFINE_CONCEPTO: {
+            DefineConceptoNode *dn = (DefineConceptoNode*)node;
+            unused_scan_expr(dn->concepto, decls, depth);
+            if (dn->descripcion) unused_scan_expr(dn->descripcion, decls, depth);
+            break;
+        }
+        case NODE_APRENDER: {
+            AprenderNode *an = (AprenderNode*)node;
+            unused_scan_expr(an->concept, decls, depth);
+            if (an->weight) unused_scan_expr(an->weight, decls, depth);
+            break;
+        }
+        case NODE_ASOCIAR: {
+            AsociarNode *an = (AsociarNode*)node;
+            unused_scan_expr(an->concept1, decls, depth);
+            unused_scan_expr(an->concept2, decls, depth);
+            if (an->weight) unused_scan_expr(an->weight, decls, depth);
+            break;
+        }
+        case NODE_CREAR_MEMORIA: {
+            CrearMemoriaNode *cn = (CrearMemoriaNode*)node;
+            unused_scan_expr(cn->filename, decls, depth);
+            if (cn->nodes_capacity) unused_scan_expr(cn->nodes_capacity, decls, depth);
+            if (cn->connections_capacity) unused_scan_expr(cn->connections_capacity, decls, depth);
+            break;
+        }
+        case NODE_LIST_LITERAL: {
+            ListLiteralNode *ln = (ListLiteralNode*)node;
+            for (size_t i = 0; i < ln->n; i++) unused_scan_expr(ln->elements[i], decls, depth);
+            break;
+        }
+        case NODE_MAP_LITERAL:
+        case NODE_JSON_LITERAL: {
+            MapLiteralNode *mn = (MapLiteralNode*)node;
+            for (size_t i = 0; i < mn->n; i++) {
+                unused_scan_expr(mn->keys[i], decls, depth);
+                unused_scan_expr(mn->values[i], decls, depth);
+            }
+            break;
+        }
         case NODE_ASSIGNMENT:
             unused_scan_expr(((AssignmentNode*)node)->target, decls, depth);
             unused_scan_expr(((AssignmentNode*)node)->expression, decls, depth);

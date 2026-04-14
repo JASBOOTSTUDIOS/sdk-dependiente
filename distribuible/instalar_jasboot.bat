@@ -66,7 +66,7 @@ xcopy /E /I /Y "examples\*" "%EXAMPLES_DIR%\" >nul 2>&1
 
 :: 9. Copiar extensión VSCode
 echo [+] Copiando extensión VSCode...
-xcopy /E /I /Y "vscode\*" "%VSCODE_DIR%\" >nul 2>&1
+copy /y "jasboot-0.0.7.vsix" "%VSCODE_DIR%\" >nul
 
 :: 10. Configurar variables de entorno (OBLIGATORIO)
 echo [+] Configurando variables de entorno del sistema...

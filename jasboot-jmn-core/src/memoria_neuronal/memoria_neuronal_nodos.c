@@ -2,6 +2,7 @@
 #include "jmn_interno.h"
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 static uint32_t find_nodo_slot(JMNMemoria* mem, uint32_t id) {
     uint32_t h = jmn_hash_u32(id) % JMN_HASH_SIZE;
@@ -35,6 +36,10 @@ void jmn_agregar_nodo(JMNMemoria* mem, uint32_t id, JMNValor peso) {
     } else {
         slot = alloc_nodo_slot(mem, id);
         mem->nodos[slot].peso = peso;
+    }
+    if (getenv("JASBOOT_DEBUG")) {
+        uint32_t h = jmn_hash_u32(id) % JMN_HASH_SIZE;
+        fprintf(stderr, "[JMN] Agregado nodo %u en slot %u (bucket %u)\n", id, slot, h);
     }
     if (!mem->es_ram) mem->dirty = 1;
 }

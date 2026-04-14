@@ -1,7 +1,7 @@
 /**
  * JMN - Memoria Neuronal Jasboot
- * Persistencia cerebro.jmn estable.
- * Formato .jmn: magic, versión, nodos, conexiones, texto.
+ * Persistencia cerebro.jmn (v1: núcleo; v2: +listas/mapas en archivo).
+ * Formato: docs/TECNICO/FORMATO_JMN.md
  */
 #ifndef MEMORIA_NEURONAL_H
 #define MEMORIA_NEURONAL_H
@@ -117,6 +117,7 @@ JMNValor jmn_lista_obtener(JMNMemoria* mem, uint32_t id, uint32_t idx);
 /** 1 si la lista existe y idx no está en [0, count); 0 si id inválido o lista inexistente (sin cambiar semántica de “handle suelto”). */
 int jmn_lista_indice_fuera_de_rango(JMNMemoria* mem, uint32_t id, uint32_t idx);
 uint32_t jmn_lista_tamano(JMNMemoria* mem, uint32_t id);
+int jmn_lista_existe(JMNMemoria* mem, uint32_t id);
 void jmn_lista_poner(JMNMemoria* mem, uint32_t id, uint32_t idx, JMNValor val);
 void jmn_lista_unir(JMNMemoria* mem, uint32_t id_izq, uint32_t id_der, uint32_t id_dest);
 void jmn_vector_limpiar(JMNMemoria* mem, uint32_t id);
@@ -130,6 +131,7 @@ void jmn_mapa_insertar(JMNMemoria* mem, uint32_t map_id, uint32_t key, JMNValor 
 /** 1 si la clave existe en el slot del mapa; en *out el valor (si out no es NULL). */
 int jmn_mapa_obtener_si_existe(JMNMemoria* mem, uint32_t map_id, uint32_t key, JMNValor* out);
 JMNValor jmn_mapa_obtener(JMNMemoria* mem, uint32_t map_id, uint32_t key);
+int jmn_mapa_existe(JMNMemoria* mem, uint32_t map_id);
 
 /* Búsqueda e inferencia */
 int jmn_buscar_asociaciones(JMNMemoria* mem, uint32_t origen, uint32_t tipo_rel, float umbral,

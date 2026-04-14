@@ -83,7 +83,7 @@ SectionEnd
 
 Section "VSCode Extension" SEC03
     SetOutPath "$INSTDIR\vscode"
-    File /r "vscode\*"
+    File "jasboot-0.0.7.vsix"
     
     # Acceso directo para documentación
     CreateShortCut "$SMPROGRAMS\${PRODUCT_NAME}\VSCode Extension.lnk" "https://marketplace.visualstudio.com/items?itemName=JASBOOTSTUDIOS.vscode-jasboot"

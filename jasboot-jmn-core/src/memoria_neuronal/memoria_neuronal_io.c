@@ -18,7 +18,9 @@
 #endif
 
 #define JMN_MAGIC 0x4A4D4E31  /* "JMN1" en big-endian */
-#define JMN_VERSION 1
+#define JMN_VERSION_V1 1
+#define JMN_VERSION_V2 2
+#define JMN_LISTA_MAPA_CAP 10000u
 
 static int jmn_io_mkdir_one(const char* path) {
     if (!path || !path[0]) return 0;
@@ -82,14 +84,36 @@ static uint32_t jmn_crc32_update(uint32_t crc, const void* data, size_t len) {
     return crc;
 }
 
+static uint32_t jmn_io_contar_listas_guardables(const JMNMemoria* mem) {
+    uint32_t n = 0;
+    if (!mem || !mem->listas) return 0;
+    for (uint32_t i = 0; i < JMN_LISTA_MAPA_CAP; i++) {
+        if (mem->listas[i].id != 0) n++;
+    }
+    return n;
+}
+
+static uint32_t jmn_io_contar_mapas_guardables(const JMNMemoria* mem) {
+    uint32_t n = 0;
+    if (!mem || !mem->mapas) return 0;
+    for (uint32_t i = 0; i < JMN_LISTA_MAPA_CAP; i++) {
+        if (mem->mapas[i].keys != NULL) n++;
+    }
+    return n;
+}
+
 int jmn_io_guardar(JMNMemoria* mem, const char* ruta) {
     if (!mem || !ruta) return -1;
     if (jmn_io_asegurar_directorios_padre(ruta) != 0) return -1;
     FILE* f = fopen(ruta, "wb");
     if (!f) return -1;
 
+    uint32_t n_lista_p = jmn_io_contar_listas_guardables(mem);
+    uint32_t n_map_p = jmn_io_contar_mapas_guardables(mem);
+    int usar_v2 = (n_lista_p > 0 || n_map_p > 0);
+
     uint32_t magic = JMN_MAGIC;
-    uint32_t version = JMN_VERSION;
+    uint32_t version = usar_v2 ? JMN_VERSION_V2 : JMN_VERSION_V1;
     uint32_t crc = 0xFFFFFFFF;
 
     fwrite(&magic, 4, 1, f);
@@ -141,6 +165,44 @@ int jmn_io_guardar(JMNMemoria* mem, const char* ruta) {
         }
     }
 
+    if (usar_v2) {
+        fwrite(&n_lista_p, 4, 1, f);
+        crc = jmn_crc32_update(crc, &n_lista_p, 4);
+        for (uint32_t i = 0; i < JMN_LISTA_MAPA_CAP; i++) {
+            if (mem->listas[i].id == 0) continue;
+            uint32_t lid = mem->listas[i].id;
+            uint32_t cnt = mem->listas[i].items ? mem->listas[i].count : 0;
+            fwrite(&lid, 4, 1, f);
+            fwrite(&cnt, 4, 1, f);
+            crc = jmn_crc32_update(crc, &lid, 4);
+            crc = jmn_crc32_update(crc, &cnt, 4);
+            for (uint32_t k = 0; k < cnt; k++) {
+                JMNValor val = mem->listas[i].items[k];
+                fwrite(&val.u, 4, 1, f);
+                crc = jmn_crc32_update(crc, &val.u, 4);
+            }
+        }
+        fwrite(&n_map_p, 4, 1, f);
+        crc = jmn_crc32_update(crc, &n_map_p, 4);
+        for (uint32_t i = 0; i < JMN_LISTA_MAPA_CAP; i++) {
+            if (!mem->mapas[i].keys) continue;
+            uint32_t slot = i;
+            uint32_t mc = mem->mapas[i].count;
+            fwrite(&slot, 4, 1, f);
+            fwrite(&mc, 4, 1, f);
+            crc = jmn_crc32_update(crc, &slot, 4);
+            crc = jmn_crc32_update(crc, &mc, 4);
+            for (uint32_t k = 0; k < mc; k++) {
+                uint32_t key = mem->mapas[i].keys[k];
+                uint32_t vu = mem->mapas[i].vals[k].u;
+                fwrite(&key, 4, 1, f);
+                fwrite(&vu, 4, 1, f);
+                crc = jmn_crc32_update(crc, &key, 4);
+                crc = jmn_crc32_update(crc, &vu, 4);
+            }
+        }
+    }
+
     uint32_t final_crc = ~crc;
     fwrite(&final_crc, 4, 1, f);
     fclose(f);
@@ -163,8 +225,7 @@ int jmn_io_cargar(JMNMemoria* mem, const char* ruta) {
         fclose(f);
         return -1;
     }
-    if (version != JMN_VERSION) {
-        /* Migración: versión futura podría manejarse aquí */
+    if (version != JMN_VERSION_V1 && version != JMN_VERSION_V2) {
         fclose(f);
         return -1;
     }
@@ -226,9 +287,25 @@ int jmn_io_cargar(JMNMemoria* mem, const char* ruta) {
         while (mem->textos[slot].used) slot = (slot + 1) % mem->cap_textos;
         mem->textos[slot].id = id;
         size_t toread = slen + 1;
-        if (toread > 255) toread = 255;
-        if (fread(mem->textos[slot].texto, 1, toread, f) != toread) break;
-        crc = jmn_crc32_update(crc, mem->textos[slot].texto, toread);
+        if (toread > 256) toread = 256; /* Máximo incluyendo el nulo */
+        
+        char dummy[256];
+        void* target = (toread <= 256) ? mem->textos[slot].texto : dummy;
+        
+        /* Si slen+1 es > 256, leemos el excedente en dummy para no desalinear el archivo */
+        if (fread(mem->textos[slot].texto, 1, (toread > 256 ? 256 : toread), f) != (toread > 256 ? 256 : toread)) break;
+        crc = jmn_crc32_update(crc, mem->textos[slot].texto, (toread > 256 ? 256 : toread));
+        
+        if (slen + 1 > 256) {
+            size_t extra = (slen + 1) - 256;
+            while (extra > 0) {
+                size_t chunk = extra > sizeof(dummy) ? sizeof(dummy) : extra;
+                if (fread(dummy, 1, chunk, f) != chunk) break;
+                crc = jmn_crc32_update(crc, dummy, chunk);
+                extra -= chunk;
+            }
+        }
+        
         mem->textos[slot].texto[255] = '\0';
         mem->textos[slot].used = 1;
 
@@ -240,12 +317,81 @@ int jmn_io_cargar(JMNMemoria* mem, const char* ruta) {
         mem->num_textos++;
     }
 
+    if (getenv("JASBOOT_DEBUG")) {
+        fprintf(stderr, "[JMN IO] Cargados %u/%u nodos, %u/%u conex, %u/%u textos\n", 
+                mem->num_nodos, num_nodos, mem->num_conexiones, num_conex, mem->num_textos, num_textos);
+    }
+
+    if (version == JMN_VERSION_V2) {
+        uint32_t n_lista = 0;
+        if (fread(&n_lista, 4, 1, f) != 1) {
+            fclose(f);
+            return -1;
+        }
+        crc = jmn_crc32_update(crc, &n_lista, 4);
+        for (uint32_t li = 0; li < n_lista; li++) {
+            uint32_t lid, cnt;
+            if (fread(&lid, 4, 1, f) != 1 || fread(&cnt, 4, 1, f) != 1) {
+                fclose(f);
+                return -1;
+            }
+            crc = jmn_crc32_update(crc, &lid, 4);
+            crc = jmn_crc32_update(crc, &cnt, 4);
+            jmn_crear_lista(mem, lid);
+            for (uint32_t k = 0; k < cnt; k++) {
+                JMNValor val = {0};
+                if (fread(&val.u, 4, 1, f) != 1) {
+                    fclose(f);
+                    return -1;
+                }
+                crc = jmn_crc32_update(crc, &val.u, 4);
+                jmn_lista_agregar(mem, lid, val);
+            }
+        }
+        uint32_t n_map = 0;
+        if (fread(&n_map, 4, 1, f) != 1) {
+            fclose(f);
+            return -1;
+        }
+        crc = jmn_crc32_update(crc, &n_map, 4);
+        for (uint32_t mi = 0; mi < n_map; mi++) {
+            uint32_t slot, mc;
+            if (fread(&slot, 4, 1, f) != 1 || fread(&mc, 4, 1, f) != 1) {
+                fclose(f);
+                return -1;
+            }
+            crc = jmn_crc32_update(crc, &slot, 4);
+            crc = jmn_crc32_update(crc, &mc, 4);
+            if (slot >= JMN_LISTA_MAPA_CAP) {
+                fclose(f);
+                return -1;
+            }
+            jmn_crear_mapa(mem, slot);
+            for (uint32_t k = 0; k < mc; k++) {
+                uint32_t key, vu;
+                if (fread(&key, 4, 1, f) != 1 || fread(&vu, 4, 1, f) != 1) {
+                    fclose(f);
+                    return -1;
+                }
+                crc = jmn_crc32_update(crc, &key, 4);
+                crc = jmn_crc32_update(crc, &vu, 4);
+                JMNValor val = { .u = vu };
+                jmn_mapa_insertar(mem, slot, key, val);
+            }
+        }
+    }
+
     /* Checksum: si existe (formato nuevo), verificar; si no (formato viejo), aceptar */
     uint32_t stored_crc;
     if (fread(&stored_crc, 4, 1, f) == 1 && stored_crc != (~crc)) {
+        if (getenv("JASBOOT_DEBUG")) {
+            fprintf(stderr, "[JMN IO] ERROR: Checksum invalido en '%s' (leido: %08X, calculado: %08X)\n", 
+                    ruta, (unsigned)stored_crc, (unsigned)(~crc));
+        }
         fclose(f);
         return -1;  /* Checksum inválido: archivo corrupto */
     }
+    mem->dirty = 0;
     fclose(f);
     return 0;
 }

@@ -51,6 +51,7 @@ static uint32_t alloc_lista_slot(JMNMemoria* mem, uint32_t id) {
         mem->num_listas++;
     }
     mem->listas[slot].count = 0;
+    if (!mem->es_ram) mem->dirty = 1;
     return slot;
 }
 
@@ -78,6 +79,7 @@ void jmn_crear_lista(JMNMemoria* mem, uint32_t id) {
     uint32_t slot = find_lista_slot(mem, id);
     if (slot != 0xFFFFFFFF) {
         mem->listas[slot].count = 0;
+        if (!mem->es_ram) mem->dirty = 1;
         return;
     }
     alloc_lista_slot(mem, id);
@@ -97,6 +99,7 @@ void jmn_lista_agregar(JMNMemoria* mem, uint32_t id, JMNValor val) {
     }
     if (mem->listas[slot].count < mem->listas[slot].cap) {
         mem->listas[slot].items[mem->listas[slot].count++] = val;
+        if (!mem->es_ram) mem->dirty = 1;
     }
 }
 
@@ -126,12 +129,18 @@ uint32_t jmn_lista_tamano(JMNMemoria* mem, uint32_t id) {
     return mem->listas[slot].items ? mem->listas[slot].count : 0;
 }
 
+int jmn_lista_existe(JMNMemoria* mem, uint32_t id) {
+    if (!mem) return 0;
+    return find_lista_slot(mem, id) != 0xFFFFFFFF;
+}
+
 void jmn_lista_poner(JMNMemoria* mem, uint32_t id, uint32_t idx, JMNValor val) {
     if (!mem) return;
     uint32_t slot = get_or_alloc_lista(mem, id);
     if (slot == 0xFFFFFFFF) return;
     if (idx < mem->listas[slot].count) {
         mem->listas[slot].items[idx] = val;
+        if (!mem->es_ram) mem->dirty = 1;
     }
 }
 
@@ -150,6 +159,7 @@ void jmn_vector_limpiar(JMNMemoria* mem, uint32_t id) {
     uint32_t slot = find_lista_slot(mem, id);
     if (slot == 0xFFFFFFFF) return;
     if (mem->listas[slot].items) mem->listas[slot].count = 0;
+    if (!mem->es_ram) mem->dirty = 1;
 }
 
 void jmn_lista_liberar(JMNMemoria* mem, uint32_t id) {
@@ -179,7 +189,10 @@ void jmn_lista_liberar(JMNMemoria* mem, uint32_t id) {
 
 void jmn_crear_mapa(JMNMemoria* mem, uint32_t map_id) {
     if (!mem) return;
+    uint32_t slot = map_id % 10000u;
+    int had = mem->mapas && mem->mapas[slot].keys != NULL;
     get_or_alloc_mapa(mem, map_id);
+    if (!mem->es_ram && !had) mem->dirty = 1;
 }
 
 uint32_t jmn_mapa_tamano(JMNMemoria* mem, uint32_t map_id) {
@@ -195,6 +208,7 @@ void jmn_mapa_insertar(JMNMemoria* mem, uint32_t map_id, uint32_t key, JMNValor 
     for (uint32_t i = 0; i < mem->mapas[slot].count; i++) {
         if (mem->mapas[slot].keys[i] == key) {
             mem->mapas[slot].vals[i] = val;
+            if (!mem->es_ram) mem->dirty = 1;
             return;
         }
     }
@@ -212,6 +226,7 @@ void jmn_mapa_insertar(JMNMemoria* mem, uint32_t map_id, uint32_t key, JMNValor 
         mem->mapas[slot].keys[mem->mapas[slot].count] = key;
         mem->mapas[slot].vals[mem->mapas[slot].count] = val;
         mem->mapas[slot].count++;
+        if (!mem->es_ram) mem->dirty = 1;
     }
 }
 
@@ -240,4 +255,10 @@ JMNValor jmn_mapa_obtener(JMNMemoria* mem, uint32_t map_id, uint32_t key) {
     JMNValor v = {0};
     (void)jmn_mapa_obtener_si_existe(mem, map_id, key, &v);
     return v;
+}
+
+int jmn_mapa_existe(JMNMemoria* mem, uint32_t map_id) {
+    if (!mem || !mem->mapas) return 0;
+    uint32_t slot = map_id % 10000u;
+    return mem->mapas[slot].keys != NULL;
 }

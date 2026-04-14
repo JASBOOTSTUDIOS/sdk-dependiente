@@ -3356,6 +3356,45 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         emit(cg, OP_ESCRIBIR, r.addr & 0xFF, 1, (r.addr >> 8) & 0xFF, fl);
         return 1;
     }
+    if (strcmp(name, "pensar_respuesta") == 0) {
+        visit_expression(cg, ARG0, 1);
+        uint8_t params = 0;
+        if (ARG1) {
+            /* TODO: permitir pasar creatividad y umbral empaquetados */
+        }
+        emit(cg, OP_MEM_PENSAR_RESPUESTA, 1, 1, params,
+             IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE);
+        SymResult r = sym_get_or_create(&cg->sym, "resultado", NULL);
+        uint8_t fl = IR_INST_FLAG_A_IMMEDIATE | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE;
+        if (r.is_relative) fl |= IR_INST_FLAG_RELATIVE;
+        emit(cg, OP_ESCRIBIR, r.addr & 0xFF, 1, (r.addr >> 8) & 0xFF, fl);
+        return 1;
+    }
+    if (strcmp(name, "asociar_relacion") == 0) {
+        if (cn->n_args < 3) return 0;
+        visit_expression(cg, ARG0, 1);
+        visit_expression(cg, ARG1, 2);
+        visit_expression(cg, ARG2, 3);
+        emit(cg, OP_MEM_ASOCIAR_RELACION, 1, 2, 3,
+             IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
+        return 1;
+    }
+    if (strcmp(name, "corregir_secuencia") == 0) {
+        if (cn->n_args < 2) return 0;
+        visit_expression(cg, ARG0, 1);
+        visit_expression(cg, ARG1, 2);
+        emit(cg, OP_MEM_CORREGIR_SECUENCIA, 1, 2, 0,
+             IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+        return 1;
+    }
+    if (strcmp(name, "comparar_patrones") == 0) {
+        if (cn->n_args < 2) return 0;
+        visit_expression(cg, ARG0, 1);
+        visit_expression(cg, ARG1, 2);
+        emit(cg, OP_MEM_COMPARAR_PATRONES, dest_reg, 1, 2,
+             IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
+        return 1;
+    }
     if (strcmp(name, "buscar") == 0) {
         if (!ARG0) return 0;
         if (is_node(ARG0, NODE_LITERAL) && ((LiteralNode*)ARG0)->type_name && strcmp(((LiteralNode*)ARG0)->type_name, "texto") == 0) {
@@ -4330,8 +4369,8 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
             sistema_error_sin_argumentos(cg, name, "texto: cadena a interpretar como entero", cn->base.line, cn->base.col);
             return 1;
         }
-        visit_expression(cg, ARG0, 1);
-        emit(cg, OP_STR_A_ENTERO, dest_reg, 1, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+        visit_expression(cg, ARG0, dest_reg + 1);
+        emit(cg, OP_STR_A_ENTERO, dest_reg, dest_reg + 1, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
         return 1;
     }
     if (strcmp(name, "str_a_flotante") == 0 || strcmp(name, "convertir_flotante") == 0) {
@@ -4339,14 +4378,14 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
             sistema_error_sin_argumentos(cg, name, "texto: cadena a interpretar como flotante", cn->base.line, cn->base.col);
             return 1;
         }
-        visit_expression(cg, ARG0, 1);
-        emit(cg, OP_STR_A_FLOTANTE, dest_reg, 1, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+        visit_expression(cg, ARG0, dest_reg + 1);
+        emit(cg, OP_STR_A_FLOTANTE, dest_reg, dest_reg + 1, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
         return 1;
     }
     if (strcmp(name, "str_desde_numero") == 0) {
         if (!ARG0) return 0;
-        visit_expression(cg, ARG0, 1);
-        emit(cg, OP_STR_DESDE_NUMERO, dest_reg, 1, 1, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE);
+        visit_expression(cg, ARG0, dest_reg + 1);
+        emit(cg, OP_STR_DESDE_NUMERO, dest_reg, dest_reg + 1, 1, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE);
         return 1;
     }
     if (strcmp(name, "decimal") == 0) {

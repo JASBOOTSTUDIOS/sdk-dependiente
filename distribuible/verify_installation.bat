@@ -39,6 +39,12 @@ if exist "%PROGRAMFILES%\Jasboot\runtime\jasboot-ir-vm.exe" (
     set /a missing_files+=1
 )
 
+if exist "%PROGRAMFILES%\Jasboot\vscode\jasboot-0.0.7.vsix" (
+    echo [OK] Extensión VSCode jasboot-0.0.7.vsix encontrada
+) else (
+    echo [ADVERTENCIA] Extensión VSCode jasboot-0.0.7.vsix NO encontrada (opcional)
+)
+
 :: 3. Verificar variables de entorno
 echo.
 echo [+] Verificando variables de entorno...

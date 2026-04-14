@@ -13,7 +13,8 @@ extern int jmn_io_cargar(JMNMemoria* mem, const char* ruta);
 uint32_t jmn_hash_u32(uint32_t x) {
     x = ((x >> 16) ^ x) * 0x45d9f3b;
     x = ((x >> 16) ^ x) * 0x45d9f3b;
-    return x >> 16;
+    x = ((x >> 16) ^ x);
+    return x;
 }
 
 uint32_t jmn_hash_str(const char* s) {

@@ -16,7 +16,7 @@
 - **jasboot-ir-vm-trace.exe**: VM con modo depuración/traza.
 
 ### Herramientas Adicionales
-- **VSCode Extension**: Extensión completa para Visual Studio Code.
+- **VSCode Extension**: Extensión para Visual Studio Code (jasboot-0.0.7.vsix).
 - **Ejemplos y Plantillas**: Proyectos de ejemplo incluyendo Neurixis IA.
 - **Documentación**: Guías y referencias completas.
 - **instalar_jasboot.bat**: Script de instalación automatizada.
@@ -136,8 +136,9 @@ dir "%JASBOOT_HOME%\examples\"
 
 1. Abre VSCode
 2. Ve a Extensiones (Ctrl+Shift+X)
-3. Busca "Jasboot" o instala desde el archivo local en `%JASBOOT_HOME%\vscode\`
-4. Reinicia VSCode
+3. Haz clic en el ícono de extensiones y selecciona "Instalar desde VSIX..."
+4. Selecciona el archivo `jasboot-0.0.7.vsix` en `%JASBOOT_HOME%\vscode\`
+5. Reinicia VSCode
 
 ### Extensiones de Archivo Soportadas
 - `.jasb` - Archivos fuente de Jasboot
@@ -166,7 +167,7 @@ C:\Program Files\Jasboot\
     examples\               # Proyectos de ejemplo
         neurixis_IA\
         otros_proyectos\
-    vscode\                 # Extensión VSCode
+    vscode\                 # Extensión VSCode (jasboot-0.0.7.vsix)
     img\                    # Recursos visuales
 ```
 

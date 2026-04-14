@@ -1473,22 +1473,9 @@ static void vm_format_source_path(VM* vm, char* out, size_t out_size) {
 }
 
 static void vm_fallar_si_memoria_sigue_abierta(VM* vm) {
-    if (!vm) return;
-#ifdef JASBOOT_LANG_INTEGRATION
-    if (vm->exit_code == 0 && vm->mem_neuronal) {
-        if (vm->mem_neuronal_open_line > 0) {
-            fprintf(stderr,
-                    "Error de ejecucion (VM): memoria neuronal abierta en la linea %d sin `cerrar_memoria()`. Cierra la memoria antes de terminar el programa.\n",
-                    vm->mem_neuronal_open_line);
-        } else {
-            fprintf(stderr,
-                    "Error de ejecucion (VM): memoria neuronal abierta sin `cerrar_memoria()`. Cierra la memoria antes de terminar el programa.\n");
-        }
-        vm->exit_code = 1;
-    }
-#else
+    /* La VM consolida y cierra JMN en vm_destroy; no forzar código de salida de error
+     * por omitir cerrar_memoria() explícito (comportamiento estable y predecible). */
     (void)vm;
-#endif
 }
 
 void vm_destroy(VM* vm) {
@@ -3363,9 +3350,14 @@ int vm_step(VM* vm) {
             s_map_counter++;
             uint32_t map_id = ((uint32_t)time(NULL) ^ 0x01234567u) + (s_map_counter * 0x9E3779B9u);
 #ifdef JASBOOT_LANG_INTEGRATION
-            ensure_jmn_col(vm);
-            if (vm->mem_colecciones) {
-                jmn_crear_mapa(vm->mem_colecciones, map_id);
+            /* Prioridad: memoria neuronal persistente si está abierta; si no, RAM efímera. */
+            JMNMemoria* m_target = vm->mem_neuronal ? vm->mem_neuronal : vm->mem_colecciones;
+            if (!m_target) {
+                ensure_jmn_col(vm);
+                m_target = vm->mem_colecciones;
+            }
+            if (m_target) {
+                jmn_crear_mapa(m_target, map_id);
             }
 #endif
             vm_set_register(vm, inst.operand_a, (uint64_t)map_id);
@@ -3375,10 +3367,13 @@ int vm_step(VM* vm) {
 
         case OP_MEM_MAPA_PONER: {
 #ifdef JASBOOT_LANG_INTEGRATION
-            ensure_jmn_col(vm);
-            if (vm->mem_colecciones) {
+            uint32_t map_id = (uint32_t)a_val;
+            JMNMemoria* m_target = (vm->mem_neuronal && jmn_mapa_existe(vm->mem_neuronal, map_id)) 
+                                   ? vm->mem_neuronal : vm->mem_colecciones;
+            if (!m_target) { ensure_jmn_col(vm); m_target = vm->mem_colecciones; }
+            if (m_target) {
                 JMNValor val; val.u = (uint32_t)c_val;
-                jmn_mapa_insertar(vm->mem_colecciones, (uint32_t)a_val, (uint32_t)b_val, val);
+                jmn_mapa_insertar(m_target, map_id, (uint32_t)b_val, val);
             }
 #endif
             vm->pc += IR_INSTRUCTION_SIZE;
@@ -3387,33 +3382,37 @@ int vm_step(VM* vm) {
 
         case OP_MEM_MAPA_OBTENER: {
 #ifdef JASBOOT_LANG_INTEGRATION
-            ensure_jmn_col(vm);
-            if (vm->mem_colecciones) {
-                JMNValor val;
-                uint32_t map_id = (uint32_t)b_val;
-                uint32_t map_key = (uint32_t)c_val;
-                if (!jmn_mapa_obtener_si_existe(vm->mem_colecciones, map_id, map_key, &val)) {
-                    char trymsg[288];
-                    snprintf(trymsg, sizeof trymsg,
-                             "clave de mapa inexistente: no hay valor para la clave %u; ese registro no fue creado "
-                             "con mapa_poner (origen: mapa_obtener o m[clave]).",
-                             (unsigned)map_key);
-                    if (vm_try_catch_or_abort(vm, trymsg))
-                        return 0;
-                    if (vm->current_line > 0)
-                        fprintf(stderr,
-                                "Error de ejecucion (VM) en la linea %d: %s\n",
-                                vm->current_line, trymsg);
-                    else
-                        fprintf(stderr, "Error de ejecucion (VM): %s\n", trymsg);
-                    vm->running = 0;
-                    vm->exit_code = 1;
-                    return 0;
-                }
-                vm_set_register(vm, inst.operand_a, (uint64_t)val.u);
-                vm->pc += IR_INSTRUCTION_SIZE;
-                break;
+            uint32_t map_id = (uint32_t)b_val;
+            uint32_t map_key = (uint32_t)c_val;
+            JMNValor val = {0};
+            int encontrado = 0;
+            if (vm->mem_neuronal) {
+                encontrado = jmn_mapa_obtener_si_existe(vm->mem_neuronal, map_id, map_key, &val);
             }
+            if (!encontrado && vm->mem_colecciones) {
+                encontrado = jmn_mapa_obtener_si_existe(vm->mem_colecciones, map_id, map_key, &val);
+            }
+            
+            if (!encontrado) {
+                char trymsg[288];
+                snprintf(trymsg, sizeof trymsg,
+                         "clave de mapa inexistente: no hay valor para la clave %u en el mapa %u.",
+                         (unsigned)map_key, (unsigned)map_id);
+                if (vm_try_catch_or_abort(vm, trymsg))
+                    return 0;
+                if (vm->current_line > 0)
+                    fprintf(stderr,
+                            "Error de ejecucion (VM) en la linea %d: %s\n",
+                            vm->current_line, trymsg);
+                else
+                    fprintf(stderr, "Error de ejecucion (VM): %s\n", trymsg);
+                vm->running = 0;
+                vm->exit_code = 1;
+                return 0;
+            }
+            vm_set_register(vm, inst.operand_a, (uint64_t)val.u);
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
 #endif
             vm_set_register(vm, inst.operand_a, 0);
             vm->pc += IR_INSTRUCTION_SIZE;
@@ -3424,9 +3423,11 @@ int vm_step(VM* vm) {
             uint32_t map_id_val = (uint32_t)b_val;
             uint32_t tam = 0;
 #ifdef JASBOOT_LANG_INTEGRATION
-            ensure_jmn_col(vm);
-            if (vm->mem_colecciones)
-                tam = jmn_mapa_tamano(vm->mem_colecciones, map_id_val);
+            JMNMemoria* m_target = (vm->mem_neuronal && jmn_mapa_existe(vm->mem_neuronal, map_id_val))
+                                   ? vm->mem_neuronal : vm->mem_colecciones;
+            if (!m_target) { ensure_jmn_col(vm); m_target = vm->mem_colecciones; }
+            if (m_target)
+                tam = jmn_mapa_tamano(m_target, map_id_val);
 #endif
             vm_set_register(vm, inst.operand_a, (uint64_t)tam);
             vm->pc += IR_INSTRUCTION_SIZE;
@@ -3438,10 +3439,12 @@ int vm_step(VM* vm) {
             uint32_t key_val = (uint32_t)c_val;
             uint32_t existe = 0;
 #ifdef JASBOOT_LANG_INTEGRATION
-            ensure_jmn_col(vm);
-            if (vm->mem_colecciones) {
+            JMNMemoria* m_target = (vm->mem_neuronal && jmn_mapa_existe(vm->mem_neuronal, map_id_val))
+                                   ? vm->mem_neuronal : vm->mem_colecciones;
+            if (!m_target) { ensure_jmn_col(vm); m_target = vm->mem_colecciones; }
+            if (m_target) {
                 JMNValor val;
-                if (jmn_mapa_obtener_si_existe(vm->mem_colecciones, map_id_val, key_val, &val)) {
+                if (jmn_mapa_obtener_si_existe(m_target, map_id_val, key_val, &val)) {
                     existe = 1;
                 }
             }
@@ -6794,7 +6797,6 @@ int vm_step(VM* vm) {
                     const char* name = (const char*)vm->ir->data + offset;
                     id = vm_hash_texto(name);
 #ifdef JASBOOT_LANG_INTEGRATION
-                    // ensure_jmn(vm); eliminado
                     if (vm->mem_neuronal) jmn_guardar_texto(vm->mem_neuronal, id, name);
 #endif
                     vm_text_cache_put(vm, id, name);
@@ -6803,9 +6805,14 @@ int vm_step(VM* vm) {
                 id = (uint32_t)vm_get_register(vm, inst.operand_b);
             }
 #ifdef JASBOOT_LANG_INTEGRATION
-            ensure_jmn_col(vm);
-            if (vm->mem_colecciones) {
-                jmn_crear_lista(vm->mem_colecciones, id);
+            /* Prioridad: memoria neuronal persistente si está abierta; si no, RAM efímera. */
+            JMNMemoria* m_target = vm->mem_neuronal ? vm->mem_neuronal : vm->mem_colecciones;
+            if (!m_target) {
+                ensure_jmn_col(vm);
+                m_target = vm->mem_colecciones;
+            }
+            if (m_target) {
+                jmn_crear_lista(m_target, id);
                 vm_list_size_cache_set(vm, id, 0);
             }
 #endif
@@ -6829,14 +6836,17 @@ int vm_step(VM* vm) {
 
         case OP_MEM_LISTA_AGREGAR: {
 #ifdef JASBOOT_LANG_INTEGRATION
-            ensure_jmn_col(vm);
-            if (vm->mem_colecciones) {
+            uint32_t list_id = (uint32_t)a_val;
+            JMNMemoria* m_target = (vm->mem_neuronal && jmn_lista_existe(vm->mem_neuronal, list_id))
+                                   ? vm->mem_neuronal : vm->mem_colecciones;
+            if (!m_target) { ensure_jmn_col(vm); m_target = vm->mem_colecciones; }
+            if (m_target) {
                 int ok_size = 0;
-                uint32_t cached_size = vm_list_size_cache_get(vm, (uint32_t)a_val, &ok_size);
+                uint32_t cached_size = vm_list_size_cache_get(vm, list_id, &ok_size);
                 JMNValor val;
                 val.u = (uint32_t)b_val;
-                jmn_lista_agregar(vm->mem_colecciones, (uint32_t)a_val, val);
-                if (ok_size) vm_list_size_cache_set(vm, (uint32_t)a_val, cached_size + 1);
+                jmn_lista_agregar(m_target, list_id, val);
+                if (ok_size) vm_list_size_cache_set(vm, list_id, cached_size + 1);
             }
 #endif
             vm->pc += IR_INSTRUCTION_SIZE;
@@ -6881,10 +6891,12 @@ int vm_step(VM* vm) {
             uint32_t list_id = (uint32_t)b_val;
             uint32_t idx = (uint32_t)c_val;
 #ifdef JASBOOT_LANG_INTEGRATION
-            ensure_jmn_col(vm);
-            if (vm->mem_colecciones) {
-                if (jmn_lista_indice_fuera_de_rango(vm->mem_colecciones, list_id, idx)) {
-                    uint32_t tam = jmn_lista_tamano(vm->mem_colecciones, list_id);
+            JMNMemoria* m_target = (vm->mem_neuronal && jmn_lista_existe(vm->mem_neuronal, list_id))
+                                   ? vm->mem_neuronal : vm->mem_colecciones;
+            if (!m_target) { ensure_jmn_col(vm); m_target = vm->mem_colecciones; }
+            if (m_target) {
+                if (jmn_lista_indice_fuera_de_rango(m_target, list_id, idx)) {
+                    uint32_t tam = jmn_lista_tamano(m_target, list_id);
                     char rango[112];
                     if (tam == 0)
                         snprintf(rango, sizeof rango, "la lista esta vacia (no hay ningun indice valido)");
@@ -6913,7 +6925,7 @@ int vm_step(VM* vm) {
                     vm->exit_code = 1;
                     return 0;
                 }
-                JMNValor val = jmn_lista_obtener(vm->mem_colecciones, list_id, idx);
+                JMNValor val = jmn_lista_obtener(m_target, list_id, idx);
                 vm_set_register(vm, inst.operand_a, (uint64_t)val.u);
             } else {
                 vm_set_register(vm, inst.operand_a, 0);
@@ -6930,10 +6942,12 @@ int vm_step(VM* vm) {
             uint32_t idx = (uint32_t)b_val;
             uint64_t reg_val = c_val;
 #ifdef JASBOOT_LANG_INTEGRATION
-            ensure_jmn_col(vm);
-            if (vm->mem_colecciones) {
+            JMNMemoria* m_target = (vm->mem_neuronal && jmn_lista_existe(vm->mem_neuronal, list_id))
+                                   ? vm->mem_neuronal : vm->mem_colecciones;
+            if (!m_target) { ensure_jmn_col(vm); m_target = vm->mem_colecciones; }
+            if (m_target) {
                 JMNValor val; val.u = (uint32_t)reg_val;
-                jmn_lista_poner(vm->mem_colecciones, list_id, idx, val);
+                jmn_lista_poner(m_target, list_id, idx, val);
             }
 #endif
             vm->pc += IR_INSTRUCTION_SIZE;
@@ -6973,11 +6987,13 @@ int vm_step(VM* vm) {
             tam = vm_list_size_cache_get(vm, list_id_val, &ok_size);
 #ifdef JASBOOT_LANG_INTEGRATION
             if (!ok_size) {
-            ensure_jmn_col(vm);
-            }
-            if (!ok_size && vm->mem_colecciones) {
-                tam = (uint32_t)jmn_lista_tamano(vm->mem_colecciones, list_id_val);
-                vm_list_size_cache_set(vm, list_id_val, tam);
+                JMNMemoria* m_target = (vm->mem_neuronal && jmn_lista_existe(vm->mem_neuronal, list_id_val))
+                                       ? vm->mem_neuronal : vm->mem_colecciones;
+                if (!m_target) { ensure_jmn_col(vm); m_target = vm->mem_colecciones; }
+                if (m_target) {
+                    tam = (uint32_t)jmn_lista_tamano(m_target, list_id_val);
+                    vm_list_size_cache_set(vm, list_id_val, tam);
+                }
             }
 #endif
             vm_set_register(vm, inst.operand_a, (uint64_t)tam);

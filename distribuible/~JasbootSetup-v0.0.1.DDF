@@ -1,0 +1,22 @@
+;Auto-generated Diamond Directive File. Can be deleted without harm.
+.Set CabinetNameTemplate=~JasbootSetup-v0.0.1.CAB
+.Set CompressionType=LZX
+.Set CompressionLevel=7
+.Set InfFileName=~JasbootSetup-v0.0.1_LAYOUT.INF
+.Set RptFileName=~JasbootSetup-v0.0.1.RPT
+.Set MaxDiskSize=CDROM
+.Set ReservePerCabinetSize=0
+.Set InfCabinetLineFormat=*cab#*=Application Source Media,*cabfile*,0
+.Set Compress=on
+.Set CompressionMemory=21
+.Set DiskDirectoryTemplate=
+.Set Cabinet=ON
+.Set MaxCabinetSize=999999999
+.Set InfDiskHeader=
+.Set InfDiskLineFormat=
+.Set InfCabinetHeader=[SourceDisksNames]
+.Set InfFileHeader=
+.Set InfFileHeader1=[SourceDisksFiles]
+.Set InfFileLineFormat=*file*=*cab#*,,*size*,*csum*
+"C:\src\jasboot\sdk-dependiente\distribuible\instalar_jasboot.bat"
+"C:\src\jasboot\sdk-dependiente\distribuible\bin\jbc.exe"
