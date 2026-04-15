@@ -56,6 +56,10 @@ void ast_free(ASTNode *node) {
                 ast_free(n->methods[i]);
             }
             if (n->methods) free(n->methods);
+            for (size_t i = 0; i < n->n_nested_structs; i++) {
+                ast_free(n->nested_structs[i]);
+            }
+            if (n->nested_structs) free(n->nested_structs);
             if (n->field_visibilities) free(n->field_visibilities);
             if (n->method_visibilities) free(n->method_visibilities);
             break;

@@ -53,6 +53,7 @@ typedef struct StructMethodInfo {
 /* Definición de struct registrada (3.7) */
 typedef struct StructInfo {
     char *name;
+    char *base_name; /* NULL si no tiene base */
     StructFieldInfo *fields;
     size_t n_fields;
     size_t total_size;

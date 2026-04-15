@@ -41,7 +41,8 @@ void sym_free(SymbolTable *st) {
     }
     for (size_t i = 0; i < st->n_structs; i++) {
         StructInfo *si = &st->structs[i];
-        free(si->name);
+        if (si->name) free(si->name);
+        if (si->base_name) free(si->base_name);
         for (size_t j = 0; j < si->n_fields; j++) {
             free(si->fields[j].name);
             free(si->fields[j].type_name);
@@ -249,8 +250,9 @@ void sym_register_class(SymbolTable *st, const char *name, const char **field_ty
         st->structs = p;
         st->structs_cap = new_cap;
     }
-    StructInfo *si = &st->structs[st->n_structs];
+    StructInfo *si = &st->structs[st->n_structs++];
     si->name = strdup(name);
+    si->base_name = NULL;
     si->fields = n_fields ? calloc(n_fields, sizeof(StructFieldInfo)) : NULL;
     si->n_fields = n_fields;
     si->is_exported = is_exported;
@@ -273,7 +275,6 @@ void sym_register_class(SymbolTable *st, const char *name, const char **field_ty
         si->methods[i].method_ast = method_asts[i];
         si->methods[i].is_private = method_vis ? method_vis[i] : 0;
     }
-    st->n_structs++;
 }
 
 int sym_register_struct_extends(SymbolTable *st, const char *name, const char *base_name,
@@ -291,8 +292,12 @@ int sym_register_class_extends(SymbolTable *st, const char *name, const char *ba
             break;
         }
     }
-    if (!base_si) return -1;
+    if (!base_si) {
+        // printf("Base class NOT FOUND: %s\n", base_name);
+        return -1;
+    }
 
+    /* Campos: heredar de la base */
     size_t total_f = base_si->n_fields + n_fields;
     const char **tf = malloc(total_f * sizeof(char*));
     const char **nf = malloc(total_f * sizeof(char*));
@@ -308,10 +313,55 @@ int sym_register_class_extends(SymbolTable *st, const char *name, const char *ba
         nf[base_si->n_fields + i] = field_names[i];
         vf[base_si->n_fields + i] = field_vis ? field_vis[i] : 0;
     }
+
+    /* Métodos: heredar de la base (excepto sobreescritos) */
+    size_t inherited_m_count = 0;
+    for (size_t i = 0; i < base_si->n_methods; i++) {
+        int overridden = 0;
+        for (size_t j = 0; j < n_methods; j++) {
+            if (strcmp(base_si->methods[i].name, method_names[j]) == 0) {
+                overridden = 1;
+                break;
+            }
+        }
+        if (!overridden) inherited_m_count++;
+    }
+
+    size_t total_m = inherited_m_count + n_methods;
+    void **tm_asts = malloc(total_m * sizeof(void*));
+    const char **tm_names = malloc(total_m * sizeof(char*));
+    int *tm_vis = malloc(total_m * sizeof(int));
+
+    size_t m_idx = 0;
+    /* Primero los heredados no sobreescritos */
+    for (size_t i = 0; i < base_si->n_methods; i++) {
+        int overridden = 0;
+        for (size_t j = 0; j < n_methods; j++) {
+            if (strcmp(base_si->methods[i].name, method_names[j]) == 0) {
+                overridden = 1;
+                break;
+            }
+        }
+        if (!overridden) {
+            tm_asts[m_idx] = base_si->methods[i].method_ast;
+            tm_names[m_idx] = base_si->methods[i].name;
+            tm_vis[m_idx] = base_si->methods[i].is_private;
+            m_idx++;
+        }
+    }
+    /* Luego los nuevos / sobreescritos */
+    for (size_t i = 0; i < n_methods; i++) {
+        tm_asts[m_idx] = method_asts[i];
+        tm_names[m_idx] = method_names[i];
+        tm_vis[m_idx] = method_vis ? method_vis[i] : 0;
+        m_idx++;
+    }
     
-    sym_register_class(st, name, tf, nf, vf, total_f, method_asts, method_names, method_vis, n_methods, is_exported);
+    sym_register_class(st, name, tf, nf, vf, total_f, tm_asts, tm_names, tm_vis, total_m, is_exported);
+    st->structs[st->n_structs - 1].base_name = strdup(base_name);
     
     free(tf); free(nf); free(vf);
+    free(tm_asts); free(tm_names); free(tm_vis);
     return 0;
 }
 
@@ -335,7 +385,8 @@ int sym_get_struct_field(SymbolTable *st, const char *struct_name, const char *f
 size_t sym_get_struct_size(SymbolTable *st, const char *struct_name) {
     if (!struct_name) return 0;
     for (size_t i = 0; i < st->n_structs; i++) {
-        if (strcmp(st->structs[i].name, struct_name) == 0)
+        // printf("Checking struct: '%s' vs '%s'\n", st->structs[i].name, struct_name);
+        if (st->structs[i].name && strcmp(st->structs[i].name, struct_name) == 0)
             return st->structs[i].total_size;
     }
     return 0;

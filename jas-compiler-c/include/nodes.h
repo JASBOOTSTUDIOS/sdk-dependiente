@@ -114,6 +114,8 @@ typedef struct {
     size_t n_fields;
     ASTNode **methods;        /* FunctionNode */
     size_t n_methods;
+    ASTNode **nested_structs;  /* StructDefNode */
+    size_t n_nested_structs;
     int *field_visibilities;  /* 0=publico, 1=privado */
     int *method_visibilities; /* 0=publico, 1=privado */
     int is_exported;

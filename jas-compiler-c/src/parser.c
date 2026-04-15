@@ -396,6 +396,35 @@ static ASTNode *clone_identifier_for_compound(IdentifierNode *id) {
 }
 
 /* Forward declarations */
+static char *parse_full_type_name(Parser *p) {
+    const Token *t = peek(p, 0);
+    if (!t) return NULL;
+    
+    char *name = NULL;
+    if (is_decl_type_token(t)) {
+        name = strdup(t->value.str);
+        advance(p);
+    } else if (t->type == TOK_IDENTIFIER || t->type == TOK_KEYWORD) {
+        name = strdup(t->value.str);
+        advance(p);
+        while (peek(p, 0) && peek(p, 0)->type == TOK_OPERATOR && peek(p, 0)->value.str && strcmp(peek(p, 0)->value.str, ".") == 0) {
+            const Token *dot_t = peek(p, 0);
+            const Token *next = peek(p, 1);
+            if (next && (next->type == TOK_IDENTIFIER || next->type == TOK_KEYWORD)) {
+                advance(p); /* consume '.' */
+                char *new_name = malloc(strlen(name) + strlen(next->value.str) + 2);
+                sprintf(new_name, "%s.%s", name, next->value.str);
+                free(name);
+                name = new_name;
+                advance(p); /* consume identifier */
+            } else {
+                break;
+            }
+        }
+    }
+    return name;
+}
+
 static ASTNode *parse_expression(Parser *p);
 static ASTNode *parse_statement(Parser *p);
 static ASTNode *parse_block(Parser *p, const char **end_kw, size_t n_end);
@@ -4164,22 +4193,18 @@ static ASTNode *parse_statement(Parser *p) {
     }
 
     /* Identifier o keyword que puede ser declaración TYPE ID o assignment/call */
-        if ((t->type == TOK_IDENTIFIER || t->type == TOK_KEYWORD) && t->value.str) {
-        const Token *nxt = peek(p, 1);
-        if (nxt && nxt->type == TOK_IDENTIFIER && nxt->value.str) {
-            /* Posible TYPE ID = expr */
-            if (is_keyword(t->value.str, strlen(t->value.str)) &&
-                (strcmp(t->value.str, "entero") == 0 || strcmp(t->value.str, "texto") == 0 ||
-                 strcmp(t->value.str, "flotante") == 0 || strcmp(t->value.str, "caracter") == 0 ||
-                 strcmp(t->value.str, "lista") == 0 || strcmp(t->value.str, "mapa") == 0 ||
-                 strcmp(t->value.str, "bool") == 0 || strcmp(t->value.str, "u32") == 0 ||
-                 strcmp(t->value.str, "u64") == 0 || strcmp(t->value.str, "u8") == 0 ||
-                 strcmp(t->value.str, "byte") == 0 || strcmp(t->value.str, "vec2") == 0 ||
-                 strcmp(t->value.str, "vec3") == 0 || strcmp(t->value.str, "vec4") == 0 || strcmp(t->value.str, "mat4") == 0 || strcmp(t->value.str, "mat3") == 0 || strcmp(t->value.str, "macro") == 0 ||
-                 strcmp(t->value.str, "funcion") == 0 || strcmp(t->value.str, "tarea") == 0)) {
-                char *ty = strdup(t->value.str);
+    if ((t->type == TOK_IDENTIFIER || t->type == TOK_KEYWORD) && t->value.str) {
+        /* Guardar posicion para backtrack si no es una declaracion */
+        size_t start_pos = p->pos;
+        char *ty = parse_full_type_name(p);
+        if (ty) {
+            const Token *name_tok = peek(p, 0);
+            /* Si despues del tipo viene un identificador, es una declaracion: Tipo var */
+            if (name_tok && (name_tok->type == TOK_IDENTIFIER || 
+                            (name_tok->type == TOK_KEYWORD && name_tok->value.str && keyword_ok_as_user_identifier(name_tok->value.str)))) {
+                char *nm = strdup(name_tok->value.str);
                 advance(p);
-
+                
                 /* Suffix opcional '?' para tipos opcionales (ej: mapa?) */
                 const Token *q_var = peek(p, 0);
                 if (q_var && q_var->type == TOK_OPERATOR && q_var->value.str && strcmp(q_var->value.str, "?") == 0) {
@@ -4195,23 +4220,16 @@ static ASTNode *parse_statement(Parser *p) {
                            strcmp(ty, "mapa") == 0 || strcmp(ty, "mapa?") == 0)) {
                     lista_el = parse_optional_lista_element_type(p);
                     if (p->last_error) {
-                        free(ty);
+                        free(ty); free(nm);
                         return NULL;
                     }
                 } else if (ty && (strcmp(ty, "tarea") == 0 || strcmp(ty, "tarea?") == 0)) {
                     if (!parse_optional_tarea_inner_type_after_tarea_keyword(p, &lista_el)) {
-                        free(ty);
+                        free(ty); free(nm);
                         return NULL;
                     }
                 }
-                const Token *name_tok = peek(p, 0);
-                if (!validate_user_defined_name_tok(p, name_tok)) {
-                    free(ty);
-                    free(lista_el);
-                    return NULL;
-                }
-                char *nm = name_tok && name_tok->value.str ? strdup(name_tok->value.str) : NULL;
-                advance(p);
+
                 ASTNode *val = NULL;
                 if (match(p, TOK_OPERATOR, "=")) {
                     if (strcmp(ty, "macro") == 0) {
@@ -4220,26 +4238,14 @@ static ASTNode *parse_statement(Parser *p) {
                         val = parse_expression(p);
                     }
                     if (!val) {
-                        if (!p->last_error && nm) {
-                            if (p->source_path && p->source_path[0])
-                                set_error_at(p, name_tok ? name_tok->line : 0, name_tok ? name_tok->column : 0,
-                                    "Archivo %s, linea %d, columna %d: no se pudo analizar la definicion de la macro `%s` (revisar parametros `( ... ) =>` y el cuerpo).",
-                                    p->source_path, name_tok ? name_tok->line : 0, name_tok ? name_tok->column : 0, nm);
-                            else
-                                set_error_at(p, name_tok ? name_tok->line : 0, name_tok ? name_tok->column : 0,
-                                    "linea %d, columna %d: no se pudo analizar la definicion de la macro `%s` (revisar parametros `( ... ) =>` y el cuerpo).",
-                                    name_tok ? name_tok->line : 0, name_tok ? name_tok->column : 0, nm);
-                        }
-                        free(ty);
-                        free(lista_el);
-                        free(nm);
+                        free(ty); free(nm); free(lista_el);
                         return NULL;
                     }
                 }
                 VarDeclNode *n = calloc(1, sizeof(VarDeclNode));
                 n->base.type = NODE_VAR_DECL;
-                n->base.line = name_tok ? name_tok->line : t->line;
-                n->base.col = name_tok ? name_tok->column : t->column;
+                n->base.line = name_tok->line;
+                n->base.col = name_tok->column;
                 n->type_name = ty;
                 n->name = nm;
                 n->value = val;
@@ -4247,102 +4253,67 @@ static ASTNode *parse_statement(Parser *p) {
                 n->list_element_type = lista_el;
                 return (ASTNode*)n;
             }
-            /* Tipo con nombre de registro (identificador): ej. Punto p [, = expr] */
-            if (t->type == TOK_IDENTIFIER) {
-                if (!validate_user_defined_name_tok(p, t)) return NULL;
-                if (!validate_user_defined_name_tok(p, nxt)) return NULL;
-                char *ty = strdup(t->value.str);
-                if (!ty) return NULL;
-                advance(p);
-                const Token *name_tok = peek(p, 0);
-                if (!name_tok || !name_tok->value.str) {
-                    free(ty);
-                    return NULL;
-                }
-                char *nm = strdup(name_tok->value.str);
-                if (!nm) {
-                    free(ty);
-                    return NULL;
-                }
-                advance(p);
-                ASTNode *val = NULL;
-                if (match(p, TOK_OPERATOR, "=")) {
-                    val = parse_expression(p);
-                    if (!val) {
-                        free(ty);
-                        free(nm);
-                        return NULL;
-                    }
-                }
-                VarDeclNode *n = calloc(1, sizeof(VarDeclNode));
-                n->base.type = NODE_VAR_DECL;
-                n->base.line = name_tok ? name_tok->line : t->line;
-                n->base.col = name_tok ? name_tok->column : t->column;
-                n->type_name = ty;
-                n->name = nm;
-                n->value = val;
-                n->is_const = 0;
-                return (ASTNode*)n;
-            }
+            /* No era una declaracion, backtrack */
+            free(ty);
+            p->pos = start_pos;
         }
-        /* Expresion completa (incluye i++, i + j, llamadas) o asignacion */
-        ASTNode *node = parse_expression(p);
-        if (!node) return NULL;
-        if (match(p, TOK_OPERATOR, "=")) {
-            ASTNode *expr = parse_expression(p);
+    }
+    /* Expresion completa (incluye i++, i + j, llamadas) o asignacion */
+    ASTNode *node = parse_expression(p);
+    if (!node) return NULL;
+    if (match(p, TOK_OPERATOR, "=")) {
+        ASTNode *expr = parse_expression(p);
+        AssignmentNode *a = calloc(1, sizeof(AssignmentNode));
+        a->base.type = NODE_ASSIGNMENT;
+        a->target = node;
+        a->expression = expr;
+        return (ASTNode*)a;
+    }
+    /* += -= *= /= %=  ->  target = target op rhs */
+    {
+        const Token *ct = peek(p, 0);
+        const char *binop = NULL;
+        if (ct && ct->type == TOK_OPERATOR && ct->value.str) {
+            if (strcmp(ct->value.str, "+=") == 0) binop = "+";
+            else if (strcmp(ct->value.str, "-=") == 0) binop = "-";
+            else if (strcmp(ct->value.str, "*=") == 0) binop = "*";
+            else if (strcmp(ct->value.str, "/=") == 0) binop = "/";
+            else if (strcmp(ct->value.str, "%=") == 0) binop = "%";
+        }
+        if (binop) {
+            if (node->type != NODE_IDENTIFIER) {
+                set_error_here(p, ct,
+                    "los operadores compuestos (+=, -=, *=, /=, %=) solo aplican a una variable simple");
+                ast_free(node);
+                return NULL;
+            }
+            advance(p);
+            ASTNode *rhs = parse_expression(p);
+            if (!rhs) {
+                ast_free(node);
+                return NULL;
+            }
+            ASTNode *lread = clone_identifier_for_compound((IdentifierNode*)node);
+            if (!lread) {
+                ast_free(node);
+                ast_free(rhs);
+                return NULL;
+            }
+            BinaryOpNode *bn = calloc(1, sizeof(BinaryOpNode));
+            bn->base.type = NODE_BINARY_OP;
+            bn->left = lread;
+            bn->right = rhs;
+            bn->operator = strdup_safe(binop);
+            bn->line = ct->line;
+            bn->col = ct->column;
             AssignmentNode *a = calloc(1, sizeof(AssignmentNode));
             a->base.type = NODE_ASSIGNMENT;
             a->target = node;
-            a->expression = expr;
+            a->expression = (ASTNode*)bn;
             return (ASTNode*)a;
         }
-        /* += -= *= /= %=  ->  target = target op rhs */
-        {
-            const Token *ct = peek(p, 0);
-            const char *binop = NULL;
-            if (ct && ct->type == TOK_OPERATOR && ct->value.str) {
-                if (strcmp(ct->value.str, "+=") == 0) binop = "+";
-                else if (strcmp(ct->value.str, "-=") == 0) binop = "-";
-                else if (strcmp(ct->value.str, "*=") == 0) binop = "*";
-                else if (strcmp(ct->value.str, "/=") == 0) binop = "/";
-                else if (strcmp(ct->value.str, "%=") == 0) binop = "%";
-            }
-            if (binop) {
-                if (node->type != NODE_IDENTIFIER) {
-                    set_error_here(p, ct,
-                        "los operadores compuestos (+=, -=, *=, /=, %=) solo aplican a una variable simple");
-                    ast_free(node);
-                    return NULL;
-                }
-                advance(p);
-                ASTNode *rhs = parse_expression(p);
-                if (!rhs) {
-                    ast_free(node);
-                    return NULL;
-                }
-                ASTNode *lread = clone_identifier_for_compound((IdentifierNode*)node);
-                if (!lread) {
-                    ast_free(node);
-                    ast_free(rhs);
-                    return NULL;
-                }
-                BinaryOpNode *bn = calloc(1, sizeof(BinaryOpNode));
-                bn->base.type = NODE_BINARY_OP;
-                bn->left = lread;
-                bn->right = rhs;
-                bn->operator = strdup_safe(binop);
-                bn->line = ct->line;
-                bn->col = ct->column;
-                AssignmentNode *a = calloc(1, sizeof(AssignmentNode));
-                a->base.type = NODE_ASSIGNMENT;
-                a->target = node;
-                a->expression = (ASTNode*)bn;
-                return (ASTNode*)a;
-            }
-        }
-        return node;
     }
-    return NULL;
+    return node;
 }
 
 static ASTNode *parse_function(Parser *p, int is_exported, int is_async) {
@@ -4396,24 +4367,21 @@ static ASTNode *parse_function(Parser *p, int is_exported, int is_async) {
                     return NULL;
                 }
             } else {
-                const Token *ty = advance(p);
-                ty_err = ty;
-                if (!is_decl_type_token(ty) &&
-                    !(ty && ty->type == TOK_IDENTIFIER && validate_user_defined_name_tok(p, ty))) {
+                type_str = parse_full_type_name(p);
+                if (!type_str) {
                     if (p->source_path && p->source_path[0])
-                        set_error_at(p, ty ? ty->line : 0, ty ? ty->column : 0,
+                        set_error_at(p, ty_err ? ty_err->line : 0, ty_err ? ty_err->column : 0,
                                   "Archivo %s, linea %d, columna %d: parametro invalido en firma de funcion. Se esperaba un tipo (entero/texto/flotante/...), pero se encontro `%s`.",
-                                  p->source_path, ty ? ty->line : 0, ty ? ty->column : 0, ty && ty->value.str ? ty->value.str : "EOF");
+                                  p->source_path, ty_err ? ty_err->line : 0, ty_err ? ty_err->column : 0, ty_err && ty_err->value.str ? ty_err->value.str : "EOF");
                     else
-                        set_error_at(p, ty ? ty->line : 0, ty ? ty->column : 0,
+                        set_error_at(p, ty_err ? ty_err->line : 0, ty_err ? ty_err->column : 0,
                                   "linea %d, columna %d: parametro invalido en firma de funcion. Se esperaba un tipo (entero/texto/flotante/...), pero se encontro `%s`.",
-                                  ty ? ty->line : 0, ty ? ty->column : 0, ty && ty->value.str ? ty->value.str : "EOF");
+                                  ty_err ? ty_err->line : 0, ty_err ? ty_err->column : 0, ty_err && ty_err->value.str ? ty_err->value.str : "EOF");
                     for (size_t k = 0; k < params.n; k++) ast_free((ASTNode *)params.arr[k]);
                     free(params.arr);
                     free(name);
                     return NULL;
                 }
-                type_str = ty && ty->value.str ? strdup(ty->value.str) : NULL;
             }
             
             /* Suffix opcional '?' para tipos opcionales */
@@ -4600,11 +4568,21 @@ static int struct_kw_is_closer(const char *kw, int is_clase) {
 }
 
 /* Tras consumir `registro` o `clase` desde el nivel superior. */
-static ASTNode *parse_struct_body(Parser *p, int is_clase, int is_exported) {
+static ASTNode *parse_struct_body(Parser *p, int is_clase, int is_exported, const char *parent_name) {
     const Token *nt = peek(p, 0);
     if (!validate_user_defined_name_tok(p, nt)) return NULL;
     advance(p);
-    char *name = nt && nt->value.str ? strdup(nt->value.str) : NULL;
+    
+    char *raw_name = nt && nt->value.str ? strdup(nt->value.str) : NULL;
+    char *name = NULL;
+    if (parent_name && raw_name) {
+        name = malloc(strlen(parent_name) + strlen(raw_name) + 2);
+        sprintf(name, "%s.%s", parent_name, raw_name);
+        free(raw_name);
+    } else {
+        name = raw_name;
+    }
+    
     char *extends_name = NULL;
     if (peek(p, 0) && peek(p, 0)->type == TOK_KEYWORD && peek(p, 0)->value.str &&
         strcmp(peek(p, 0)->value.str, "extiende") == 0) {
@@ -4624,6 +4602,9 @@ static ASTNode *parse_struct_body(Parser *p, int is_clase, int is_exported) {
     ASTNode **methods = NULL;
     int *mv = NULL;
     size_t nm = 0, mcap = 0;
+
+    ASTNode **nested = NULL;
+    size_t nn_structs = 0, ncap = 0;
 
     while (peek(p, 0)) {
         const Token *phead = peek(p, 0);
@@ -4658,6 +4639,19 @@ static ASTNode *parse_struct_body(Parser *p, int is_clase, int is_exported) {
                 nm++;
                 continue;
             }
+            if (strcmp(kw, "registro") == 0 || strcmp(kw, "clase") == 0) {
+                advance(p);
+                int nested_is_clase = (strcmp(kw, "clase") == 0);
+                ASTNode *nested_node = parse_struct_body(p, nested_is_clase, 0, name);
+                if (!nested_node) goto parse_struct_body_fail;
+                
+                if (nn_structs >= ncap) {
+                    ncap = ncap ? ncap * 2 : 4;
+                    nested = realloc(nested, ncap * sizeof(ASTNode*));
+                }
+                nested[nn_structs++] = nested_node;
+                continue;
+            }
             if (is_clase && strcmp(kw, "fin_registro") == 0) {
                 set_error_at(p, tblk->line, tblk->column, "Cierre de clase '%s' debe ser `fin_clase`.", name);
                 goto parse_struct_body_fail;
@@ -4667,7 +4661,6 @@ static ASTNode *parse_struct_body(Parser *p, int is_clase, int is_exported) {
                 goto parse_struct_body_fail;
             }
             if (strcmp(kw, "principal") == 0 || strcmp(kw, "asincrono") == 0 ||
-                strcmp(kw, "registro") == 0 || strcmp(kw, "clase") == 0 ||
                 strcmp(kw, "extiende") == 0 ||
                 strcmp(kw, "activar_modulo") == 0 || strcmp(kw, "usar") == 0 || strcmp(kw, "fin_principal") == 0) {
                 goto parse_struct_body_fail;
@@ -4769,6 +4762,8 @@ static ASTNode *parse_struct_body(Parser *p, int is_clase, int is_exported) {
     sn->methods = methods;
     sn->method_visibilities = mv;
     sn->n_methods = nm;
+    sn->nested_structs = nested;
+    sn->n_nested_structs = nn_structs;
     sn->is_exported = is_exported;
     return (ASTNode*)sn;
 
@@ -4777,6 +4772,8 @@ parse_struct_body_fail:
     free(ft); free(fn); free(fv);
     for (size_t i = 0; i < nm; i++) ast_free(methods[i]);
     free(methods); free(mv);
+    for (size_t i = 0; i < nn_structs; i++) ast_free(nested[i]);
+    free(nested);
     free(name); free(extends_name);
     return NULL;
 }
@@ -5040,7 +5037,7 @@ ASTNode *parser_parse(Parser *p) {
                         }
                         if (strcmp(nx->value.str, "clase") == 0) {
                             advance(p);
-                            ASTNode *sd = parse_struct_body(p, 1, 1);
+                            ASTNode *sd = parse_struct_body(p, 1, 1, NULL);
                             if (sd) {
                                 node_vec_push(&globals, sd);
                             } else if (p->last_error) {
@@ -5053,7 +5050,7 @@ ASTNode *parser_parse(Parser *p) {
                         }
                         if (strcmp(nx->value.str, "registro") == 0) {
                             advance(p);
-                            ASTNode *sd = parse_struct_body(p, 0, 1);
+                            ASTNode *sd = parse_struct_body(p, 0, 1, NULL);
                             if (sd) {
                                 node_vec_push(&globals, sd);
                             } else if (p->last_error) {
@@ -5180,7 +5177,7 @@ ASTNode *parser_parse(Parser *p) {
             }
             if (strcmp(t->value.str, "registro") == 0) {
                 advance(p);
-                ASTNode *sd = parse_struct_body(p, 0, 0);
+                ASTNode *sd = parse_struct_body(p, 0, 0, NULL);
                 if (sd) {
                     node_vec_push(&globals, sd);
                 } else if (p->last_error) {
@@ -5195,7 +5192,7 @@ ASTNode *parser_parse(Parser *p) {
             }
             if (strcmp(t->value.str, "clase") == 0) {
                 advance(p);
-                ASTNode *sd = parse_struct_body(p, 1, 0);
+                ASTNode *sd = parse_struct_body(p, 1, 0, NULL);
                 if (sd) {
                     node_vec_push(&globals, sd);
                 } else if (p->last_error) {

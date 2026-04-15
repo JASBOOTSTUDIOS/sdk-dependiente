@@ -2100,6 +2100,33 @@ static void emit_format_struct_string_reg(CodeGen *cg, const char *struct_name, 
 
 static int get_func_label(CodeGen *cg, const char *name) {
     if (!name) return -1;
+
+    /* Intentar buscar en la cadena de herencia si es un método de clase */
+    /* Para clases anidadas (ej: A.B.metodo), el separador es el ÚLTIMO punto. */
+    const char *dot = strrchr(name, '.');
+    if (dot) {
+        char class_name[128];
+        size_t len = dot - name;
+        if (len >= sizeof(class_name)) len = sizeof(class_name) - 1;
+        memcpy(class_name, name, len);
+        class_name[len] = '\0';
+        const char *method_name = dot + 1;
+
+        const char *curr_class = class_name;
+        while (curr_class) {
+            char full_name[256];
+            snprintf(full_name, sizeof(full_name), "%s.%s", curr_class, method_name);
+            for (size_t i = 0; i < cg->n_funcs; i++) {
+                if (cg->func_names[i] && strcmp(cg->func_names[i], full_name) == 0)
+                    return cg->func_labels[i];
+            }
+            /* Subir en la jerarquía */
+            StructInfo *si = sym_get_struct_info(&cg->sym, curr_class);
+            if (!si || !si->base_name) break;
+            curr_class = si->base_name;
+        }
+    }
+
     for (size_t i = 0; i < cg->n_funcs; i++)
         if (cg->func_names[i] && strcmp(cg->func_names[i], name) == 0)
             return cg->func_labels[i];
@@ -2107,8 +2134,9 @@ static int get_func_label(CodeGen *cg, const char *name) {
 }
 
 static const char *get_member_chain_type(CodeGen *cg, ASTNode *node) {
-    if (is_node(node, NODE_IDENTIFIER))
+    if (is_node(node, NODE_IDENTIFIER)) {
         return sym_lookup_type(&cg->sym, ((IdentifierNode*)node)->name);
+    }
     if (is_node(node, NODE_MEMBER_ACCESS)) {
         MemberAccessNode *man = (MemberAccessNode*)node;
         const char *base_type = get_member_chain_type(cg, man->target);
@@ -7034,6 +7062,93 @@ static void emit_call_args_preserved_offset(CodeGen *cg, ASTNode **args, size_t 
     free(tmp_slots);
 }
 
+static void codegen_register_structs_recursive(CodeGen *cg, ASTNode *node) {
+    if (!node || node->type != NODE_STRUCT_DEF) return;
+    StructDefNode *sd = (StructDefNode*)node;
+    
+    const char **mnames = sd->n_methods ? malloc(sd->n_methods * sizeof(char*)) : NULL;
+    void **masts = sd->n_methods ? malloc(sd->n_methods * sizeof(void*)) : NULL;
+    for (size_t j = 0; j < sd->n_methods; j++) {
+        mnames[j] = ((FunctionNode*)sd->methods[j])->name;
+        masts[j] = sd->methods[j];
+    }
+
+    if (sd->extends_name && sd->extends_name[0]) {
+        int er = sym_register_class_extends(&cg->sym, sd->name, sd->extends_name,
+            (const char**)sd->field_types, (const char**)sd->field_names, sd->field_visibilities, sd->n_fields,
+            masts, mnames, sd->method_visibilities, sd->n_methods, sd->is_exported);
+        if (er == -1) {
+            cg->has_error = 1;
+            cg->err_line = sd->base.line;
+            cg->err_col = sd->base.col;
+            snprintf(cg->last_error, CODEGEN_ERROR_MAX,
+                "clase/registro '%s': tipo base '%s' no registrado",
+                sd->name ? sd->name : "?", sd->extends_name);
+        } else if (er == -2) {
+            cg->has_error = 1;
+            cg->err_line = sd->base.line;
+            cg->err_col = sd->base.col;
+            snprintf(cg->last_error, CODEGEN_ERROR_MAX,
+                "clase '%s': campo duplicado respecto a la base '%s'",
+                sd->name ? sd->name : "?", sd->extends_name);
+        }
+    } else {
+        sym_register_class(&cg->sym, sd->name, (const char**)sd->field_types,
+                           (const char**)sd->field_names, sd->field_visibilities, sd->n_fields,
+                           masts, mnames, sd->method_visibilities, sd->n_methods, sd->is_exported);
+    }
+    if (mnames) free(mnames);
+    if (masts) free(masts);
+
+    for (size_t i = 0; i < sd->n_nested_structs; i++) {
+        codegen_register_structs_recursive(cg, sd->nested_structs[i]);
+    }
+}
+
+static size_t codegen_count_functions_recursive(ASTNode *node) {
+    if (!node || node->type != NODE_STRUCT_DEF) return 0;
+    StructDefNode *sd = (StructDefNode*)node;
+    size_t count = sd->n_methods;
+    for (size_t i = 0; i < sd->n_nested_structs; i++) {
+        count += codegen_count_functions_recursive(sd->nested_structs[i]);
+    }
+    return count;
+}
+
+static void codegen_register_func_labels_recursive(CodeGen *cg, ASTNode *node, size_t *idx) {
+    if (!node || node->type != NODE_STRUCT_DEF) return;
+    StructDefNode *sd = (StructDefNode*)node;
+    
+    for (size_t j = 0; j < sd->n_methods; j++) {
+        FunctionNode *fn = (FunctionNode*)sd->methods[j];
+        char *full_name = malloc(256);
+        snprintf(full_name, 256, "%s.%s", sd->name, fn->name);
+        cg->func_names[*idx] = full_name;
+        cg->func_return_types[*idx] = fn->return_type ? fn->return_type : "entero";
+        cg->func_return_task_elems[*idx] = fn->return_task_elem;
+        cg->func_labels[*idx] = new_label(cg);
+        (*idx)++;
+    }
+
+    for (size_t i = 0; i < sd->n_nested_structs; i++) {
+        codegen_register_func_labels_recursive(cg, sd->nested_structs[i], idx);
+    }
+}
+
+static void codegen_visit_functions_recursive(CodeGen *cg, ASTNode *node, size_t *f_idx) {
+    if (!node || node->type != NODE_STRUCT_DEF) return;
+    StructDefNode *sd = (StructDefNode*)node;
+    
+    for (size_t j = 0; j < sd->n_methods; j++) {
+        if (cg->func_labels) mark_label(cg, cg->func_labels[(*f_idx)++]);
+        visit_function(cg, sd->methods[j], sd->name);
+    }
+
+    for (size_t i = 0; i < sd->n_nested_structs; i++) {
+        codegen_visit_functions_recursive(cg, sd->nested_structs[i], f_idx);
+    }
+}
+
 uint8_t *codegen_generate(CodeGen *cg, ASTNode *ast, size_t *out_len) {
     if (!ast || ast->type != NODE_PROGRAM) return NULL;
     ProgramNode *p = (ProgramNode*)ast;
@@ -7064,43 +7179,7 @@ uint8_t *codegen_generate(CodeGen *cg, ASTNode *ast, size_t *out_len) {
 
     /* Registrar structs / clases desde globals */
     for (size_t i = 0; i < p->n_globals; i++) {
-        ASTNode *g = p->globals[i];
-        if (g && g->type == NODE_STRUCT_DEF) {
-            StructDefNode *sd = (StructDefNode*)g;
-            const char **mnames = sd->n_methods ? malloc(sd->n_methods * sizeof(char*)) : NULL;
-            void **masts = sd->n_methods ? malloc(sd->n_methods * sizeof(void*)) : NULL;
-            for (size_t j = 0; j < sd->n_methods; j++) {
-                mnames[j] = ((FunctionNode*)sd->methods[j])->name;
-                masts[j] = sd->methods[j];
-            }
-
-            if (sd->extends_name && sd->extends_name[0]) {
-                int er = sym_register_class_extends(&cg->sym, sd->name, sd->extends_name,
-                    (const char**)sd->field_types, (const char**)sd->field_names, sd->field_visibilities, sd->n_fields,
-                    masts, mnames, sd->method_visibilities, sd->n_methods, sd->is_exported);
-                if (er == -1) {
-                    cg->has_error = 1;
-                    cg->err_line = sd->base.line;
-                    cg->err_col = sd->base.col;
-                    snprintf(cg->last_error, CODEGEN_ERROR_MAX,
-                        "clase/registro '%s': tipo base '%s' no registrado",
-                        sd->name ? sd->name : "?", sd->extends_name);
-                } else if (er == -2) {
-                    cg->has_error = 1;
-                    cg->err_line = sd->base.line;
-                    cg->err_col = sd->base.col;
-                    snprintf(cg->last_error, CODEGEN_ERROR_MAX,
-                        "clase '%s': campo duplicado respecto a la base '%s'",
-                        sd->name ? sd->name : "?", sd->extends_name);
-                }
-            } else {
-                sym_register_class(&cg->sym, sd->name, (const char**)sd->field_types,
-                                   (const char**)sd->field_names, sd->field_visibilities, sd->n_fields,
-                                   masts, mnames, sd->method_visibilities, sd->n_methods, sd->is_exported);
-            }
-            if (mnames) free(mnames);
-            if (masts) free(masts);
-        }
+        codegen_register_structs_recursive(cg, p->globals[i]);
     }
     /* Global VarDecls + init (macros/lambdas: misma ruta que visit_statement) */
     for (size_t i = 0; i < p->n_globals; i++) {
@@ -7140,12 +7219,15 @@ uint8_t *codegen_generate(CodeGen *cg, ASTNode *ast, size_t *out_len) {
         }
     }
 
+    /* Registrar structs / clases desde globals */
+    for (size_t i = 0; i < p->n_globals; i++) {
+        codegen_register_structs_recursive(cg, p->globals[i]);
+    }
+
     /* Registrar labels de funciones (globales + metodos) para CallNode */
     size_t total_funcs = p->n_funcs;
     for (size_t i = 0; i < p->n_globals; i++) {
-        if (p->globals[i]->type == NODE_STRUCT_DEF) {
-            total_funcs += ((StructDefNode*)p->globals[i])->n_methods;
-        }
+        total_funcs += codegen_count_functions_recursive(p->globals[i]);
     }
 
     cg->n_funcs = total_funcs;
@@ -7165,19 +7247,7 @@ uint8_t *codegen_generate(CodeGen *cg, ASTNode *ast, size_t *out_len) {
                 idx++;
             }
             for (size_t i = 0; i < p->n_globals; i++) {
-                if (p->globals[i]->type == NODE_STRUCT_DEF) {
-                    StructDefNode *sd = (StructDefNode*)p->globals[i];
-                    for (size_t j = 0; j < sd->n_methods; j++) {
-                        FunctionNode *fn = (FunctionNode*)sd->methods[j];
-                        char *full_name = malloc(256);
-                        snprintf(full_name, 256, "%s.%s", sd->name, fn->name);
-                        cg->func_names[idx] = full_name;
-                        cg->func_return_types[idx] = fn->return_type ? fn->return_type : "entero";
-                        cg->func_return_task_elems[idx] = fn->return_task_elem;
-                        cg->func_labels[idx] = new_label(cg);
-                        idx++;
-                    }
-                }
+                codegen_register_func_labels_recursive(cg, p->globals[i], &idx);
             }
         }
     }
@@ -7193,13 +7263,7 @@ uint8_t *codegen_generate(CodeGen *cg, ASTNode *ast, size_t *out_len) {
         visit_function(cg, p->functions[i], NULL);
     }
     for (size_t i = 0; i < p->n_globals; i++) {
-        if (p->globals[i]->type == NODE_STRUCT_DEF) {
-            StructDefNode *sd = (StructDefNode*)p->globals[i];
-            for (size_t j = 0; j < sd->n_methods; j++) {
-                if (cg->func_labels) mark_label(cg, cg->func_labels[f_idx++]);
-                visit_function(cg, sd->methods[j], sd->name);
-            }
-        }
+        codegen_visit_functions_recursive(cg, p->globals[i], &f_idx);
     }
 
     mark_label(cg, main_id);
