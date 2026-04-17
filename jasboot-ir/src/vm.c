@@ -7849,6 +7849,17 @@ int vm_step(VM* vm) {
             uint32_t id1 = (uint32_t)a_val;
             uint32_t id2 = (uint32_t)b_val;
             uint32_t tipo = (uint32_t)(c_val & 0xFFu);
+            
+            // Robustez: Si tipo es un ID de cadena (p.ej. "secuencia"), resolverlo
+            if (c_val > 255) {
+                const char* t_str = vm_text_cache_get(vm, (uint32_t)c_val);
+                if (t_str) {
+                    if (strcmp(t_str, "secuencia") == 0) tipo = 3; // JMN_RELACION_SECUENCIA
+                    else if (strcmp(t_str, "similitud") == 0) tipo = 1; // JMN_RELACION_SIMILITUD
+                    else if (strcmp(t_str, "oposicion") == 0) tipo = 2; // JMN_RELACION_OPOSICION
+                }
+            }
+
             uint32_t peso_x1000 = (uint32_t)((c_val >> 8) & 0xFFFFu);
             float peso = (peso_x1000 != 0) ? ((float)peso_x1000 / 1000.0f) : 1.0f;
 
