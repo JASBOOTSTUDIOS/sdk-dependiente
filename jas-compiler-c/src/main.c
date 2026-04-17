@@ -408,11 +408,7 @@ static int should_merge_global_var(const VarDeclNode *vd, const ProgramNode *mp,
 
     if (!is_exported) return 0;
     if (spec->import_kind == USAR_IMPORT_TODO) return 1;
-    if (spec->import_kind == USAR_IMPORT_NAMES) {
-        for (size_t i = 0; i < spec->n_import_names; i++) {
-            if (strcmp(spec->import_names[i], vd->name) == 0) return 1;
-        }
-    }
+    if (spec->import_kind == USAR_IMPORT_NAMES) return 1;
     return 0;
 }
 
@@ -440,11 +436,7 @@ static int should_merge_struct(const ASTNode *g, const ProgramNode *mp, const Ac
 
     if (!is_exported) return 0;
     if (spec->import_kind == USAR_IMPORT_TODO) return 1;
-    if (spec->import_kind == USAR_IMPORT_NAMES) {
-        for (size_t i = 0; i < spec->n_import_names; i++) {
-            if (strcmp(spec->import_names[i], sd->name) == 0) return 1;
-        }
-    }
+    if (spec->import_kind == USAR_IMPORT_NAMES) return 1;
     return 0;
 }
 

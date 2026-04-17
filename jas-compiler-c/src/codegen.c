@@ -1597,7 +1597,7 @@ static const char *get_return_type_from_block(CodeGen *cg, ASTNode *node) {
 }
 
 static const char *get_expression_type(CodeGen *cg, ASTNode *node) {
-    if (!node) return "entero";
+    if (!node) return "elemento";
     if (is_node(node, NODE_LITERAL)) return ((LiteralNode*)node)->type_name ? ((LiteralNode*)node)->type_name : "entero";
     if (is_node(node, NODE_IDENTIFIER)) {
         const char *name = ((IdentifierNode*)node)->name;
@@ -1606,10 +1606,10 @@ static const char *get_expression_type(CodeGen *cg, ASTNode *node) {
             !codegen_lookup_type_in_scope_range(cg, name, cg->current_lambda_scope_base)) {
             for (size_t i = 0; i < cg->current_lambda_capture_count; i++) {
                 if (strcmp(cg->current_lambda_capture_names[i], name) == 0)
-                    return cg->current_lambda_capture_types[i] ? cg->current_lambda_capture_types[i] : "entero";
+                    return cg->current_lambda_capture_types[i] ? cg->current_lambda_capture_types[i] : "elemento";
             }
         }
-        return t ? t : "entero";
+        return t ? t : "elemento";
     }
     if (is_node(node, NODE_BINARY_OP)) {
         const char *lt = get_expression_type(cg, ((BinaryOpNode*)node)->left);
@@ -1618,14 +1618,14 @@ static const char *get_expression_type(CodeGen *cg, ASTNode *node) {
         if (rt && strcmp(rt, "flotante") == 0) return "flotante";
         if (lt && strcmp(lt, "texto") == 0) return "texto";
         if (rt && strcmp(rt, "texto") == 0) return "texto";
-        if (lt && rt && strcmp(lt, rt) == 0 && (strcmp(lt, "vec2") == 0 || strcmp(lt, "vec3") == 0 || strcmp(lt, "vec4") == 0))
+        if (lt && rt && strcmp(lt, rt) == 0 && (strcmp(lt, "vec2") == 0 || strcmp(lt, "vec3") == 0 || strcmp(lt, "vec4") == 0 || strcmp(lt, "entero") == 0))
             return lt;
     }
     if (is_node(node, NODE_POSTFIX_UPDATE))
         return get_expression_type(cg, ((PostfixUpdateNode*)node)->target);
     if (is_node(node, NODE_INDEX_ACCESS)) {
         const char *t = get_expression_type(cg, ((IndexAccessNode*)node)->target);
-        return t ? t : "entero";
+        return t ? t : "elemento";
     }
     if (is_node(node, NODE_TERNARY)) {
         const char *tt = get_expression_type(cg, ((TernaryNode*)node)->true_expr);
@@ -1675,14 +1675,14 @@ static const char *get_expression_type(CodeGen *cg, ASTNode *node) {
                         snprintf(full_name, sizeof(full_name), "%s.%s", curr, ma->member);
                         for (size_t i = 0; i < cg->n_funcs; i++) {
                             if (cg->func_names[i] && strcmp(cg->func_names[i], full_name) == 0)
-                                return cg->func_return_types[i] ? cg->func_return_types[i] : "entero";
+                                return cg->func_return_types[i] ? cg->func_return_types[i] : "elemento";
                         }
                         StructInfo *si = sym_get_struct_info(&cg->sym, curr);
                         curr = (si && si->base_name) ? si->base_name : NULL;
                     }
                 }
             }
-            return "entero";
+            return "elemento";
         }
         /* Incorporados con retorno texto: deben ir ANTES del lookup como `funcion` en sym (si no, se devuelve "entero"
          * y texto+str_desde_numero vuelve a emitir OP_STR_DESDE_NUMERO sobre el id de cadena -> "5861576"). */
@@ -1705,7 +1705,7 @@ static const char *get_expression_type(CodeGen *cg, ASTNode *node) {
                     snprintf(full_name, sizeof(full_name), "%s.%s", curr, cn->name);
                     for (size_t i = 0; i < cg->n_funcs; i++) {
                         if (cg->func_names[i] && strcmp(cg->func_names[i], full_name) == 0)
-                            return cg->func_return_types[i] ? cg->func_return_types[i] : "entero";
+                            return cg->func_return_types[i] ? cg->func_return_types[i] : "elemento";
                     }
                     StructInfo *si = sym_get_struct_info(&cg->sym, curr);
                     curr = (si && si->base_name) ? si->base_name : NULL;
@@ -1715,12 +1715,12 @@ static const char *get_expression_type(CodeGen *cg, ASTNode *node) {
             /* 3. Luego funciones globales o variables de tipo funcion */
             for (size_t i = 0; i < cg->n_funcs; i++) {
                 if (cg->func_names[i] && strcmp(cg->func_names[i], cn->name) == 0)
-                    return cg->func_return_types[i] ? cg->func_return_types[i] : "entero";
+                    return cg->func_return_types[i] ? cg->func_return_types[i] : "elemento";
             }
             SymResult vr = sym_lookup(&cg->sym, cn->name);
             const char *vty = vr.found ? sym_lookup_type(&cg->sym, cn->name) : NULL;
             if (vr.found && !vr.macro_ast && vty && strcmp(vty, "funcion") == 0)
-                return "entero";
+                return "elemento";
         }
         if (cn->name && (strcmp(cn->name, "vec2") == 0 && cn->n_args == 2)) return "vec2";
         if (cn->name && (strcmp(cn->name, "vec3") == 0 && cn->n_args == 3)) return "vec3";
@@ -1803,16 +1803,16 @@ static const char *get_expression_type(CodeGen *cg, ASTNode *node) {
                 snprintf(full_name, sizeof(full_name), "%s.%s", cg->current_class_name, cn->name);
                 for (size_t i = 0; i < cg->n_funcs; i++) {
                     if (cg->func_names[i] && strcmp(cg->func_names[i], full_name) == 0)
-                        return cg->func_return_types[i] ? cg->func_return_types[i] : "entero";
+                        return cg->func_return_types[i] ? cg->func_return_types[i] : "elemento";
                 }
             }
         }
         if (cn->name && cg->ext_func_return_types) {
             for (size_t i = 0; i < cg->n_ext_funcs; i++)
                 if (cg->ext_func_names[i] && strcmp(cg->ext_func_names[i], cn->name) == 0)
-                    return cg->ext_func_return_types[i] ? cg->ext_func_return_types[i] : "entero";
+                    return cg->ext_func_return_types[i] ? cg->ext_func_return_types[i] : "elemento";
         }
-        return "entero";
+        return "elemento";
     }
     if (is_node(node, NODE_BLOCK)) {
         const char *t = get_return_type_from_block(cg, node);
@@ -1828,9 +1828,9 @@ static const char *get_expression_type(CodeGen *cg, ASTNode *node) {
             const char *ft = get_member_chain_type(cg, node);
             if (ft) return ft;
         }
-        return "entero";
+        return "elemento";
     }
-    return "entero";
+    return "elemento";
 }
 
 /* Llamadas sistema que ya dejan un id de texto en registro; no aplicar OP_STR_DESDE_NUMERO otra vez en texto+... */
@@ -4036,8 +4036,7 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
             return 1;
         }
         if (cn->n_args == 0) {
-            int id = ++cg->literal_counter;
-            emit(cg, OP_MOVER, dest_reg, id & 0xFF, (id >> 8) & 0xFF, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
+            emit(cg, OP_MOVER, dest_reg, 0, 0, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
             emit(cg, OP_MEM_LISTA_CREAR, dest_reg, dest_reg, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
         } else if (is_node(ARG0, NODE_LITERAL) && ((LiteralNode*)ARG0)->type_name && strcmp(((LiteralNode*)ARG0)->type_name, "texto") == 0) {
             size_t off = add_string(cg, ((LiteralNode*)ARG0)->value.str ? ((LiteralNode*)ARG0)->value.str : "");
@@ -4094,6 +4093,22 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         emit(cg, OP_MOVER, dest_reg, 1, 0, IR_INST_FLAG_B_REGISTER);
         return 1;
     }
+    if (strcmp(name, "lista_poner") == 0 || strcmp(name, "mem_lista_poner") == 0) {
+        if (cn->n_args < 3) {
+            codegen_error_sistema_lista_arity(cg, cn, name, cn->n_args, 3,
+                "lista, indice (entero) y valor",
+                "lista_poner(mi_lista, 0, valor) o mem_lista_poner(mi_lista, 0, valor)");
+            return 1;
+        }
+        visit_expression(cg, ARG0, dest_reg + 1);
+        visit_expression(cg, ARG1, dest_reg + 2);
+        visit_expression(cg, ARG2, dest_reg + 3);
+        
+        emit(cg, OP_MEM_LISTA_PONER, (uint8_t)(dest_reg + 1), (uint8_t)(dest_reg + 2), (uint8_t)(dest_reg + 3), 
+             IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
+        emit(cg, OP_MOVER, dest_reg, dest_reg + 1, 0, IR_INST_FLAG_B_REGISTER);
+        return 1;
+    }
     if (strcmp(name, "lista_obtener") == 0 || strcmp(name, "mem_lista_obtener") == 0) {
         if (cn->n_args < 2) {
             codegen_error_sistema_lista_arity(cg, cn, name, cn->n_args, 2,
@@ -4103,7 +4118,8 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         }
         visit_expression(cg, ARG0, dest_reg + 1);
         visit_expression(cg, ARG1, dest_reg + 2);
-        emit(cg, OP_MEM_LISTA_OBTENER, dest_reg, dest_reg + 1, dest_reg + 2, 0);
+        emit(cg, OP_MEM_LISTA_OBTENER, (uint8_t)dest_reg, (uint8_t)(dest_reg + 1), (uint8_t)(dest_reg + 2), 
+             IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
         return 1;
     }
     if (strcmp(name, "lista_tamano") == 0 || strcmp(name, "mem_lista_tamano") == 0) {
@@ -4462,26 +4478,59 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
     }
     if (strcmp(name, "str_a_entero") == 0 || strcmp(name, "convertir_entero") == 0) {
         if (!ARG0) {
-            sistema_error_sin_argumentos(cg, name, "texto: cadena a interpretar como entero", cn->base.line, cn->base.col);
+            sistema_error_sin_argumentos(cg, name, "texto, flotante o entero: valor a convertir", cn->base.line, cn->base.col);
             return 1;
         }
+        const char *t = get_expression_type(cg, ARG0);
         visit_expression(cg, ARG0, dest_reg + 1);
-        emit(cg, OP_STR_A_ENTERO, dest_reg, dest_reg + 1, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+        if (t && strcmp(t, "entero") == 0) {
+            emit(cg, OP_MOVER, dest_reg, dest_reg + 1, 0, IR_INST_FLAG_B_REGISTER);
+        } else if (t && strcmp(t, "flotante") == 0) {
+            emit(cg, OP_CONV_F2I, dest_reg, dest_reg + 1, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+        } else if (t && strcmp(t, "elemento") == 0) {
+            emit(cg, OP_CONV_ANY2I, dest_reg, dest_reg + 1, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+        } else {
+            /* Por defecto asumimos texto para str_a_entero */
+            emit(cg, OP_STR_A_ENTERO, dest_reg, dest_reg + 1, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+        }
         return 1;
     }
     if (strcmp(name, "str_a_flotante") == 0 || strcmp(name, "convertir_flotante") == 0) {
         if (!ARG0) {
-            sistema_error_sin_argumentos(cg, name, "texto: cadena a interpretar como flotante", cn->base.line, cn->base.col);
+            sistema_error_sin_argumentos(cg, name, "texto, entero o flotante: valor a convertir", cn->base.line, cn->base.col);
             return 1;
         }
+        const char *t = get_expression_type(cg, ARG0);
         visit_expression(cg, ARG0, dest_reg + 1);
-        emit(cg, OP_STR_A_FLOTANTE, dest_reg, dest_reg + 1, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+        if (t && strcmp(t, "flotante") == 0) {
+            emit(cg, OP_MOVER, dest_reg, dest_reg + 1, 0, IR_INST_FLAG_B_REGISTER);
+        } else if (t && strcmp(t, "entero") == 0) {
+            emit(cg, OP_CONV_I2F, dest_reg, dest_reg + 1, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+        } else if (t && strcmp(t, "elemento") == 0) {
+            emit(cg, OP_CONV_ANY2F, dest_reg, dest_reg + 1, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+        } else {
+            /* Por defecto asumimos texto para str_a_flotante */
+            emit(cg, OP_STR_A_FLOTANTE, dest_reg, dest_reg + 1, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+        }
         return 1;
     }
-    if (strcmp(name, "str_desde_numero") == 0) {
+    if (strcmp(name, "str_desde_numero") == 0 || strcmp(name, "texto_desde_numero") == 0) {
         if (!ARG0) return 0;
+        const char *t = get_expression_type(cg, ARG0);
+        int is_flt = (t && strcmp(t, "flotante") == 0);
+        int is_int = (t && strcmp(t, "entero") == 0);
         visit_expression(cg, ARG0, dest_reg + 1);
-        emit(cg, OP_STR_DESDE_NUMERO, dest_reg, dest_reg + 1, 1, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE);
+        if (is_flt) {
+            emit(cg, OP_STR_DESDE_NUMERO, (uint8_t)dest_reg, (uint8_t)(dest_reg + 1), 0, 
+                 IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE);
+        } else if (is_int) {
+            emit(cg, OP_STR_DESDE_NUMERO, (uint8_t)dest_reg, (uint8_t)(dest_reg + 1), 1, 
+                 IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE);
+        } else {
+            /* Caso por defecto: Delegar a la VM para decidir si es int o float (elemento, etc) */
+            emit(cg, OP_STR_DESDE_ANY, (uint8_t)dest_reg, (uint8_t)(dest_reg + 1), 0, 
+                 IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+        }
         return 1;
     }
     if (strcmp(name, "decimal") == 0) {
@@ -4962,7 +5011,11 @@ static void emit_print(CodeGen *cg, ASTNode *expr, int stmt_line, int stmt_col) 
             emit(cg, OP_IMPRIMIR_TEXTO, reg, 0, 0, IR_INST_FLAG_A_REGISTER);
         }         else if (t && strcmp(t, "flotante") == 0)
             emit(cg, OP_IMPRIMIR_FLOTANTE, reg, 0, 0, IR_INST_FLAG_A_REGISTER);
-        else
+        else if (t && strcmp(t, "elemento") == 0) {
+            /* Delegar a la VM con str_desde_any antes de imprimir texto */
+            emit(cg, OP_STR_DESDE_ANY, reg, reg, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+            emit(cg, OP_IMPRIMIR_TEXTO, reg, 0, 0, IR_INST_FLAG_A_REGISTER);
+        } else
             emit(cg, OP_IMPRIMIR_NUMERO, reg, 0, 0, IR_INST_FLAG_A_REGISTER);
         }
     }
@@ -5277,8 +5330,8 @@ static int visit_expression(CodeGen *cg, ASTNode *node, int dest_reg) {
         const char *op = bn->operator;
         const char *lt = get_expression_type(cg, bn->left);
         const char *rt = get_expression_type(cg, bn->right);
-        int is_texto = (lt && (strcmp(lt, "texto") == 0 || strcmp(lt, "concepto") == 0 || strcmp(lt, "caracter") == 0)) ||
-                       (rt && (strcmp(rt, "texto") == 0 || strcmp(rt, "concepto") == 0 || strcmp(rt, "caracter") == 0));
+        int is_texto = (lt && (strcmp(lt, "texto") == 0 || strcmp(lt, "concepto") == 0 || strcmp(lt, "caracter") == 0 || strcmp(lt, "elemento") == 0)) ||
+                       (rt && (strcmp(rt, "texto") == 0 || strcmp(rt, "concepto") == 0 || strcmp(rt, "caracter") == 0 || strcmp(rt, "elemento") == 0));
         int is_flt = (lt && strcmp(lt, "flotante") == 0) || (rt && strcmp(rt, "flotante") == 0);
 
         if (strcmp(op, "%") == 0 &&
@@ -5518,8 +5571,14 @@ static int visit_expression(CodeGen *cg, ASTNode *node, int dest_reg) {
                 /* Evaluar argumentos -> reg 2, 3... */
                 emit_call_args_preserved_methods(cg, cn->args, cn->n_args);
 
-                /* Intentar dispatch dinámico (polimorfismo) */
-                if (emit_dynamic_dispatch(cg, obj_type, ma->member, cn, dest_reg, 0)) {
+                /* Intentar dispatch dinámico (polimorfismo) 
+                   EXCEPTO si el objetivo es 'padre' (queremos dispatch estático a la base) */
+                int is_super_call = 0;
+                if (is_node(ma->target, NODE_IDENTIFIER) && strcmp(((IdentifierNode*)ma->target)->name, "padre") == 0) {
+                    is_super_call = 1;
+                }
+
+                if (!is_super_call && emit_dynamic_dispatch(cg, obj_type, ma->member, cn, dest_reg, 0)) {
                     return dest_reg;
                 }
 
@@ -5823,7 +5882,7 @@ static void emit_conv_for_store(CodeGen *cg, const char *dest_type, const char *
 static int reject_non_numeric_to_scalar(CodeGen *cg, const char *dest_type, const char *expr_type, int line, int col) {
     if (!dest_type || !expr_type) return 0;
     if (strcmp(dest_type, "entero") != 0 && strcmp(dest_type, "flotante") != 0) return 0;
-    if (strcmp(expr_type, "entero") == 0 || strcmp(expr_type, "flotante") == 0) return 0;
+    if (strcmp(expr_type, "entero") == 0 || strcmp(expr_type, "flotante") == 0 || strcmp(expr_type, "elemento") == 0) return 0;
     if (strcmp(dest_type, "entero") == 0 && strcmp(expr_type, "objeto") == 0) return 0;
     snprintf(cg->last_error, CODEGEN_ERROR_MAX,
              "No hay conversion implicita de tipo '%s' a '%s'. Use convertir_entero/convertir_flotante (o str_a_entero/str_a_flotante) o ajuste el tipo.",
@@ -5838,7 +5897,7 @@ static int reject_non_numeric_to_scalar(CodeGen *cg, const char *dest_type, cons
 static int reject_return_incompatible_value(CodeGen *cg, const char *declared_ret, const char *expr_type, int line, int col) {
     if (!declared_ret || !expr_type) return 0;
     if (strcmp(declared_ret, "entero") != 0 && strcmp(declared_ret, "flotante") != 0) return 0;
-    if (strcmp(expr_type, "entero") == 0 || strcmp(expr_type, "flotante") == 0) return 0;
+    if (strcmp(expr_type, "entero") == 0 || strcmp(expr_type, "flotante") == 0 || strcmp(expr_type, "elemento") == 0) return 0;
     const char *fn = (cg->current_fn_name && cg->current_fn_name[0]) ? cg->current_fn_name : "?";
     snprintf(cg->last_error, CODEGEN_ERROR_MAX,
              "La funcion '%s' declara retorno tipo '%s' y no puede retornar un valor de tipo '%s'. "
@@ -6858,10 +6917,16 @@ static void visit_statement(CodeGen *cg, ASTNode *node) {
                 /* Evaluar argumentos -> reg 2, 3, ... */
                 emit_call_args_preserved_methods(cg, cn->args, cn->n_args);
 
-                /* Intentar dispatch dinámico (polimorfismo) */
-                if (emit_dynamic_dispatch(cg, obj_type, ma->member, cn, 0, 1)) {
-                    return;
-                }
+            /* Intentar dispatch dinámico (polimorfismo) 
+               EXCEPTO si el objetivo es 'padre' (queremos dispatch estático a la base) */
+            int is_super_call = 0;
+            if (is_node(ma->target, NODE_IDENTIFIER) && strcmp(((IdentifierNode*)ma->target)->name, "padre") == 0) {
+                is_super_call = 1;
+            }
+
+            if (!is_super_call && emit_dynamic_dispatch(cg, obj_type, ma->member, cn, 0, 1)) {
+                return;
+            }
 
                 /* Fallback dispatch estático */
                 int label_id = get_method_label_recursive(cg, obj_type, ma->member);
@@ -7080,6 +7145,16 @@ static void visit_function(CodeGen *cg, ASTNode *node, const char *class_name) {
         SymResult sr = sym_lookup(&cg->sym, "este");
         if (sr.found) {
             emit_escribir_u24(cg, sr.addr, 1, 1);
+        }
+        
+        /* 'padre' apunta a la misma instancia pero con el tipo de la clase base */
+        StructInfo *si = sym_get_struct_info(&cg->sym, class_name);
+        if (si && si->base_name && si->base_name[0]) {
+            sym_declare(&cg->sym, "padre", si->base_name, 8, 1, 0, NULL);
+            SymResult sr_p = sym_lookup(&cg->sym, "padre");
+            if (sr_p.found) {
+                emit_escribir_u24(cg, sr_p.addr, 1, 1);
+            }
         }
         arg_start_reg = 2;
     }

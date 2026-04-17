@@ -3394,23 +3394,10 @@ int vm_step(VM* vm) {
             }
             
             if (!encontrado) {
-                char trymsg[288];
-                snprintf(trymsg, sizeof trymsg,
-                         "clave de mapa inexistente: no hay valor para la clave %u en el mapa %u.",
-                         (unsigned)map_key, (unsigned)map_id);
-                if (vm_try_catch_or_abort(vm, trymsg))
-                    return 0;
-                if (vm->current_line > 0)
-                    fprintf(stderr,
-                            "Error de ejecucion (VM) en la linea %d: %s\n",
-                            vm->current_line, trymsg);
-                else
-                    fprintf(stderr, "Error de ejecucion (VM): %s\n", trymsg);
-                vm->running = 0;
-                vm->exit_code = 1;
-                return 0;
+                vm_set_register(vm, inst.operand_a, 0); /* Return nulo (0) */
+            } else {
+                vm_set_register(vm, inst.operand_a, (uint64_t)val.u);
             }
-            vm_set_register(vm, inst.operand_a, (uint64_t)val.u);
             vm->pc += IR_INSTRUCTION_SIZE;
             break;
 #endif
@@ -3827,6 +3814,38 @@ int vm_step(VM* vm) {
             union { uint64_t u64; float f32; } cast = {0};
             cast.u64 = (uint32_t)(b_val & 0xFFFFFFFF);
             vm_set_register(vm, inst.operand_a, (uint64_t)cast.f32);
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+        case OP_CONV_ANY2F: {
+            uint32_t u32 = (uint32_t)(b_val & 0xFFFFFFFF);
+            int is_float = 0;
+            if ((u32 >= 0x38000000 && u32 <= 0x50000000) || (u32 >= 0xB8000000 && u32 <= 0xD0000000)) {
+                is_float = 1;
+            }
+            if (is_float) {
+                vm_set_register(vm, inst.operand_a, b_val);
+            } else {
+                union { uint64_t u64; float f32; } cast = {0};
+                cast.f32 = (float)b_val;
+                vm_set_register(vm, inst.operand_a, cast.u64);
+            }
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+        case OP_CONV_ANY2I: {
+            uint32_t u32 = (uint32_t)(b_val & 0xFFFFFFFF);
+            int is_float = 0;
+            if ((u32 >= 0x38000000 && u32 <= 0x50000000) || (u32 >= 0xB8000000 && u32 <= 0xD0000000)) {
+                is_float = 1;
+            }
+            if (is_float) {
+                union { uint64_t u64; float f32; } cast = {0};
+                cast.u64 = u32;
+                vm_set_register(vm, inst.operand_a, (uint64_t)((long int)cast.f32));
+            } else {
+                vm_set_register(vm, inst.operand_a, b_val);
+            }
             vm->pc += IR_INSTRUCTION_SIZE;
             break;
         }
@@ -5635,33 +5654,63 @@ int vm_step(VM* vm) {
             } else {
                 is_int = (vm_get_register(vm, inst.operand_c) == 1);
             }
-            
+
             if (is_int) {
                 snprintf(buf, sizeof(buf), "%lld", (long long)reg_val);
             } else {
-                union { uint64_t u64; float f32; } u = {0};
-                u.u64 = (uint32_t)reg_val;
+                union { uint32_t u32; float f32; } u;
+                u.u32 = (uint32_t)reg_val;
                 float val = u.f32;
-                if (val == (float)((long long)val)) {
-                    snprintf(buf, sizeof(buf), "%lld", (long long)val);
-                } else {
-                    snprintf(buf, sizeof(buf), "%.2f", val);
-                }
+                snprintf(buf, sizeof(buf), "%.2f", (double)val);
             }
             
-            uint32_t id_res = 0;
-            /* Bypasseamos integración neuronal para mayor estabilidad en compilador */
-            /*
-#ifdef JASBOOT_LANG_INTEGRATION
-            if (vm->mem_neuronal) {
-                id_res = jmn_registrar_texto_dinamico(vm->mem_neuronal, buf);
-            }
-#endif
+            uint32_t id_res = vm_hash_texto(buf);
+            vm_text_cache_put(vm, id_res, buf);
+            vm_set_register(vm, inst.operand_a, (uint64_t)id_res);
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
+        case OP_STR_DESDE_ANY: {
+            uint64_t reg_val = vm_get_register(vm, inst.operand_b);
+            char buf[64];
+
+            /* Heurística mejorada: 
+               En Jasboot, los IDs de texto suelen ser < 0x10000000 (hashes o contadores bajos).
+               Los flotantes (IEEE 754 32-bit) en rangos comunes (0.0001 a 10^10) 
+               tienen el bit 31 en 0 y exponentes entre 0x38 y 0x4E.
+               0x38000000 es ~0.00000005
+               0x4E800000 es ~1,000,000,000
             */
-            if (id_res == 0) {
-                id_res = vm_hash_texto(buf);
-                vm_text_cache_put(vm, id_res, buf);
+            uint32_t u32 = (uint32_t)reg_val;
+            int is_float = 0;
+            
+            if (u32 >= 0x38000000 && u32 <= 0x50000000) {
+                is_float = 1;
+            } else if (u32 >= 0xB8000000 && u32 <= 0xD0000000) {
+                /* Flotantes negativos */
+                is_float = 1;
             }
+            
+            if (is_float) {
+                union { uint32_t u32; float f32; } u;
+                u.u32 = u32;
+                float f = u.f32;
+                if (!isnan(f) && !isinf(f)) {
+                    if (f == (float)((long int)f)) {
+                        snprintf(buf, sizeof(buf), "%ld", (long int)f);
+                    } else {
+                        snprintf(buf, sizeof(buf), "%.2f", (double)f);
+                    }
+                } else {
+                    snprintf(buf, sizeof(buf), "%lld", (long long)reg_val);
+                }
+            } else {
+                snprintf(buf, sizeof(buf), "%lld", (long long)reg_val);
+            }
+            
+            uint32_t id_res = vm_hash_texto(buf);
+            vm_text_cache_put(vm, id_res, buf);
             vm_set_register(vm, inst.operand_a, (uint64_t)id_res);
             vm->pc += IR_INSTRUCTION_SIZE;
             break;
@@ -6807,6 +6856,14 @@ int vm_step(VM* vm) {
             } else {
                 id = (uint32_t)vm_get_register(vm, inst.operand_b);
             }
+
+            if (id == 0) {
+                static uint32_t s_list_counter = 0;
+                s_list_counter++;
+                id = ((uint32_t)time(NULL) ^ 0x07654321u) + (s_list_counter * 0x9E3779B9u);
+                id |= 0x80000000u; /* Mark as anonymous/generated */
+            }
+
 #ifdef JASBOOT_LANG_INTEGRATION
             /* Prioridad: memoria neuronal persistente si está abierta; si no, RAM efímera. */
             JMNMemoria* m_target = vm->mem_neuronal ? vm->mem_neuronal : vm->mem_colecciones;

@@ -199,6 +199,9 @@ IRValidationInfo ir_validate_memory(IRFile* ir) {
             inst.opcode != OP_CMP_LT_U && inst.opcode != OP_CMP_GT_U && inst.opcode != OP_CMP_LE_U && inst.opcode != OP_CMP_GE_U &&
             inst.opcode != OP_IR && inst.opcode != OP_SI && inst.opcode != OP_LLAMAR && inst.opcode != OP_RETORNAR &&
             inst.opcode != OP_ID_A_TEXTO &&
+            inst.opcode != OP_STR_DESDE_ANY &&
+            inst.opcode != OP_CONV_ANY2F &&
+            inst.opcode != OP_CONV_ANY2I &&
             inst.opcode != OP_RESERVAR_PILA &&
             inst.opcode != OP_STR_DESDE_NUMERO &&
             inst.opcode != OP_STR_FLOTANTE_PREC &&

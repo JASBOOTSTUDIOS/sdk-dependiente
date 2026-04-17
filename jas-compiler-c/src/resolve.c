@@ -74,6 +74,10 @@ static void resolve_struct_methods_recursive(SymbolTable *st, ASTNode *node) {
         sym_enter_scope(st, 1);
         /* 'este' apunta a la instancia de la clase */
         sym_declare(st, "este", sd->name, 8, 1, 0, NULL);
+        if (sd->extends_name && sd->extends_name[0]) {
+            /* 'padre' apunta a la misma instancia pero con el tipo de la clase base */
+            sym_declare(st, "padre", sd->extends_name, 8, 1, 0, NULL);
+        }
         for (size_t k = 0; k < fn->n_params; k++) {
             VarDeclNode *vd = (VarDeclNode *)fn->params[k];
             if (vd)

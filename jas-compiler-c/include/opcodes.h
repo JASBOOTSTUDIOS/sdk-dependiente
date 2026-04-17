@@ -200,6 +200,9 @@
 #define OP_SYS_ARGC            0x69
 #define OP_SYS_ARGV            0x6A
 #define OP_STR_DESDE_NUMERO    0x98
+#define OP_STR_DESDE_ANY       0x49
+#define OP_CONV_ANY2F          0x4A
+#define OP_CONV_ANY2I          0x4B
 #define OP_STR_FLOTANTE_PREC   0x8F
 #define OP_STR_CODIGO_CARACTER 0xEE
 #define OP_STR_DESDE_CODIGO    0x9A
@@ -208,6 +211,7 @@
 #define OP_STR_MINUSCULAS      0x50
 #define OP_STR_MAYUSCULAS      0x4F
 #define OP_MEM_LISTA_LIMPIAR   0xB6
+#define OP_MEM_LISTA_PONER     0xB7
 #define OP_MEM_LISTA_LIBERAR   0x8D
 #define OP_TCP_ENVIAR          0x19
 #define OP_TCP_RECIBIR         0x1A

@@ -209,6 +209,7 @@ static int keyword_ok_as_user_identifier(const char *s) {
             strcmp(s, "entrada") == 0 || strcmp(s, "texto") == 0 ||
             strcmp(s, "caracter") == 0 || strcmp(s, "bool") == 0 ||
             strcmp(s, "lista") == 0 || strcmp(s, "mapa") == 0 ||
+            strcmp(s, "padre") == 0 ||
             is_sistema_llamada(s, L));
 }
 

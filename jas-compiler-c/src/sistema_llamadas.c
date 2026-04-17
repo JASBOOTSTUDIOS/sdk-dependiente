@@ -12,7 +12,7 @@ const char *const SISTEMA_LLAMADAS[] = {
     "str_a_entero", "str_a_flotante", "convertir_entero", "convertir_flotante", "fs_abrir", "fs_cerrar", "fs_escribir", "fs_leer_linea",
     "fs_leer_byte", "fs_escribir_byte", "fs_leer_texto", "sys_argc", "sys_argv", "str_extraer_caracter", "str_desde_numero", "decimal", "codigo_caracter", "caracter_a_texto",
     "byte_a_caracter", "caracter_a_byte",
-    "lista_crear", "mem_lista_crear", "mem_lista_agregar", "mem_lista_obtener", "mem_lista_tamano",
+    "lista_crear", "mem_lista_crear", "mem_lista_agregar", "mem_lista_obtener", "mem_lista_tamano", "lista_poner", "mem_lista_poner",
     "lista_limpiar", "mem_lista_limpiar",
     "lista_liberar", "mem_lista_liberar",
     "lista_mapear", "mem_lista_mapear", "lista_filtrar", "mem_lista_filtrar",
