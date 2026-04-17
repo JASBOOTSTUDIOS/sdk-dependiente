@@ -111,6 +111,8 @@ static size_t add_string(CodeGen *cg, const char *s);
 static int has_interpolation(const char *s);
 static void emit_print_cstr(CodeGen *cg, const char *s);
 static int get_func_label(CodeGen *cg, const char *name);
+static void emit_escribir_u24(CodeGen *cg, uint32_t addr, int val_reg, int is_relative);
+static void emit_leer_u24(CodeGen *cg, int dest_reg, uint32_t addr, int is_relative);
 
 static void emit_load_text_literal_reg(CodeGen *cg, const char *s, int dest_reg) {
     size_t off = add_string(cg, s ? s : "");
@@ -158,9 +160,7 @@ static void emit_store_identifier_reg(CodeGen *cg, const char *name, int reg) {
         cg->has_error = 1;
         return;
     }
-    uint8_t flags = IR_INST_FLAG_A_IMMEDIATE | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE;
-    if (r.is_relative) flags |= IR_INST_FLAG_RELATIVE;
-    emit(cg, OP_ESCRIBIR, r.addr & 0xFF, reg, (r.addr >> 8) & 0xFF, flags);
+    emit_escribir_u24(cg, r.addr, reg, r.is_relative);
 }
 
 static char* build_repeated_concat_chunk(const char* left, const char* right, uint64_t times) {
@@ -667,7 +667,7 @@ static int try_emit_collapsed_invariant_while(CodeGen *cg, WhileNode *wn) {
         int limit_reg = visit_expression(cg, cond->right, 1);
         uint8_t fl = IR_INST_FLAG_A_IMMEDIATE | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE;
         if (counter_slot.is_relative) fl |= IR_INST_FLAG_RELATIVE;
-        emit(cg, OP_ESCRIBIR, counter_slot.addr & 0xFF, (uint8_t)limit_reg, (counter_slot.addr >> 8) & 0xFF, fl);
+        emit_escribir_u24(cg, counter_slot.addr, (uint8_t)limit_reg, counter_slot.is_relative);
     }
 
     mark_label(cg, end_id);
@@ -1691,6 +1691,10 @@ static const char *get_expression_type(CodeGen *cg, ASTNode *node) {
             if (strcmp(cn->name, "concatenar") == 0) return "texto";
             if (strcmp(cn->name, "str_desde_numero") == 0 || strcmp(cn->name, "texto_desde_numero") == 0)
                 return "texto";
+            if (strcmp(cn->name, "obtener_timestamp") == 0 || strcmp(cn->name, "obtener_ahora") == 0 || strcmp(cn->name, "ahora") == 0)
+                return "entero";
+            if (strcmp(cn->name, "formatear_timestamp") == 0)
+                return "texto";
         }
         if (cn->name && !cn->callee) {
             /* 1. Buscar si es un constructor de clase/registro */
@@ -2576,7 +2580,7 @@ static void codegen_emit_mem_lista_agregar_from_regs(CodeGen *cg, uint8_t list_r
     SymResult ag_tmp = sym_reserve_temp(&cg->sym, 8);
     uint8_t fl_agw = IR_INST_FLAG_A_IMMEDIATE | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE;
     if (ag_tmp.is_relative) fl_agw |= IR_INST_FLAG_RELATIVE;
-    emit(cg, OP_ESCRIBIR, ag_tmp.addr & 0xFF, list_reg, (ag_tmp.addr >> 8) & 0xFF, fl_agw);
+        emit_escribir_u24(cg, ag_tmp.addr, list_reg, ag_tmp.is_relative);
     uint8_t fl_agr = IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE;
     if (ag_tmp.is_relative) fl_agr |= IR_INST_FLAG_RELATIVE;
     emit(cg, OP_LEER, 1, ag_tmp.addr & 0xFF, (ag_tmp.addr >> 8) & 0xFF, fl_agr);
@@ -3449,7 +3453,7 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         SymResult r = sym_get_or_create(&cg->sym, "resultado", NULL);
         uint8_t fl = IR_INST_FLAG_A_IMMEDIATE | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE;
         if (r.is_relative) fl |= IR_INST_FLAG_RELATIVE;
-        emit(cg, OP_ESCRIBIR, r.addr & 0xFF, 1, (r.addr >> 8) & 0xFF, fl);
+        emit_escribir_u24(cg, r.addr, 1, r.is_relative);
         return 1;
     }
     if (strcmp(name, "pensar_respuesta") == 0) {
@@ -3463,7 +3467,7 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         SymResult r = sym_get_or_create(&cg->sym, "resultado", NULL);
         uint8_t fl = IR_INST_FLAG_A_IMMEDIATE | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE;
         if (r.is_relative) fl |= IR_INST_FLAG_RELATIVE;
-        emit(cg, OP_ESCRIBIR, r.addr & 0xFF, 1, (r.addr >> 8) & 0xFF, fl);
+        emit_escribir_u24(cg, r.addr, 1, r.is_relative);
         return 1;
     }
     if (strcmp(name, "asociar_relacion") == 0) {
@@ -3503,7 +3507,7 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         SymResult r = sym_get_or_create(&cg->sym, "resultado", NULL);
         uint8_t fl = IR_INST_FLAG_A_IMMEDIATE | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE;
         if (r.is_relative) fl |= IR_INST_FLAG_RELATIVE;
-        emit(cg, OP_ESCRIBIR, r.addr & 0xFF, 1, (r.addr >> 8) & 0xFF, fl);
+        emit_escribir_u24(cg, r.addr, 1, r.is_relative);
         return 1;
     }
     if (strcmp(name, "procesar_texto") == 0) {
@@ -3656,6 +3660,21 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
     }
     if (strcmp(name, "ahora") == 0 || strcmp(name, "obtener_ahora") == 0 || strcmp(name, "obtener_timestamp") == 0) {
         emit(cg, OP_SYS_TIMESTAMP, dest_reg, 0, 0, IR_INST_FLAG_A_REGISTER);
+        return 1;
+    }
+    if (strcmp(name, "formatear_timestamp") == 0) {
+        if (cn->n_args != 2) {
+            snprintf(cg->last_error, CODEGEN_ERROR_MAX,
+                     "`formatear_timestamp` requiere 2 argumentos: timestamp y formato.");
+            cg->has_error = 1;
+            cg->err_line = cn->base.line;
+            cg->err_col = cn->base.col;
+            return 1;
+        }
+        visit_expression(cg, ARG0, dest_reg + 1);
+        visit_expression(cg, ARG1, dest_reg + 2);
+        emit(cg, OP_STR_FORMATEAR_TIMESTAMP, (uint8_t)dest_reg, (uint8_t)(dest_reg + 1), (uint8_t)(dest_reg + 2),
+             IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
         return 1;
     }
     if (strcmp(name, "pausa_milisegundos") == 0 || strcmp(name, "esperar_milisegundos") == 0) {
@@ -4084,7 +4103,7 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         SymResult ag_tmp = sym_reserve_temp(&cg->sym, 8);
         uint8_t fl_agw = IR_INST_FLAG_A_IMMEDIATE | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE;
         if (ag_tmp.is_relative) fl_agw |= IR_INST_FLAG_RELATIVE;
-        emit(cg, OP_ESCRIBIR, ag_tmp.addr & 0xFF, 1, (ag_tmp.addr >> 8) & 0xFF, fl_agw);
+        emit_escribir_u24(cg, ag_tmp.addr, 1, ag_tmp.is_relative);
         visit_expression(cg, ARG1, 2);
         uint8_t fl_agr = IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE;
         if (ag_tmp.is_relative) fl_agr |= IR_INST_FLAG_RELATIVE;
@@ -4184,17 +4203,17 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         SymResult idx_tmp = sym_reserve_temp(&cg->sym, 8);
         uint8_t flw = IR_INST_FLAG_A_IMMEDIATE | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE;
         if (src_tmp.is_relative) flw |= IR_INST_FLAG_RELATIVE;
-        emit(cg, OP_ESCRIBIR, src_tmp.addr & 0xFF, 1, (src_tmp.addr >> 8) & 0xFF, flw);
+        emit_escribir_u24(cg, src_tmp.addr, 1, src_tmp.is_relative);
         int nid = ++cg->literal_counter;
         emit(cg, OP_MOVER, 2, nid & 0xFF, (nid >> 8) & 0xFF, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
         emit(cg, OP_MEM_LISTA_CREAR, 2, 2, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
         uint8_t flwo = IR_INST_FLAG_A_IMMEDIATE | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE;
         if (out_tmp.is_relative) flwo |= IR_INST_FLAG_RELATIVE;
-        emit(cg, OP_ESCRIBIR, out_tmp.addr & 0xFF, 2, (out_tmp.addr >> 8) & 0xFF, flwo);
+        emit_escribir_u24(cg, out_tmp.addr, 2, out_tmp.is_relative);
         emit(cg, OP_MOVER, 15, 0, 0, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
         uint8_t fli = IR_INST_FLAG_A_IMMEDIATE | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE;
         if (idx_tmp.is_relative) fli |= IR_INST_FLAG_RELATIVE;
-        emit(cg, OP_ESCRIBIR, idx_tmp.addr & 0xFF, 15, (idx_tmp.addr >> 8) & 0xFF, fli);
+        emit_escribir_u24(cg, idx_tmp.addr, 15, idx_tmp.is_relative);
         int loop_id = new_label(cg);
         int end_id = new_label(cg);
         mark_label(cg, loop_id);
@@ -4223,7 +4242,7 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         codegen_emit_mem_lista_agregar_from_regs(cg, 20, 21);
         emit(cg, OP_LEER, 17, idx_tmp.addr & 0xFF, (idx_tmp.addr >> 8) & 0xFF, flri);
         emit(cg, OP_SUMAR, 17, 17, 1, IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE);
-        emit(cg, OP_ESCRIBIR, idx_tmp.addr & 0xFF, 17, (idx_tmp.addr >> 8) & 0xFF, fli);
+        emit_escribir_u24(cg, idx_tmp.addr, 17, idx_tmp.is_relative);
         emit(cg, OP_IR, 0, 0, 0, 0);
         add_patch(cg, loop_id, PATCH_JUMP);
         mark_label(cg, end_id);
@@ -4258,17 +4277,17 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         SymResult idx_tmp = sym_reserve_temp(&cg->sym, 8);
         uint8_t flw = IR_INST_FLAG_A_IMMEDIATE | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE;
         if (src_tmp.is_relative) flw |= IR_INST_FLAG_RELATIVE;
-        emit(cg, OP_ESCRIBIR, src_tmp.addr & 0xFF, 1, (src_tmp.addr >> 8) & 0xFF, flw);
+        emit_escribir_u24(cg, src_tmp.addr, 1, src_tmp.is_relative);
         int nid = ++cg->literal_counter;
         emit(cg, OP_MOVER, 2, nid & 0xFF, (nid >> 8) & 0xFF, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
         emit(cg, OP_MEM_LISTA_CREAR, 2, 2, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
         uint8_t flwo = IR_INST_FLAG_A_IMMEDIATE | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE;
         if (out_tmp.is_relative) flwo |= IR_INST_FLAG_RELATIVE;
-        emit(cg, OP_ESCRIBIR, out_tmp.addr & 0xFF, 2, (out_tmp.addr >> 8) & 0xFF, flwo);
+        emit_escribir_u24(cg, out_tmp.addr, 2, out_tmp.is_relative);
         emit(cg, OP_MOVER, 15, 0, 0, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
         uint8_t fli = IR_INST_FLAG_A_IMMEDIATE | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE;
         if (idx_tmp.is_relative) fli |= IR_INST_FLAG_RELATIVE;
-        emit(cg, OP_ESCRIBIR, idx_tmp.addr & 0xFF, 15, (idx_tmp.addr >> 8) & 0xFF, fli);
+        emit_escribir_u24(cg, idx_tmp.addr, 15, idx_tmp.is_relative);
         int loop_id = new_label(cg);
         int end_id = new_label(cg);
         int skip_agr_id = new_label(cg);
@@ -4301,7 +4320,7 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         mark_label(cg, skip_agr_id);
         emit(cg, OP_LEER, 17, idx_tmp.addr & 0xFF, (idx_tmp.addr >> 8) & 0xFF, flri);
         emit(cg, OP_SUMAR, 17, 17, 1, IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE);
-        emit(cg, OP_ESCRIBIR, idx_tmp.addr & 0xFF, 17, (idx_tmp.addr >> 8) & 0xFF, fli);
+        emit_escribir_u24(cg, idx_tmp.addr, 17, idx_tmp.is_relative);
         emit(cg, OP_IR, 0, 0, 0, 0);
         add_patch(cg, loop_id, PATCH_JUMP);
         mark_label(cg, end_id);
@@ -4802,7 +4821,7 @@ static void emit_build_interpolated_string(CodeGen *cg, const char *text, int de
                 tmp_dest = sym_reserve_temp(&cg->sym, 8);
                 uint8_t fl_w = IR_INST_FLAG_A_IMMEDIATE | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE;
                 if (tmp_dest.is_relative) fl_w |= IR_INST_FLAG_RELATIVE;
-                emit(cg, OP_ESCRIBIR, tmp_dest.addr & 0xFF, dest_reg, (tmp_dest.addr >> 8) & 0xFF, fl_w);
+                emit_escribir_u24(cg, tmp_dest.addr, dest_reg, tmp_dest.is_relative);
             }
             if (type_is_user_struct(cg, tchk)) {
                 MemberAddrResult mbase = get_member_address(cg, expr_node, 2);
@@ -5031,6 +5050,14 @@ static void emit_call_args_preserved_methods(CodeGen *cg, ASTNode **args, size_t
 
 static int visit_expression(CodeGen *cg, ASTNode *node, int dest_reg) {
     if (!node) return dest_reg;
+    if (is_node(node, NODE_INPUT)) {
+        InputNode *in = (InputNode*)node;
+        if (in->immediate)
+            emit(cg, OP_IO_PERCIBIR_TECLADO, dest_reg, 0, 0, IR_INST_FLAG_A_REGISTER);
+        else
+            emit(cg, OP_IO_INPUT_REG, dest_reg, 0, 0, IR_INST_FLAG_A_REGISTER);
+        return dest_reg;
+    }
     if (is_node(node, NODE_LIST_LITERAL)) {
         ListLiteralNode *lln = (ListLiteralNode*)node;
         if (lln->n > 65535) {
@@ -5164,7 +5191,7 @@ static int visit_expression(CodeGen *cg, ASTNode *node, int dest_reg) {
             uint32_t addr = param_addrs ? param_addrs[i] : 0;
             uint8_t fl = IR_INST_FLAG_A_IMMEDIATE | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE;
             fl |= IR_INST_FLAG_RELATIVE;
-            emit(cg, OP_ESCRIBIR, addr & 0xFF, 1 + i, (addr >> 8) & 0xFF, fl);
+            emit_escribir_u24(cg, addr, 1 + i, 1);
         }
         if (is_node(ld->body, NODE_BLOCK))
             visit_block(cg, ld->body);
@@ -5301,7 +5328,7 @@ static int visit_expression(CodeGen *cg, ASTNode *node, int dest_reg) {
             emit(cg, OP_RESTAR, tmp, dest_reg, 1, IR_INST_FLAG_C_IMMEDIATE);
         uint8_t wflags = IR_INST_FLAG_A_IMMEDIATE | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE;
         if (r.is_relative) wflags |= IR_INST_FLAG_RELATIVE;
-        emit(cg, OP_ESCRIBIR, r.addr & 0xFF, tmp, (r.addr >> 8) & 0xFF, wflags);
+        emit_escribir_u24(cg, r.addr, tmp, r.is_relative);
         return dest_reg;
     }
     if (is_node(node, NODE_UNARY_OP)) {
@@ -5366,7 +5393,7 @@ static int visit_expression(CodeGen *cg, ASTNode *node, int dest_reg) {
             SymResult tmp = sym_reserve_temp(&cg->sym, 8);
             uint8_t fl_w = IR_INST_FLAG_A_IMMEDIATE | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE;
             if (tmp.is_relative) fl_w |= IR_INST_FLAG_RELATIVE;
-            emit(cg, OP_ESCRIBIR, tmp.addr & 0xFF, rL, (tmp.addr >> 8) & 0xFF, fl_w);
+            emit_escribir_u24(cg, tmp.addr, rL, tmp.is_relative);
             
             rR_reg = rL == 1 ? 3 : 1;
             (void)visit_expression(cg, bn->right, rR_reg);
@@ -5423,7 +5450,7 @@ static int visit_expression(CodeGen *cg, ASTNode *node, int dest_reg) {
                 SymResult tmp = sym_reserve_temp(&cg->sym, 8);
                 uint8_t fl_w = IR_INST_FLAG_A_IMMEDIATE | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE;
                 if (tmp.is_relative) fl_w |= IR_INST_FLAG_RELATIVE;
-                emit(cg, OP_ESCRIBIR, tmp.addr & 0xFF, rR_reg, (tmp.addr >> 8) & 0xFF, fl_w);
+                emit_escribir_u24(cg, tmp.addr, rR_reg, tmp.is_relative);
                 
                 rL = visit_expression(cg, bn->left, dest_reg);
                 if (cg->has_error) return dest_reg;
@@ -5438,7 +5465,7 @@ static int visit_expression(CodeGen *cg, ASTNode *node, int dest_reg) {
                 SymResult tmp = sym_reserve_temp(&cg->sym, 8);
                 uint8_t fl_w = IR_INST_FLAG_A_IMMEDIATE | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE;
                 if (tmp.is_relative) fl_w |= IR_INST_FLAG_RELATIVE;
-                emit(cg, OP_ESCRIBIR, tmp.addr & 0xFF, rL, (tmp.addr >> 8) & 0xFF, fl_w);
+                emit_escribir_u24(cg, tmp.addr, rL, tmp.is_relative);
                 
                 rR_reg = visit_expression(cg, bn->right, next_safe_reg);
                 if (cg->has_error) return dest_reg;
@@ -5645,7 +5672,7 @@ static int visit_expression(CodeGen *cg, ASTNode *node, int dest_reg) {
                 SymResult p_r = sym_declare(&cg->sym, ld->params[i], arg_type, 8, 1, 0, NULL); 
                 uint8_t fl = IR_INST_FLAG_A_IMMEDIATE | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE;
                 if (p_r.is_relative) fl |= IR_INST_FLAG_RELATIVE;
-                emit(cg, OP_ESCRIBIR, p_r.addr & 0xFF, reg, (p_r.addr >> 8) & 0xFF, fl);
+                emit_escribir_u24(cg, p_r.addr, reg, 1);
             }
             cg->expr_allow_func_literal = prev;
             int old_macro_end_label = cg->macro_end_label;
@@ -5869,13 +5896,19 @@ static int codegen_vec_lvalue_base(CodeGen *cg, ASTNode *node, uint32_t *out_bas
     return 0;
 }
 
-/* Conversion implicita al guardar: entero <- flotante (F2I), flotante <- entero (I2F). */
+/* Conversion implicita al guardar: entero <- flotante (F2I), flotante <- entero (I2F). 
+ * También permitimos entero/flotante -> texto automáticamente (OP_STR_DESDE_NUMERO). */
 static void emit_conv_for_store(CodeGen *cg, const char *dest_type, const char *expr_type, int reg) {
     if (!dest_type || !expr_type) return;
     if (strcmp(dest_type, "entero") == 0 && strcmp(expr_type, "flotante") == 0)
         emit(cg, OP_CONV_F2I, reg, reg, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
     else if (strcmp(dest_type, "flotante") == 0 && strcmp(expr_type, "entero") == 0)
         emit(cg, OP_CONV_I2F, reg, reg, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+    else if (strcmp(dest_type, "texto") == 0 && (strcmp(expr_type, "entero") == 0 || strcmp(expr_type, "flotante") == 0)) {
+        int is_int = (strcmp(expr_type, "entero") == 0);
+        emit(cg, OP_STR_DESDE_NUMERO, (uint8_t)reg, (uint8_t)reg, is_int ? 1 : 0, 
+             IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE);
+    }
 }
 
 /* Solo entero<->flotante es implicito; otros tipos a numerico exigen API explicita (str_a_*, etc.). */
@@ -5990,7 +6023,7 @@ static void visit_statement(CodeGen *cg, ASTNode *node) {
                         if (et && strcmp(et, "entero") == 0)
                             emit(cg, OP_CONV_I2F, reg, reg, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
                         uint32_t a = r.addr + (uint32_t)(i * 8);
-                        emit(cg, OP_ESCRIBIR, a & 0xFF, reg, (a >> 8) & 0xFF, fl);
+                        emit_escribir_u24(cg, a, reg, r.is_relative);
                     }
                     return;
                 }
@@ -6069,7 +6102,7 @@ static void visit_statement(CodeGen *cg, ASTNode *node) {
                                 emit(cg, OP_LEER, 1, (srL.addr + off) & 0xFF, ((srL.addr + off) >> 8) & 0xFF, flL);
                                 emit(cg, OP_MULTIPLICAR_FLT, 1, 1, 2, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
                             }
-                            emit(cg, OP_ESCRIBIR, (r.addr + off) & 0xFF, 1, ((r.addr + off) >> 8) & 0xFF, fl);
+                            emit_escribir_u24(cg, r.addr + off, 1, r.is_relative);
                         }
                         return;
                         }
@@ -6087,7 +6120,7 @@ static void visit_statement(CodeGen *cg, ASTNode *node) {
             emit_conv_for_store(cg, vd->type_name, et, reg);
             uint8_t flags = IR_INST_FLAG_A_IMMEDIATE | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE;
             if (r.is_relative) flags |= IR_INST_FLAG_RELATIVE;
-            emit(cg, OP_ESCRIBIR, r.addr & 0xFF, reg, (r.addr >> 8) & 0xFF, flags);
+        emit_escribir_u24(cg, r.addr, reg, r.is_relative);
         }
         return;
     }
@@ -6279,7 +6312,7 @@ static void visit_statement(CodeGen *cg, ASTNode *node) {
                     if (et && strcmp(et, "entero") == 0)
                         emit(cg, OP_CONV_I2F, reg, reg, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
                     uint32_t a = r.addr + (uint32_t)(i * 8);
-                    emit(cg, OP_ESCRIBIR, a & 0xFF, reg, (a >> 8) & 0xFF, fl);
+                    emit_escribir_u24(cg, a, reg, (fl & IR_INST_FLAG_RELATIVE) != 0);
                 }
                 return;
             }
@@ -6329,7 +6362,7 @@ static void visit_statement(CodeGen *cg, ASTNode *node) {
                             emit(cg, OP_MULTIPLICAR_FLT, 1, 1, 2, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
                         } else break;
                         uint32_t a = r.addr + off;
-                        emit(cg, OP_ESCRIBIR, a & 0xFF, 1, (a >> 8) & 0xFF, fl);
+                        emit_escribir_u24(cg, a, 1, (fl & IR_INST_FLAG_RELATIVE) != 0);
                     }
                     return;
                 }
@@ -6455,7 +6488,7 @@ static void visit_statement(CodeGen *cg, ASTNode *node) {
                 if (r.found) {
                     uint8_t fl = IR_INST_FLAG_A_IMMEDIATE | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE;
                     if (r.is_relative) fl |= IR_INST_FLAG_RELATIVE;
-                    emit(cg, OP_ESCRIBIR, r.addr & 0xFF, 1, (r.addr >> 8) & 0xFF, fl);
+                    emit_escribir_u24(cg, r.addr, 1, r.is_relative);
                 }
             }
             visit_block(cg, tn->catch_body);
@@ -6480,19 +6513,14 @@ static void visit_statement(CodeGen *cg, ASTNode *node) {
     }
     if (is_node(node, NODE_THROW)) {
         ThrowNode *th = (ThrowNode*)node;
-        if (!cg->try_stack_n) {
-            snprintf(cg->last_error, CODEGEN_ERROR_MAX, "Error: 'lanzar' solo puede usarse dentro de un bloque 'intentar'");
-            cg->has_error = 1;
-            cg->err_line = th->base.line;
-            cg->err_col = th->base.col;
-            return;
+        int reg = visit_expression(cg, th->expression, 1);
+        const char *et = get_expression_type(cg, th->expression);
+        if (et && strcmp(et, "texto") != 0) {
+            emit(cg, OP_STR_DESDE_ANY, 1, (uint8_t)reg, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+        } else if (reg != 1) {
+            emit(cg, OP_MOVER, 1, (uint8_t)reg, 0, IR_INST_FLAG_B_REGISTER);
         }
-        (void)visit_expression(cg, th->expression, 1);
-        TryLabel *tc = &cg->try_stack[cg->try_stack_n - 1];
-        emit(cg, OP_IR, 0, 0, 0, 0);
-        if (tc->has_catch) add_patch(cg, tc->catch_id, PATCH_JUMP);
-        else if (tc->has_final) add_patch(cg, tc->final_id, PATCH_JUMP);
-        else add_patch(cg, tc->end_id, PATCH_JUMP);
+        emit(cg, OP_LANZAR, 1, 0, 0, IR_INST_FLAG_A_REGISTER);
         return;
     }
     /* 4.5 WhileNode */
@@ -6572,11 +6600,11 @@ static void visit_statement(CodeGen *cg, ASTNode *node) {
         visit_expression(cg, fe->collection, 1);
         uint8_t flw = IR_INST_FLAG_A_IMMEDIATE | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE;
         if (src_tmp.is_relative) flw |= IR_INST_FLAG_RELATIVE;
-        emit(cg, OP_ESCRIBIR, src_tmp.addr & 0xFF, 1, (src_tmp.addr >> 8) & 0xFF, flw);
+        emit_escribir_u24(cg, src_tmp.addr, 1, src_tmp.is_relative);
         emit(cg, OP_MOVER, 15, 0, 0, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
         uint8_t fli = IR_INST_FLAG_A_IMMEDIATE | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE;
         if (idx_tmp.is_relative) fli |= IR_INST_FLAG_RELATIVE;
-        emit(cg, OP_ESCRIBIR, idx_tmp.addr & 0xFF, 15, (idx_tmp.addr >> 8) & 0xFF, fli);
+        emit_escribir_u24(cg, idx_tmp.addr, 15, idx_tmp.is_relative);
         mark_label(cg, start_id);
         uint8_t flr = IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE;
         if (src_tmp.is_relative) flr |= IR_INST_FLAG_RELATIVE;
@@ -6592,11 +6620,11 @@ static void visit_statement(CodeGen *cg, ASTNode *node) {
         emit(cg, OP_MEM_LISTA_OBTENER, 19, 15, 17, 0);
         uint8_t flit = IR_INST_FLAG_A_IMMEDIATE | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE;
         if (iter_r.is_relative) flit |= IR_INST_FLAG_RELATIVE;
-        emit(cg, OP_ESCRIBIR, iter_r.addr & 0xFF, 19, (iter_r.addr >> 8) & 0xFF, flit);
+        emit_escribir_u24(cg, iter_r.addr, 19, iter_r.is_relative);
         visit_block(cg, fe->body);
         emit(cg, OP_LEER, 17, idx_tmp.addr & 0xFF, (idx_tmp.addr >> 8) & 0xFF, flri);
         emit(cg, OP_SUMAR, 17, 17, 1, IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE);
-        emit(cg, OP_ESCRIBIR, idx_tmp.addr & 0xFF, 17, (idx_tmp.addr >> 8) & 0xFF, fli);
+        emit_escribir_u24(cg, idx_tmp.addr, 17, idx_tmp.is_relative);
         emit(cg, OP_IR, 0, 0, 0, 0);
         add_patch(cg, start_id, PATCH_JUMP);
         mark_label(cg, end_id);
@@ -6793,7 +6821,7 @@ static void visit_statement(CodeGen *cg, ASTNode *node) {
             SymResult r = sym_get_or_create(&cg->sym, en->target, NULL);
             uint8_t fl = IR_INST_FLAG_A_IMMEDIATE | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE;
             if (r.is_relative) fl |= IR_INST_FLAG_RELATIVE;
-            emit(cg, OP_ESCRIBIR, r.addr & 0xFF, 3, (r.addr >> 8) & 0xFF, fl);
+            emit_escribir_u24(cg, r.addr, 3, r.is_relative);
         }
         return;
     }
@@ -6805,7 +6833,7 @@ static void visit_statement(CodeGen *cg, ASTNode *node) {
         SymResult r = sym_get_or_create(&cg->sym, "resultado", NULL);
         uint8_t fl = IR_INST_FLAG_A_IMMEDIATE | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE;
         if (r.is_relative) fl |= IR_INST_FLAG_RELATIVE;
-        emit(cg, OP_ESCRIBIR, r.addr & 0xFF, 1, (r.addr >> 8) & 0xFF, fl);
+        emit_escribir_u24(cg, r.addr, 1, r.is_relative);
         return;
     }
     if (is_node(node, NODE_TERMINA_CON)) {
@@ -6816,7 +6844,7 @@ static void visit_statement(CodeGen *cg, ASTNode *node) {
         SymResult r = sym_get_or_create(&cg->sym, "resultado", NULL);
         uint8_t fl = IR_INST_FLAG_A_IMMEDIATE | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE;
         if (r.is_relative) fl |= IR_INST_FLAG_RELATIVE;
-        emit(cg, OP_ESCRIBIR, r.addr & 0xFF, 1, (r.addr >> 8) & 0xFF, fl);
+        emit_escribir_u24(cg, r.addr, 1, r.is_relative);
         return;
     }
     if (is_node(node, NODE_ULTIMA_PALABRA)) {
@@ -6827,7 +6855,7 @@ static void visit_statement(CodeGen *cg, ASTNode *node) {
             SymResult r = sym_get_or_create(&cg->sym, un->target, NULL);
             uint8_t fl = IR_INST_FLAG_A_IMMEDIATE | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE;
             if (r.is_relative) fl |= IR_INST_FLAG_RELATIVE;
-            emit(cg, OP_ESCRIBIR, r.addr & 0xFF, 2, (r.addr >> 8) & 0xFF, fl);
+            emit_escribir_u24(cg, r.addr, 2, r.is_relative);
         }
         return;
     }
@@ -6839,7 +6867,7 @@ static void visit_statement(CodeGen *cg, ASTNode *node) {
             SymResult r = sym_get_or_create(&cg->sym, cn->target, NULL);
             uint8_t fl = IR_INST_FLAG_A_IMMEDIATE | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE;
             if (r.is_relative) fl |= IR_INST_FLAG_RELATIVE;
-            emit(cg, OP_ESCRIBIR, r.addr & 0xFF, 2, (r.addr >> 8) & 0xFF, fl);
+            emit_escribir_u24(cg, r.addr, 2, r.is_relative);
         }
         return;
     }
@@ -6974,7 +7002,7 @@ static void visit_statement(CodeGen *cg, ASTNode *node) {
                 SymResult p_r = sym_declare(&cg->sym, ld->params[i], "entero", 8, 1, 0, NULL); 
                 uint8_t fl = IR_INST_FLAG_A_IMMEDIATE | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE;
                 if (p_r.is_relative) fl |= IR_INST_FLAG_RELATIVE;
-                emit(cg, OP_ESCRIBIR, p_r.addr & 0xFF, reg, (p_r.addr >> 8) & 0xFF, fl);
+                emit_escribir_u24(cg, p_r.addr, reg, 1);
             }
             cg->expr_allow_func_literal = prev;
             int old_macro_end_label = cg->macro_end_label;
@@ -7056,9 +7084,14 @@ static void visit_statement(CodeGen *cg, ASTNode *node) {
             SymResult r = sym_lookup(&cg->sym, in->variable);
             if (!r.found)
                 r = sym_declare(&cg->sym, in->variable, "texto", 8, 0, 0, NULL);
-            uint8_t fl = IR_INST_FLAG_A_IMMEDIATE | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE;
-            if (r.is_relative) fl |= IR_INST_FLAG_RELATIVE;
-            emit(cg, OP_ESCRIBIR, r.addr & 0xFF, 1, (r.addr >> 8) & 0xFF, fl);
+            if (r.is_const) {
+                snprintf(cg->last_error, CODEGEN_ERROR_MAX, "Error: no se puede ingresar texto en la constante '%s'", in->variable);
+                cg->has_error = 1;
+                cg->err_line = node->line;
+                cg->err_col = node->col;
+                return;
+            }
+            emit_escribir_u24(cg, r.addr, 1, r.is_relative);
         }
         return;
     }
@@ -7207,7 +7240,7 @@ static void emit_call_args_preserved_offset(CodeGen *cg, ASTNode **args, size_t 
             {
                 uint8_t fl = IR_INST_FLAG_A_IMMEDIATE | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE;
                 if (tmp_slots[i].is_relative) fl |= IR_INST_FLAG_RELATIVE;
-                emit(cg, OP_ESCRIBIR, tmp_slots[i].addr & 0xFF, temp_reg, (tmp_slots[i].addr >> 8) & 0xFF, fl);
+                emit_escribir_u24(cg, tmp_slots[i].addr, temp_reg, 1);
             }
         }
     }
@@ -7248,47 +7281,79 @@ uint8_t *codegen_generate(CodeGen *cg, ASTNode *ast, size_t *out_len) {
         sym_register_struct(&cg->sym, "mat4", m4t, m4f, 16);
     }
 
-    /* Registrar structs / clases desde globals */
-    for (size_t i = 0; i < p->n_globals; i++) {
-        ASTNode *g = p->globals[i];
-        if (g && g->type == NODE_STRUCT_DEF) {
-            StructDefNode *sd = (StructDefNode*)g;
-            const char **mnames = sd->n_methods ? malloc(sd->n_methods * sizeof(char*)) : NULL;
-            void **masts = sd->n_methods ? malloc(sd->n_methods * sizeof(void*)) : NULL;
-            for (size_t j = 0; j < sd->n_methods; j++) {
-                mnames[j] = ((FunctionNode*)sd->methods[j])->name;
-                masts[j] = sd->methods[j];
-            }
-
-            if (sd->extends_name && sd->extends_name[0]) {
-                int er = sym_register_class_extends(&cg->sym, sd->name, sd->extends_name,
-                    (const char**)sd->field_types, (const char**)sd->field_names, sd->field_visibilities, sd->n_fields,
-                    masts, mnames, sd->method_visibilities, sd->n_methods, sd->is_exported, sd->is_clase);
-                if (er == -1) {
-                    cg->has_error = 1;
-                    cg->err_line = sd->base.line;
-                    cg->err_col = sd->base.col;
-                    snprintf(cg->last_error, CODEGEN_ERROR_MAX,
-                        "clase/registro '%s': tipo base '%s' no registrado",
-                        sd->name ? sd->name : "?", sd->extends_name);
-                } else if (er == -2) {
-                    cg->has_error = 1;
-                    cg->err_line = sd->base.line;
-                    cg->err_col = sd->base.col;
-                    snprintf(cg->last_error, CODEGEN_ERROR_MAX,
-                        "clase '%s': campo duplicado respecto a la base '%s'",
-                        sd->name ? sd->name : "?", sd->extends_name);
+    /* Registrar structs / clases desde globals (Multi-pasada para herencia) */
+    int changed = 1;
+    int structs_left = 0;
+    while (changed) {
+        changed = 0;
+        structs_left = 0;
+        for (size_t i = 0; i < p->n_globals; i++) {
+            ASTNode *g = p->globals[i];
+            if (g && g->type == NODE_STRUCT_DEF) {
+                StructDefNode *sd = (StructDefNode*)g;
+                if (sym_get_struct_info(&cg->sym, sd->name)) continue; // Ya registrado
+                
+                const char **mnames = sd->n_methods ? malloc(sd->n_methods * sizeof(char*)) : NULL;
+                void **masts = sd->n_methods ? malloc(sd->n_methods * sizeof(void*)) : NULL;
+                for (size_t j = 0; j < sd->n_methods; j++) {
+                    mnames[j] = ((FunctionNode*)sd->methods[j])->name;
+                    masts[j] = sd->methods[j];
                 }
-            } else {
-                sym_register_class(&cg->sym, sd->name, (const char**)sd->field_types,
-                                   (const char**)sd->field_names, sd->field_visibilities, sd->n_fields,
-                                   masts, mnames, sd->method_visibilities, sd->n_methods, sd->is_exported, sd->is_clase);
+
+                int er = 0;
+                if (sd->extends_name && sd->extends_name[0]) {
+                    er = sym_register_class_extends(&cg->sym, sd->name, sd->extends_name,
+                        (const char**)sd->field_types, (const char**)sd->field_names, sd->field_visibilities, sd->n_fields,
+                        masts, mnames, sd->method_visibilities, sd->n_methods, sd->is_exported, sd->is_clase);
+                } else {
+                    sym_register_class(&cg->sym, sd->name, (const char**)sd->field_types,
+                                       (const char**)sd->field_names, sd->field_visibilities, sd->n_fields,
+                                       masts, mnames, sd->method_visibilities, sd->n_methods, sd->is_exported, sd->is_clase);
+                }
+                
+                if (er >= 0) {
+                    changed = 1;
+                } else {
+                    structs_left++;
+                }
+                if (mnames) free(mnames);
+                if (masts) free(masts);
             }
-            if (mnames) free(mnames);
-            if (masts) free(masts);
         }
     }
-    /* Global VarDecls + init (macros/lambdas: misma ruta que visit_statement) */
+    if (structs_left > 0) {
+        /* Intento final para reportar errores */
+        for (size_t i = 0; i < p->n_globals; i++) {
+            ASTNode *g = p->globals[i];
+            if (g && g->type == NODE_STRUCT_DEF) {
+                StructDefNode *sd = (StructDefNode*)g;
+                if (!sym_get_struct_info(&cg->sym, sd->name)) {
+                    /* Repetir registro para capturar error */
+                    const char **mnames = sd->n_methods ? malloc(sd->n_methods * sizeof(char*)) : NULL;
+                    void **masts = sd->n_methods ? malloc(sd->n_methods * sizeof(void*)) : NULL;
+                    for (size_t j = 0; j < sd->n_methods; j++) {
+                        mnames[j] = ((FunctionNode*)sd->methods[j])->name;
+                        masts[j] = sd->methods[j];
+                    }
+                    if (sd->extends_name && sd->extends_name[0]) {
+                        int er = sym_register_class_extends(&cg->sym, sd->name, sd->extends_name,
+                            (const char**)sd->field_types, (const char**)sd->field_names, sd->field_visibilities, sd->n_fields,
+                            masts, mnames, sd->method_visibilities, sd->n_methods, sd->is_exported, sd->is_clase);
+                        if (er == -1) {
+                            cg->has_error = 1; cg->err_line = sd->base.line; cg->err_col = sd->base.col;
+                            snprintf(cg->last_error, CODEGEN_ERROR_MAX, "clase/registro '%s': tipo base '%s' no registrado", sd->name ? sd->name : "?", sd->extends_name);
+                        } else if (er == -2) {
+                            cg->has_error = 1; cg->err_line = sd->base.line; cg->err_col = sd->base.col;
+                            snprintf(cg->last_error, CODEGEN_ERROR_MAX, "clase '%s': campo duplicado respecto a la base '%s'", sd->name ? sd->name : "?", sd->extends_name);
+                        }
+                    }
+                    if (mnames) free(mnames);
+                    if (masts) free(masts);
+                }
+            }
+        }
+    }
+    /* Global VarDecls (Pase 1: solo declaracion para permitir referencias cruzadas) */
     for (size_t i = 0; i < p->n_globals; i++) {
         ASTNode *g = p->globals[i];
         if (g && g->type == NODE_VAR_DECL) {
@@ -7306,22 +7371,35 @@ uint8_t *codegen_generate(CodeGen *cg, ASTNode *ast, size_t *out_len) {
             }
             size_t sz = sym_get_struct_size(&cg->sym, vd->type_name);
             if (sz == 0) sz = 8;
-            SymResult r = sym_declare(&cg->sym, vd->name, vd->type_name, sz, 0, vd->is_const ? 1 : 0,
-                                     vd->list_element_type);
-            if (r.found && vd->value) {
-                const char *et = get_expression_type(cg, vd->value);
-                if (reject_non_numeric_to_scalar(cg, vd->type_name, et, vd->base.line, vd->base.col))
-                    continue;
-                int prev_allow = cg->expr_allow_func_literal;
-                if (vd->type_name && strcmp(vd->type_name, "funcion") == 0)
-                    cg->expr_allow_func_literal = 1;
-                int reg = visit_expression(cg, vd->value, 1);
-                cg->expr_allow_func_literal = prev_allow;
-                if (cg->has_error) continue;
-                emit_conv_for_store(cg, vd->type_name, et, reg);
-                uint8_t flags = IR_INST_FLAG_A_IMMEDIATE | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE;
-                if (r.is_relative) flags |= IR_INST_FLAG_RELATIVE;
-                emit(cg, OP_ESCRIBIR, r.addr & 0xFF, reg, (r.addr >> 8) & 0xFF, flags);
+            sym_declare(&cg->sym, vd->name, vd->type_name, sz, 0, vd->is_const ? 1 : 0,
+                        vd->list_element_type);
+        }
+    }
+
+    /* Global VarDecls (Pase 2: generacion de codigo de inicializacion) */
+    for (size_t i = 0; i < p->n_globals; i++) {
+        ASTNode *g = p->globals[i];
+        if (g && g->type == NODE_VAR_DECL) {
+            VarDeclNode *vd = (VarDeclNode*)g;
+            if (vd->value && (!is_node(vd->value, NODE_LAMBDA_DECL) || 
+                (vd->type_name && strcmp(vd->type_name, "macro") != 0))) {
+                
+                SymResult r = sym_lookup(&cg->sym, vd->name);
+                if (r.found && vd->value) {
+                    const char *et = get_expression_type(cg, vd->value);
+                    if (reject_non_numeric_to_scalar(cg, vd->type_name, et, vd->base.line, vd->base.col))
+                        continue;
+                    int prev_allow = cg->expr_allow_func_literal;
+                    if (vd->type_name && strcmp(vd->type_name, "funcion") == 0)
+                        cg->expr_allow_func_literal = 1;
+                    int reg = visit_expression(cg, vd->value, 1);
+                    cg->expr_allow_func_literal = prev_allow;
+                    if (cg->has_error) continue;
+                    emit_conv_for_store(cg, vd->type_name, et, reg);
+                    uint8_t flags = IR_INST_FLAG_A_IMMEDIATE | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE;
+                    if (r.is_relative) flags |= IR_INST_FLAG_RELATIVE;
+                emit_escribir_u24(cg, r.addr, reg, r.is_relative);
+                }
             }
         }
     }

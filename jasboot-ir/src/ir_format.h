@@ -254,6 +254,7 @@ typedef enum {
     OP_BYTES_ANEXAR = 0x7D,          // A <- append(bytes B, bytes/texto C)
     OP_BYTES_PUNTERO = 0x27,         // A <- puntero crudo de bytes B
     OP_PAUSA_MILISEGUNDOS = 0x28,    // Duerme el hilo del VM: B = ms (reg); A <- 1 (bloqueante; no multitarea)
+    OP_STR_FORMATEAR_TIMESTAMP = 0x29, // A <- Texto formateado de timestamp B con formato C
     OP_BYTES_SUBBYTES = 0x7F,        // A <- subbytes(B, C, reg(B+1)=len)
     OP_BYTES_DESDE_TEXTO = 0x80,     // A <- bytes utf8(B)
     OP_BYTES_A_TEXTO = 0x81,         // A <- texto desde bytes B
@@ -351,7 +352,8 @@ typedef enum {
     OP_MEM_OBTENER_TODOS = 0xFE,      // A <- Obtener lista de todos los IDs
     OP_NOP = 0xFF,            // No operation
     OP_TRY_ENTER = 0x86,     // Apila desplazamiento u24 (A|B|C) del manejador atrapar/final (offset en seccion codigo)
-    OP_TRY_LEAVE = 0x87      // Saca un nivel de intentar (exito del bloque try)
+    OP_TRY_LEAVE = 0x87,     // Saca un nivel de intentar (exito del bloque try)
+    OP_LANZAR = 0x4C         // Lanza una excepcion (A=id_texto)
 } IROpcode;
 
 // Estructura para leer/escribir IR

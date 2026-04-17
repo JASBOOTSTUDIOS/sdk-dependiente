@@ -3545,9 +3545,6 @@ int vm_step(VM* vm) {
         }
             
         case OP_RETORNAR: {
-            if (vm->mem_neuronal && vm_error_memoria_sin_cerrar(vm)) {
-                return 0;
-            }
             if (vm->stack_ptr == 0 || vm->fp_stack_ptr == 0) {
                 vm->running = 0;
                 vm->exit_code = (int)a_val;
@@ -3751,7 +3748,9 @@ int vm_step(VM* vm) {
             fflush(stdout);
             if (fgets(buffer, sizeof(buffer), stdin)) {
                 size_t len = strlen(buffer);
-                if (len > 0 && buffer[len - 1] == '\n') buffer[len - 1] = '\0';
+                while (len > 0 && (buffer[len - 1] == '\n' || buffer[len - 1] == '\r')) {
+                    buffer[--len] = '\0';
+                }
                 uint32_t new_id = 0;
                 int is_numeric = 1;
                 char* endptr;
@@ -7442,6 +7441,19 @@ int vm_step(VM* vm) {
             break;
         }
 
+        case OP_LANZAR: {
+            uint32_t msg_id = (uint32_t)vm_get_register(vm, inst.operand_a);
+            const char* msg = vm_text_cache_get(vm, msg_id);
+            if (!msg) msg = "Excepcion no controlada";
+            if (!vm_try_catch_or_abort(vm, msg)) {
+                fprintf(stderr, "Error de ejecucion (VM): Excepcion lanzada y no atrapada: %s\n", msg);
+                vm->running = 0;
+                vm->exit_code = 1;
+                return 0;
+            }
+            break;
+        }
+
         case OP_NOP:
             vm->pc += IR_INSTRUCTION_SIZE;
             break;
@@ -7708,6 +7720,37 @@ int vm_step(VM* vm) {
         // A = dest_reg
         uint32_t timestamp = (uint32_t)time(NULL);
         vm_set_register(vm, inst.operand_a, (uint64_t)timestamp);
+        vm->pc += IR_INSTRUCTION_SIZE;
+        break;
+    }
+
+    case OP_STR_FORMATEAR_TIMESTAMP: {
+        // A = dest_reg (string ID)
+        // B = timestamp_reg (entero)
+        // C = format_reg (string ID)
+        uint64_t ts_val = vm_get_register(vm, inst.operand_b);
+        
+        // Robustez: si es un ID de cadena que contiene un numero (p.ej. "1776459238"), lo usamos
+        const char* ts_str = vm_text_cache_get(vm, (uint32_t)ts_val);
+        if (ts_str && ts_str[0] >= '0' && ts_str[0] <= '9') {
+            ts_val = (uint64_t)atoll(ts_str);
+        }
+
+        uint64_t fmt_id = vm_get_register(vm, inst.operand_c);
+        
+        const char* fmt_str = vm_text_cache_get(vm, (uint32_t)fmt_id);
+        if (!fmt_str) fmt_str = "%Y-%m-%d %H:%M:%S";
+        
+        time_t t = (time_t)ts_val;
+        struct tm* tm_info = localtime(&t);
+        char buf[128];
+        if (tm_info && strftime(buf, sizeof(buf), fmt_str, tm_info)) {
+            uint32_t hid = vm_hash_texto(buf);
+            vm_text_cache_put(vm, hid, strdup(buf));
+            vm_set_register(vm, inst.operand_a, (uint64_t)hid);
+        } else {
+            vm_set_register(vm, inst.operand_a, 0);
+        }
         vm->pc += IR_INSTRUCTION_SIZE;
         break;
     }

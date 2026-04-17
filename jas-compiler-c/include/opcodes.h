@@ -173,6 +173,7 @@
 #define OP_IO_ENTRADA_FLOTANTE 0x8E
 #define OP_IO_PAUSA            0x26
 #define OP_PAUSA_MILISEGUNDOS  0x28
+#define OP_STR_FORMATEAR_TIMESTAMP 0x29
 #define OP_SYS_TIMESTAMP       0x57
 #define OP_FS_LEER_LINEA       0x58
 #define OP_FS_ESCRIBIR         0x53
@@ -228,6 +229,7 @@
 #define OP_JSON_LISTA_TAMANO   0x8C
 #define OP_TRY_ENTER           0x86
 #define OP_TRY_LEAVE           0x87
+#define OP_LANZAR              0x4C
 #define OP_MEM_LISTA_ID        0xB4
 #define OP_MEM_PENSAR_RESPUESTA 0xB5
 #define OP_LEER_U32_IND        0xEA

@@ -1951,6 +1951,19 @@ static ASTNode *parse_primary(Parser *p) {
         n->is_float = 0;
         return (ASTNode*)n;
     }
+    if (t->type == TOK_KEYWORD && t->value.str && 
+        (strcmp(t->value.str, "ingresar_texto") == 0 || strcmp(t->value.str, "ingreso_inmediato") == 0)) {
+        int immediate = (strcmp(t->value.str, "ingreso_inmediato") == 0);
+        advance(p);
+        InputNode *n = calloc(1, sizeof(InputNode));
+        if (!n) return NULL;
+        n->base.type = NODE_INPUT;
+        n->variable = NULL; // Usado como expresion
+        n->immediate = immediate ? 1 : 0;
+        n->base.line = t->line;
+        n->base.col = t->column;
+        return (ASTNode*)n;
+    }
     if (t->type == TOK_KEYWORD && t->value.str && !keyword_ok_as_user_identifier(t->value.str)) {
         // En jasboot, "es", "mayor", "menor", "que" son parte de operadores compuestos y podrian llegar aqui.
         // Pero "es" no deberia ser leido como variable.

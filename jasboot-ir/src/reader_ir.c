@@ -222,6 +222,7 @@ IRValidationInfo ir_validate_memory(IRFile* ir) {
             inst.opcode != OP_TLS_CERRAR &&
             inst.opcode != OP_IO_PAUSA &&
             inst.opcode != OP_PAUSA_MILISEGUNDOS &&
+            inst.opcode != OP_STR_FORMATEAR_TIMESTAMP &&
             inst.opcode != OP_IMPRIMIR_TEXTO &&
             inst.opcode != OP_IO_INGRESAR_TEXTO &&
             inst.opcode != OP_IO_INPUT_REG &&
@@ -371,6 +372,7 @@ IRValidationInfo ir_validate_memory(IRFile* ir) {
             inst.opcode != 0x69 && inst.opcode != 0x6A && inst.opcode != OP_STR_SUBTEXTO &&
             inst.opcode != OP_GET_FP &&
             inst.opcode != OP_TRY_ENTER && inst.opcode != OP_TRY_LEAVE &&
+            inst.opcode != OP_LANZAR &&
             inst.opcode != OP_NOP && inst.opcode != OP_DEBUG_LINE) {
             info.result = IR_VALID_INVALID_OPCODE;
             info.instruction_index = i;

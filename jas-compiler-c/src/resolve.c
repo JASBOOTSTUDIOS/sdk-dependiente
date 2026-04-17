@@ -121,9 +121,38 @@ int resolve_program(ASTNode *ast, SymbolTable *st) {
         sym_register_struct(st, "mat4", m4_types, m4_fields, 16);
     }
 
-    /* Registrar structs (3.7) y clases con extiende */
-    for (size_t i = 0; i < p->n_globals; i++) {
-        register_struct_recursive(st, p->globals[i], &resolve_errs);
+    /* Registrar structs (3.7) y clases con extiende (Multi-pasada para herencia) */
+    int changed = 1;
+    int structs_left = 0;
+    while (changed) {
+        changed = 0;
+        structs_left = 0;
+        for (size_t i = 0; i < p->n_globals; i++) {
+            ASTNode *g = p->globals[i];
+            if (g && g->type == NODE_STRUCT_DEF) {
+                StructDefNode *sd = (StructDefNode*)g;
+                if (sym_get_struct_info(st, sd->name)) continue; // Ya registrado
+                
+                int local_errs = 0;
+                register_struct_recursive(st, g, &local_errs);
+                if (local_errs == 0) {
+                    changed = 1;
+                } else {
+                    structs_left++;
+                }
+            }
+        }
+    }
+    if (structs_left > 0) {
+        /* Intento final para reportar errores reales de base faltante */
+        for (size_t i = 0; i < p->n_globals; i++) {
+            if (p->globals[i] && p->globals[i]->type == NODE_STRUCT_DEF) {
+                StructDefNode *sd = (StructDefNode*)p->globals[i];
+                if (!sym_get_struct_info(st, sd->name)) {
+                    register_struct_recursive(st, p->globals[i], &resolve_errs);
+                }
+            }
+        }
     }
 
     /* Variables globales (VarDecl en globals) */

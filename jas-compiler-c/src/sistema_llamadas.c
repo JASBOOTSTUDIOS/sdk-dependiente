@@ -5,7 +5,7 @@
 const char *const SISTEMA_LLAMADAS[] = {
     "abrir_archivo", "cerrar_archivo", "escribir_archivo", "leer_linea_archivo",
     "fin_archivo", "existe_archivo", "obtener_todos_conceptos", "obtener_relacionados",
-    "lista_tamano", "lista_obtener", "obtener_timestamp", "aprender", "aprender_peso", "procesar_texto",
+    "lista_tamano", "lista_obtener", "obtener_timestamp", "formatear_timestamp", "aprender", "aprender_peso", "procesar_texto",
     "str_minusculas", "str_mayusculas", "mayusculas", "str_copiar", "copiar_texto", "lista_agregar", "crear_lista", "obtener_nombre_concepto",
     "listar_archivos", "fs_listar", "finalizar", "olvidar", "obtener_campo", "bit_shl", "bit_shr",
     "sistema_ejecutar", "mapa_crear", "mapa_poner", "mapa_obtener", "mapa_eliminar", "mapa_tamano", "mapa_contiene",
