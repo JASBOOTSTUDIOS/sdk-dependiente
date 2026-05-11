@@ -1,6 +1,35 @@
 #include "reader_ir.h"
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
+
+static void ir_format_invalid_opcode_message(char *msg, size_t cap, uint8_t opcode,
+                                              size_t inst_index, size_t offset_bytes_code) {
+    const char *nombre = NULL;
+    if (opcode == OP_STR_DESDE_ANY)
+        nombre = "OP_STR_DESDE_ANY (0x49: conversion heuristica de valor en registro a texto)";
+    char causa[256] = "";
+    if (opcode == OP_STR_DESDE_ANY) {
+        snprintf(causa, sizeof causa,
+                 "Si esta VM no reconociera 0x49, suele ser jasboot-ir-vm desactualizado respecto a jbc.exe. "
+                 "Recompile ambos desde la misma revision.");
+    } else {
+        snprintf(causa, sizeof causa,
+                 "Causa probable: desajuste de version entre jbc.exe y jasboot-ir-vm.exe, "
+                 "o .jbo corrupto. Use el mismo arbol de fuentes para compilador y VM.");
+    }
+    snprintf(msg, cap,
+             "[IR] Fase: VALIDACION AL CARGAR el .jbo (antes de ejecutar codigo Jasboot). No es un error de \"runtime\" del programa todavia.\n"
+             "  Opcode desconocido: 0x%02X (decimal %u)%s%s\n"
+             "  Ubicacion: indice de instruccion %zu, offset %zu bytes en la seccion codigo (cabecera IR = %u bytes).\n"
+             "  %s",
+             opcode, (unsigned)opcode,
+             nombre ? "\n  Nombre (referencia): " : "",
+             nombre ? nombre : "",
+             inst_index, offset_bytes_code,
+             (unsigned)IR_HEADER_SIZE,
+             causa);
+}
 
 const char* ir_validation_result_to_string(IRValidationResult result) {
     switch (result) {
@@ -293,6 +322,7 @@ IRValidationInfo ir_validate_memory(IRFile* ir) {
             inst.opcode != OP_STR_CODIGO_CARACTER &&
             inst.opcode != OP_STR_DESDE_CODIGO &&
             inst.opcode != OP_STR_DIVIDIR_TEXTO &&
+            inst.opcode != OP_STR_REEMPLAZAR &&
             inst.opcode != OP_BIT_SHL &&
             inst.opcode != OP_BIT_SHR &&
             inst.opcode != OP_SYS_EXEC &&
@@ -385,6 +415,7 @@ IRValidationInfo ir_validate_memory(IRFile* ir) {
             inst.opcode != OP_STR_LONGITUD &&
             inst.opcode != OP_STR_EXTRAER_CARACTER &&
             inst.opcode != 0x69 && inst.opcode != 0x6A && inst.opcode != OP_STR_SUBTEXTO &&
+            inst.opcode != OP_STR_REEMPLAZAR &&
             inst.opcode != OP_GET_FP &&
             inst.opcode != OP_TRY_ENTER && inst.opcode != OP_TRY_LEAVE &&
             inst.opcode != OP_LANZAR &&
@@ -392,8 +423,9 @@ IRValidationInfo ir_validate_memory(IRFile* ir) {
             inst.opcode != OP_NOP && inst.opcode != OP_DEBUG_LINE) {
             info.result = IR_VALID_INVALID_OPCODE;
             info.instruction_index = i;
-            static char msg[64];
-            snprintf(msg, sizeof(msg), "Invalid opcode: 0x%02X", inst.opcode);
+            static char msg[768];
+            ir_format_invalid_opcode_message(msg, sizeof msg, inst.opcode, i,
+                                             i * (size_t)IR_INSTRUCTION_SIZE);
             info.message = msg;
             return info;
         }

@@ -24,8 +24,12 @@
 int main(int argc, char **argv) {
     jb_init();
     jb_set_argv(argc, argv);
-    jb_imprimir(jb_json_stringify(jb_new_nulo(), jb_new_entero(0)));
-    jb_imprimir(jb_json_stringify(jb_new_nulo(), jb_new_entero(0)));
+    jb_var_t nombre = jb_new_texto("Jasboot");
+    jb_var_t version = jb_new_texto("AOT 1.0");
+    jb_imprimir(jb_new_texto("Lenguaje:"));
+    jb_imprimir(nombre);
+    jb_imprimir(jb_new_texto("Modo:"));
+    jb_imprimir(version);
     jb_cleanup();
     return 0;
 }

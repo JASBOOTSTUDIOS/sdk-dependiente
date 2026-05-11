@@ -2724,8 +2724,9 @@ static void parser_synchronize(Parser *p) {
                 strcmp(kw, "vec3") == 0 || strcmp(kw, "vec4") == 0 ||
                 strcmp(kw, "mat4") == 0 || strcmp(kw, "mat3") == 0 ||
                 strcmp(kw, "si") == 0 || strcmp(kw, "mientras") == 0 ||
-                strcmp(kw, "para_cada") == 0 ||
+                strcmp(kw, "para_cada") == 0 || strcmp(kw, "cada") == 0 ||
                 strcmp(kw, "hacer") == 0 || strcmp(kw, "para") == 0 ||
+                strcmp(kw, "indice") == 0 ||
                 strcmp(kw, "seleccionar") == 0 || strcmp(kw, "intentar") == 0 ||
                 strcmp(kw, "asincrono") == 0 || strcmp(kw, "esperar") == 0 ||
                 strcmp(kw, "tarea") == 0 ||
@@ -2921,9 +2922,178 @@ static ASTNode *parse_block(Parser *p, const char **end_kw, size_t n_end) {
     return (ASTNode*)bn;
 }
 
+/* para_cada tipo id [indice i] sobre|en expr hacer ... fin_para_cada
+   o: para cada tipo id ... (misma forma; requiere tipo entero|flotante|texto|bool|caracter). */
+static ASTNode *parse_para_cada_statement(Parser *p) {
+    const Token *t0 = peek(p, 0);
+    if (!t0 || !t0->value.str) return NULL;
+    size_t save_pos = p->pos;
+    int is_para_cada_kw = (t0->type == TOK_KEYWORD && strcmp(t0->value.str, "para_cada") == 0);
+    const Token *fe_tok = t0;
+
+    if (is_para_cada_kw) {
+        advance(p);
+    } else if (t0->type == TOK_KEYWORD && strcmp(t0->value.str, "para") == 0) {
+        const Token *t1 = peek(p, 1);
+        if (!t1 || t1->type != TOK_KEYWORD || !t1->value.str || strcmp(t1->value.str, "cada") != 0)
+            return NULL;
+        fe_tok = t0;
+        advance(p);
+        advance(p);
+    } else
+        return NULL;
+
+    const Token *ity = peek(p, 0);
+    static const char *ok_it[] = {"entero", "flotante", "texto", "bool", "caracter", NULL};
+    int it_ok = 0;
+    if (ity && ity->type == TOK_KEYWORD && ity->value.str) {
+        for (int i = 0; ok_it[i]; i++) {
+            if (strcmp(ity->value.str, ok_it[i]) == 0) {
+                it_ok = 1;
+                break;
+            }
+        }
+    }
+    if (!it_ok) {
+        if (is_para_cada_kw) {
+            set_error_here(p, ity ? ity : peek(p, 0),
+                           "para_cada: el tipo de elemento debe ser entero, flotante, texto, bool o caracter.");
+            return NULL;
+        }
+        p->pos = save_pos;
+        return NULL;
+    }
+    char *iter_ty = strdup(ity->value.str);
+    if (!iter_ty) return NULL;
+    advance(p);
+    const Token *id_tok = peek(p, 0);
+    if (!validate_user_defined_name_tok(p, id_tok)) {
+        free(iter_ty);
+        return NULL;
+    }
+    char *iter_nm = id_tok && id_tok->value.str ? strdup(id_tok->value.str) : NULL;
+    advance(p);
+
+    char *index_nm = NULL;
+    const Token *pk = peek(p, 0);
+    if (pk && pk->type == TOK_KEYWORD && strcmp(pk->value.str, "indice") == 0) {
+        advance(p);
+        const Token *ix = peek(p, 0);
+        if (!validate_user_defined_name_tok(p, ix)) {
+            free(iter_ty);
+            free(iter_nm);
+            return NULL;
+        }
+        index_nm = ix && ix->value.str ? strdup(ix->value.str) : NULL;
+        advance(p);
+    }
+
+    const Token *sk = peek(p, 0);
+    int tiene_sobre = 0;
+    if (match_word(p, "sobre") || match_word(p, "en")) {
+        tiene_sobre = 1;
+    }
+    if (!tiene_sobre) {
+        set_error_here(p, sk ? sk : peek(p, 0),
+                       "Se esperaba 'sobre' o 'en' antes de la expresion de coleccion o texto en para_cada.");
+        free(iter_ty);
+        free(iter_nm);
+        free(index_nm);
+        return NULL;
+    }
+
+    ASTNode *coll = parse_expression(p);
+    if (!coll) {
+        free(iter_ty);
+        free(iter_nm);
+        free(index_nm);
+        return NULL;
+    }
+    char *key_nm = NULL;
+    {
+        const Token *pk2 = peek(p, 0);
+        if (pk2 && pk2->type == TOK_KEYWORD && pk2->value.str && strcmp(pk2->value.str, "sobre") == 0) {
+            advance(p);
+            const Token *key_tok = peek(p, 0);
+            if (!validate_user_defined_name_tok(p, key_tok)) {
+                ast_free(coll);
+                free(iter_ty);
+                free(iter_nm);
+                free(index_nm);
+                return NULL;
+            }
+            key_nm = key_tok && key_tok->value.str ? strdup(key_tok->value.str) : NULL;
+            advance(p);
+        }
+    }
+    if (!expect(p, TOK_KEYWORD, "hacer", "Se esperaba 'hacer' despues de la expresion en para_cada")) {
+        ast_free(coll);
+        free(iter_ty);
+        free(iter_nm);
+        free(index_nm);
+        free(key_nm);
+        return NULL;
+    }
+    const char *fe_ends[] = {"fin_para_cada", "fin_para"};
+    ASTNode *fe_body = parse_block(p, fe_ends, 2);
+    if (p->last_error) {
+        ast_free(coll);
+        free(iter_ty);
+        free(iter_nm);
+        free(index_nm);
+        free(key_nm);
+        return NULL;
+    }
+    if (!match(p, TOK_KEYWORD, "fin_para_cada") && !match(p, TOK_KEYWORD, "fin_para")) {
+        const Token *next_t = peek(p, 0);
+        if (next_t && next_t->type == TOK_KEYWORD && next_t->value.str) {
+            if (p->source_path && p->source_path[0])
+                set_error_at(p, fe_tok->line, fe_tok->column,
+                             "Archivo %s, linea %d, columna %d: bloque 'para_cada' sin cierre 'fin_para_cada' ni 'fin_para' (se encontro '%s').",
+                             p->source_path, fe_tok->line, fe_tok->column, next_t->value.str);
+            else
+                set_error_at(p, fe_tok->line, fe_tok->column,
+                             "linea %d, columna %d: bloque 'para_cada' sin cierre 'fin_para_cada' ni 'fin_para' (se encontro '%s').",
+                             fe_tok->line, fe_tok->column, next_t->value.str);
+        } else {
+            if (p->source_path && p->source_path[0])
+                set_error_at(p, fe_tok->line, fe_tok->column,
+                             "Archivo %s, linea %d, columna %d: bloque 'para_cada' sin cierre 'fin_para_cada' ni 'fin_para'.",
+                             p->source_path, fe_tok->line, fe_tok->column);
+            else
+                set_error_at(p, fe_tok->line, fe_tok->column,
+                             "linea %d, columna %d: bloque 'para_cada' sin cierre 'fin_para_cada' ni 'fin_para'.",
+                             fe_tok->line, fe_tok->column);
+        }
+        ast_free(coll);
+        ast_free(fe_body);
+        free(iter_ty);
+        free(iter_nm);
+        free(index_nm);
+        free(key_nm);
+        return NULL;
+    }
+    ForEachNode *n = calloc(1, sizeof(ForEachNode));
+    n->base.type = NODE_FOREACH;
+    n->base.line = fe_tok->line;
+    n->base.col = fe_tok->column;
+    n->iter_type = iter_ty;
+    n->iter_name = iter_nm;
+    n->index_name = index_nm;
+    n->key_name = key_nm;
+    n->collection = coll;
+    n->body = fe_body;
+    return (ASTNode *)n;
+}
+
 static ASTNode *parse_statement(Parser *p) {
     const Token *t = peek(p, 0);
     if (!t) return NULL;
+
+    {
+        ASTNode *fe_pc = parse_para_cada_statement(p);
+        if (fe_pc) return fe_pc;
+    }
 
     if (t->type == TOK_KEYWORD && t->value.str) {
         if (strncmp(t->value.str, "fin_", 4) == 0 || strcmp(t->value.str, "sino") == 0) {
@@ -3604,7 +3774,7 @@ static ASTNode *parse_statement(Parser *p) {
                 char *iter_ty = NULL;
                 
                 // El tipo es opcional, si no está usamos "elemento"
-                static const char *ok_it[] = {"entero", "flotante", "texto", "bool", NULL};
+                static const char *ok_it[] = {"entero", "flotante", "texto", "bool", "lista", "mapa", "elemento", NULL};
                 int it_ok = 0;
                 if (ity && ity->type == TOK_KEYWORD && ity->value.str) {
                     // Si el siguiente token es 'en', entonces 'ity' es el nombre de la variable, no el tipo.
@@ -3655,10 +3825,24 @@ static ASTNode *parse_statement(Parser *p) {
                     return NULL;
                 }
 
+                char *key_nm = NULL;
+                if (match(p, TOK_KEYWORD, "sobre")) {
+                    const Token *key_tok = peek(p, 0);
+                    if (!validate_user_defined_name_tok(p, key_tok)) {
+                        ast_free(coll);
+                        free(iter_ty);
+                        free(iter_nm);
+                        return NULL;
+                    }
+                    key_nm = strdup(key_tok->value.str);
+                    advance(p);
+                }
+
                 if (!expect(p, TOK_KEYWORD, "hacer", "Se esperaba 'hacer' despues de la expresion de lista en para cada")) {
                     ast_free(coll);
                     free(iter_ty);
                     free(iter_nm);
+                    free(key_nm);
                     return NULL;
                 }
 
@@ -3668,6 +3852,7 @@ static ASTNode *parse_statement(Parser *p) {
                     ast_free(coll);
                     free(iter_ty);
                     free(iter_nm);
+                    free(key_nm);
                     return NULL;
                 }
 
@@ -3677,6 +3862,7 @@ static ASTNode *parse_statement(Parser *p) {
                     ast_free(fe_body);
                     free(iter_ty);
                     free(iter_nm);
+                    free(key_nm);
                     return NULL;
                 }
 
@@ -3686,6 +3872,7 @@ static ASTNode *parse_statement(Parser *p) {
                 n->base.col = p_tok->column;
                 n->iter_type = iter_ty;
                 n->iter_name = iter_nm;
+                n->key_name = key_nm;
                 n->collection = coll;
                 n->body = fe_body;
                 return (ASTNode *)n;

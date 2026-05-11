@@ -24,8 +24,12 @@
 int main(int argc, char **argv) {
     jb_init();
     jb_set_argv(argc, argv);
-    jb_imprimir(jb_json_stringify(jb_new_nulo(), jb_new_entero(0)));
-    jb_imprimir(jb_json_stringify(jb_new_nulo(), jb_new_entero(0)));
+    jb_var_t idx = jb_new_nulo();
+    for (    jb_assign(&idx, jb_new_entero(0));
+jb_lt(idx, jb_new_entero(3));     jb_warn_aot("sentencia AOT tipo=44");
+) {
+        jb_imprimir(idx);
+    }
     jb_cleanup();
     return 0;
 }

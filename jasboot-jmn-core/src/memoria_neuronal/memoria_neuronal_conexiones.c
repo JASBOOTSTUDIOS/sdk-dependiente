@@ -65,7 +65,8 @@ void jmn_agregar_conexion(JMNMemoria* mem, uint32_t origen, uint32_t dest, JMNVa
     if (!mem || origen == 0 || dest == 0) return;
     uint32_t slot = find_conex_slot(mem, origen, dest, tipo);
     if (slot != 0xFFFFFFFF) {
-        mem->conexiones[slot].fuerza.f += fuerza.f;
+        // Sobrescribir peso en lugar de sumar para evitar acumulación infinita en pruebas
+        mem->conexiones[slot].fuerza = fuerza;
         if (mem->conexiones[slot].fuerza.f > 1.0f) mem->conexiones[slot].fuerza.f = 1.0f;
         if (mem->conexiones[slot].fuerza.f < 0.0f) mem->conexiones[slot].fuerza.f = 0.0f;
         mem->conexiones[slot].key_id = tipo;

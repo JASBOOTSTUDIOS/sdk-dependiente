@@ -138,6 +138,8 @@ void jb_imprimir(jb_var_t v);
 void jb_imprimir_sin_salto(jb_var_t v);
 void jb_imprimir_flotante(jb_var_t v);
 void jb_warn_aot(const char *msg);
+/** Para expresiones AOT donde hace falta un jb_var_t tras un aviso. */
+jb_var_t jb_warn_aot_expr(const char *msg);
 
 int jb_truthy(jb_var_t v);
 
@@ -170,6 +172,7 @@ jb_var_t jb_extraer_subtexto(jb_var_t s, jb_var_t a, jb_var_t b);
 jb_var_t jb_contiene_texto(jb_var_t s, jb_var_t sub);
 jb_var_t jb_termina_con(jb_var_t s, jb_var_t suf);
 jb_var_t jb_minusculas(jb_var_t s);
+jb_var_t jb_reemplazar(jb_var_t hay, jb_var_t patron, jb_var_t reemplazo);
 jb_var_t jb_dividir_texto(jb_var_t s, jb_var_t sep);
 jb_var_t jb_codigo_caracter(jb_var_t s);
 jb_var_t jb_caracter_a_texto(jb_var_t code);
@@ -208,6 +211,7 @@ jb_var_t jb_member_get(jb_var_t v, const char *member);
 void jb_put_member_leaf(jb_var_t *obj, const char *leaf, jb_var_t val);
 void jb_map_remove(jb_var_t *map_var, jb_var_t key);
 jb_var_t jb_map_val_at(jb_var_t map, jb_var_t idx);
+jb_var_t jb_map_key_at(jb_var_t map, jb_var_t idx);
 
 jb_var_t jb_fs_abrir(jb_var_t path, jb_var_t mode);
 jb_var_t jb_fs_cerrar(jb_var_t h);
@@ -252,21 +256,11 @@ void jb_mat4_mul_vec4(jb_var_t *out, jb_var_t *m, jb_var_t *v);
 jb_var_t jb_vec_mat_component(jb_var_t v, const char *name);
 void jb_put_vec_mat_member(jb_var_t *v, const char *name, jb_var_t val);
 
-/* --- JMN ligero + persistencia texto --- */
-extern jb_var_t g_jmn_memoria;
-extern jb_var_t g_jmn_relaciones;
-extern jb_var_t g_jmn_secuencias; /* mapa nombre_contexto -> lista(texto) */
-
+/* --- JMN (jasboot-jmn-core, paridad con VM) --- */
 jb_var_t jb_jmn_key_as_text(jb_var_t key);
 double jb_jmn_as_f64(jb_var_t v, double def);
 double jb_jmn_clamp01(double x);
 void jb_jmn_set_resultado(jb_var_t v);
-void jb_jmn_set_peso(jb_var_t a, jb_var_t b, double w);
-double jb_jmn_get_peso(jb_var_t a, jb_var_t b);
-void jb_jmn_set_path(const char *p);
-int jb_jmn_load_from_path(const char *p);
-void jb_jmn_reset_memoria(void);
-void jb_jmn_save_to_path(const char *p);
 
 jb_var_t jb_crear_memoria(jb_var_t path);
 jb_var_t jb_abrir_memoria(jb_var_t path);
@@ -276,11 +270,15 @@ jb_var_t jb_asociar(jb_var_t origen, jb_var_t destino, jb_var_t fuerza);
 jb_var_t jb_reforzar(jb_var_t origen, jb_var_t destino, jb_var_t delta);
 jb_var_t jb_penalizar(jb_var_t origen, jb_var_t destino, jb_var_t delta);
 jb_var_t jb_buscar_asociados(jb_var_t origen, jb_var_t min_peso);
+jb_var_t jb_buscar_asociados_lista(jb_var_t origen, jb_var_t k, jb_var_t tipo_rel_opt);
+jb_var_t jb_buscar_asociados_rango(jb_var_t lista_conceptos, jb_var_t min_p, jb_var_t max_p);
 jb_var_t jb_propagar_activacion(jb_var_t origen, jb_var_t decaimiento);
 jb_var_t jb_resolver_conflictos(jb_var_t origen);
 jb_var_t jb_buscar_peso(jb_var_t concepto);
 jb_var_t jb_define_concepto(jb_var_t concepto, jb_var_t descripcion);
 void jb_consolidar_memoria(void);
+/** consolidar_memoria / consolidar / dormir en contexto de expresión AOT. */
+jb_var_t jb_consolidar_memoria_expr(void);
 void jb_cerrar_memoria(void);
 jb_var_t jb_aprender_concepto(jb_var_t concepto, jb_var_t peso);
 
@@ -313,6 +311,7 @@ jb_var_t jb_obtener_nombre_concepto(jb_var_t idv);
 void jb_imprimir_id(jb_var_t idv);
 jb_var_t jb_propiedad_concepto(jb_var_t concepto, jb_var_t prop);
 jb_var_t jb_asociar_relacion(jb_var_t a, jb_var_t b, jb_var_t fuerza);
+jb_var_t jb_asociar_relacion_4(jb_var_t a, jb_var_t b, jb_var_t tipo_rel, jb_var_t peso);
 jb_var_t jb_asociar_similitud(jb_var_t a, jb_var_t b, jb_var_t fuerza);
 jb_var_t jb_asociar_diferencia(jb_var_t a, jb_var_t b, jb_var_t fuerza);
 jb_var_t jb_comparar_patrones(jb_var_t a, jb_var_t b);

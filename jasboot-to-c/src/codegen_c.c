@@ -3,6 +3,8 @@
 #include <stdlib.h>
 #include <ctype.h>
 
+static unsigned s_jb_list_lit_seq;
+
 typedef struct {
     FILE *out;
     ProgramNode *prog;
@@ -14,6 +16,8 @@ typedef struct {
         const char *typ;
     } var_types[192];
     int n_var_types;
+    /** 1 en NODE_CALL como sentencia: emitir void(...) sin operador coma ni expr envoltorio. */
+    int emit_void_call_as_stmt;
 } GenCtx;
 
 static void ind(GenCtx *g) {
@@ -58,6 +62,67 @@ static void push_var_type(GenCtx *g, const char *var, const char *typ) {
     g->var_types[g->n_var_types].var = var;
     g->var_types[g->n_var_types].typ = typ;
     g->n_var_types++;
+}
+
+static int block_ends_with_return(BlockNode *bn) {
+    if (!bn || bn->n == 0) return 0;
+    ASTNode *last = bn->statements[bn->n - 1u];
+    return last && last->type == NODE_RETURN;
+}
+
+static int ast_body_ends_with_return(ASTNode *body) {
+    if (!body) return 0;
+    if (body->type == NODE_BLOCK) return block_ends_with_return((BlockNode *)body);
+    return body->type == NODE_RETURN;
+}
+
+static int user_func_returns_texto(ProgramNode *p, const char *name) {
+    if (!p || !name) return 0;
+    for (size_t i = 0; i < p->n_funcs; i++) {
+        FunctionNode *f = (FunctionNode *)p->functions[i];
+        if (f && f->name && strcmp(f->name, name) == 0 && f->return_type && strcmp(f->return_type, "texto") == 0)
+            return 1;
+    }
+    return 0;
+}
+
+static int expr_like_texto(GenCtx *g, ASTNode *node) {
+    if (!g || !node) return 0;
+    if (node->type == NODE_LITERAL) {
+        LiteralNode *l = (LiteralNode *)node;
+        return l->type_name && strcmp(l->type_name, "texto") == 0;
+    }
+    if (node->type == NODE_IDENTIFIER) {
+        const char *t = lookup_var_type(g, ((IdentifierNode *)node)->name);
+        return t && strcmp(t, "texto") == 0;
+    }
+    if (node->type == NODE_CALL) {
+        CallNode *c = (CallNode *)node;
+        if (c->callee || !c->name) return 0;
+        const char *n = c->name;
+        if (user_func_returns_texto(g->prog, n)) return 1;
+        if (strcmp(n, "concatenar") == 0) return 1;
+        if (strcmp(n, "minusculas") == 0 || strcmp(n, "mayusculas") == 0 || strcmp(n, "str_mayusculas") == 0) return 1;
+        if (strcmp(n, "reemplazar") == 0 || strcmp(n, "remplazar") == 0 || strcmp(n, "reemplazar_texto") == 0) return 1;
+        if (strcmp(n, "copiar_texto") == 0) return 1;
+        if (strcmp(n, "extraer_subtexto") == 0) return 1;
+        if (strcmp(n, "str_extraer_caracter") == 0) return 1;
+        if (strcmp(n, "caracter_a_texto") == 0) return 1;
+        if (strcmp(n, "decimal") == 0) return 1;
+        if (strcmp(n, "texto_desde_numero") == 0 || strcmp(n, "str_desde_numero") == 0) return 1;
+        if (strcmp(n, "entero_a_texto") == 0) return 1;
+        return 0;
+    }
+    return 0;
+}
+
+/** `para cada` sobre mapa: la coleccion es identificador con tipo declarado mapa. */
+static int foreach_collection_is_mapa(GenCtx *g, ASTNode *coll) {
+    if (!coll || coll->type != NODE_IDENTIFIER) return 0;
+    {
+        const char *t = lookup_var_type(g, ((IdentifierNode *)coll)->name);
+        return t && strcmp(t, "mapa") == 0;
+    }
 }
 
 static const char *resolve_method_class(ProgramNode *p, const char *cls, const char *meth) {
@@ -200,7 +265,7 @@ static void emit_map_put_nested(GenCtx *g, ASTNode *map_path, ASTNode *key_e, AS
     const char *segs[16];
     int ns = 0;
     if (map_path_parts(map_path, &rn, segs, &ns) < 0 || !rn) {
-        fputs("(jb_warn_aot(\"mapa_poner: ruta invalida\"), jb_new_nulo())", o);
+        fputs("jb_warn_aot_expr(\"mapa_poner: ruta invalida\")", o);
         return;
     }
     if (ns == 0) {
@@ -247,7 +312,7 @@ static void emit_list_op_on_map_path(GenCtx *g, ASTNode *list_path, const char *
     const char *segs[16];
     int ns = 0;
     if (map_path_parts(list_path, &rn, segs, &ns) < 0 || !rn || ns == 0) {
-        fputs("(jb_warn_aot(\"lista mutada: se esperaba ruta m.campo\"), jb_new_nulo())", o);
+        fputs("jb_warn_aot_expr(\"lista mutada: se esperaba ruta m.campo\")", o);
         return;
     }
     fputs("({ ", o);
@@ -292,7 +357,7 @@ static void emit_nested_map_assign_leaf(GenCtx *g, ASTNode *container_path, cons
     const char *segs[16];
     int ns = 0;
     if (map_path_parts(container_path, &rn, segs, &ns) < 0 || !rn) {
-        fputs("(jb_warn_aot(\"asignacion miembro mapa invalida\"), jb_new_nulo())", o);
+        fputs("jb_warn_aot_expr(\"asignacion miembro mapa invalida\")", o);
         return;
     }
     if (ns == 0) {
@@ -338,7 +403,7 @@ static void emit_list_index_set_on_map_path(GenCtx *g, ASTNode *list_path, ASTNo
     const char *segs[16];
     int ns = 0;
     if (map_path_parts(list_path, &rn, segs, &ns) < 0 || !rn || ns == 0) {
-        fputs("(jb_warn_aot(\"lista [] en mapa: ruta invalida\"), jb_new_nulo())", o);
+        fputs("jb_warn_aot_expr(\"lista [] en mapa: ruta invalida\")", o);
         return;
     }
     fputs("({ ", o);
@@ -401,7 +466,7 @@ static void gen_call(GenCtx *g, CallNode *c) {
             fputc(')', o);
             return;
         }
-        fputs("(jb_warn_aot(\"llamada metodo AOT sin tipo de receptor\"), jb_new_nulo())", o);
+        fputs("jb_warn_aot_expr(\"llamada metodo AOT sin tipo de receptor\")", o);
         return;
     }
     if (!c->name) {
@@ -797,6 +862,17 @@ static void gen_call(GenCtx *g, CallNode *c) {
         fputc(')', o);
         return;
     }
+    if ((strcmp(nm, "reemplazar") == 0 || strcmp(nm, "remplazar") == 0 || strcmp(nm, "reemplazar_texto") == 0) &&
+        c->n_args >= 3) {
+        fputs("jb_reemplazar(", o);
+        gen_expr(g, c->args[0]);
+        fputs(", ", o);
+        gen_expr(g, c->args[1]);
+        fputs(", ", o);
+        gen_expr(g, c->args[2]);
+        fputc(')', o);
+        return;
+    }
     if (strcmp(nm, "longitud_texto") == 0) {
         fputs("jb_texto_len(", o);
         if (c->n_args > 0) gen_expr(g, c->args[0]);
@@ -813,7 +889,10 @@ static void gen_call(GenCtx *g, CallNode *c) {
             fprintf(o, "(jb_list_clear(&%s), %s)", vn, vn);
             return;
         }
-        fputs("(jb_warn_aot(\"lista_limpiar: se esperaba identificador de lista\"), jb_new_nulo())", o);
+        if (g->emit_void_call_as_stmt)
+            fputs("jb_warn_aot(\"lista_limpiar: se esperaba identificador de lista\")", o);
+        else
+            fputs("jb_warn_aot_expr(\"lista_limpiar: se esperaba identificador de lista\")", o);
         return;
     }
     if (strcmp(nm, "lista_liberar") == 0 || strcmp(nm, "mem_lista_liberar") == 0) {
@@ -822,7 +901,10 @@ static void gen_call(GenCtx *g, CallNode *c) {
             fprintf(o, "(jb_list_release_in_place(&%s), jb_new_entero(0))", vn);
             return;
         }
-        fputs("(jb_warn_aot(\"lista_liberar: se esperaba identificador de lista\"), jb_new_nulo())", o);
+        if (g->emit_void_call_as_stmt)
+            fputs("jb_warn_aot(\"lista_liberar: se esperaba identificador de lista\")", o);
+        else
+            fputs("jb_warn_aot_expr(\"lista_liberar: se esperaba identificador de lista\")", o);
         return;
     }
     if ((strcmp(nm, "dividir") == 0 || strcmp(nm, "dividir_texto") == 0) && c->n_args >= 2) {
@@ -1001,10 +1083,16 @@ static void gen_call(GenCtx *g, CallNode *c) {
     }
     if ((strcmp(nm, "consolidar_memoria") == 0 || strcmp(nm, "consolidar") == 0 || strcmp(nm, "dormir") == 0)) {
         if (c->n_args != 0) {
-            fprintf(o, "(jb_warn_aot(\"%s: solo sin argumentos en AOT\"), jb_new_nulo())", nm ? nm : "");
+            if (g->emit_void_call_as_stmt)
+                fprintf(o, "jb_warn_aot(\"%s: solo sin argumentos en AOT\")", nm ? nm : "");
+            else
+                fprintf(o, "jb_warn_aot_expr(\"%s: solo sin argumentos en AOT\")", nm ? nm : "");
             return;
         }
-        fputs("(jb_consolidar_memoria(), jb_new_nulo())", o);
+        if (g->emit_void_call_as_stmt)
+            fputs("jb_consolidar_memoria()", o);
+        else
+            fputs("jb_consolidar_memoria_expr()", o);
         return;
     }
     if ((strcmp(nm, "buscar_asociados") == 0 || strcmp(nm, "asociados_de") == 0) && c->n_args >= 1) {
@@ -1015,6 +1103,29 @@ static void gen_call(GenCtx *g, CallNode *c) {
             gen_expr(g, c->args[1]);
         else
             fputs("jb_new_flotante(0)", o);
+        fputs(")", o);
+        return;
+    }
+    if ((strcmp(nm, "buscar_asociados_lista") == 0 || strcmp(nm, "asociados_lista_de") == 0) && c->n_args >= 2) {
+        fputs("jb_buscar_asociados_lista(", o);
+        gen_expr(g, c->args[0]);
+        fputs(", ", o);
+        gen_expr(g, c->args[1]);
+        fputs(", ", o);
+        if (c->n_args >= 3)
+            gen_expr(g, c->args[2]);
+        else
+            fputs("jb_new_nulo()", o);
+        fputs(")", o);
+        return;
+    }
+    if (strcmp(nm, "buscar_asociados_rango") == 0 && c->n_args >= 3) {
+        fputs("jb_buscar_asociados_rango(", o);
+        gen_expr(g, c->args[0]);
+        fputs(", ", o);
+        gen_expr(g, c->args[1]);
+        fputs(", ", o);
+        gen_expr(g, c->args[2]);
         fputs(")", o);
         return;
     }
@@ -1234,7 +1345,19 @@ static void gen_call(GenCtx *g, CallNode *c) {
         fputs(")", o);
         return;
     }
-    if (strcmp(nm, "asociar_relacion") == 0 || strcmp(nm, "asociar_similitud") == 0 || strcmp(nm, "asociar_diferencia") == 0) {
+    if (strcmp(nm, "asociar_relacion") == 0 && c->n_args >= 4) {
+        fputs("jb_asociar_relacion_4(", o);
+        gen_expr(g, c->args[0]);
+        fputs(", ", o);
+        gen_expr(g, c->args[1]);
+        fputs(", ", o);
+        gen_expr(g, c->args[2]);
+        fputs(", ", o);
+        gen_expr(g, c->args[3]);
+        fputs(")", o);
+        return;
+    }
+    if (strcmp(nm, "asociar_similitud") == 0 || strcmp(nm, "asociar_diferencia") == 0) {
         if (c->n_args >= 3) {
             fprintf(o, "jb_%s(", nm);
             gen_expr(g, c->args[0]);
@@ -1246,6 +1369,16 @@ static void gen_call(GenCtx *g, CallNode *c) {
             return;
         }
     }
+    if (strcmp(nm, "asociar_relacion") == 0 && c->n_args >= 3) {
+        fputs("jb_asociar_relacion(", o);
+        gen_expr(g, c->args[0]);
+        fputs(", ", o);
+        gen_expr(g, c->args[1]);
+        fputs(", ", o);
+        gen_expr(g, c->args[2]);
+        fputs(")", o);
+        return;
+    }
     if (is_user_func(g->prog, nm)) {
         fprintf(o, "jbf_%s(", nm);
         for (size_t i = 0; i < c->n_args; i++) {
@@ -1255,7 +1388,10 @@ static void gen_call(GenCtx *g, CallNode *c) {
         fputs(")", o);
         return;
     }
-    fprintf(o, "(jb_warn_aot(\"llamada AOT no implementada: %s\"), jb_new_nulo())", nm);
+    if (g->emit_void_call_as_stmt)
+        fprintf(o, "jb_warn_aot(\"llamada AOT no implementada: %s\")", nm);
+    else
+        fprintf(o, "jb_warn_aot_expr(\"llamada AOT no implementada: %s\")", nm);
 }
 
 static void gen_expr(GenCtx *g, ASTNode *node) {
@@ -1303,11 +1439,19 @@ static void gen_expr(GenCtx *g, ASTNode *node) {
             BinaryOpNode *b = (BinaryOpNode *)node;
             const char *op = b->operator ? b->operator : "";
             if (strcmp(op, "+") == 0) {
-                fputs("jb_add(", o);
-                gen_expr(g, b->left);
-                fputs(", ", o);
-                gen_expr(g, b->right);
-                fputs(")", o);
+                if (expr_like_texto(g, b->left) || expr_like_texto(g, b->right)) {
+                    fputs("jb_concat(", o);
+                    gen_expr(g, b->left);
+                    fputs(", ", o);
+                    gen_expr(g, b->right);
+                    fputs(")", o);
+                } else {
+                    fputs("jb_add(", o);
+                    gen_expr(g, b->left);
+                    fputs(", ", o);
+                    gen_expr(g, b->right);
+                    fputs(")", o);
+                }
             } else if (strcmp(op, "-") == 0) {
                 fputs("jb_sub(", o);
                 gen_expr(g, b->left);
@@ -1393,7 +1537,7 @@ static void gen_expr(GenCtx *g, ASTNode *node) {
                 gen_expr(g, b->right);
                 fputs(")", o);
             } else {
-                fprintf(o, "(jb_warn_aot(\"operador binario AOT: %s\"), jb_new_nulo())", op);
+                fprintf(o, "jb_warn_aot_expr(\"operador binario AOT: %s\")", op);
             }
             break;
         }
@@ -1409,7 +1553,7 @@ static void gen_expr(GenCtx *g, ASTNode *node) {
                 gen_expr(g, u->expression);
                 fputs(")", o);
             } else {
-                fputs("(jb_warn_aot(\"unario AOT\"), jb_new_nulo())", o);
+                fputs("jb_warn_aot_expr(\"unario AOT\")", o);
             }
             break;
         }
@@ -1438,8 +1582,17 @@ static void gen_expr(GenCtx *g, ASTNode *node) {
             break;
         }
         case NODE_LIST_LITERAL: {
-            (void)(ListLiteralNode *)node;
-            fputs("jb_new_list()", o);
+            ListLiteralNode *ll = (ListLiteralNode *)node;
+            size_t ei;
+            unsigned sid = ++s_jb_list_lit_seq;
+            fprintf(o, "({ jb_var_t _jb_ll_%u = jb_new_list(); ", sid);
+            for (ei = 0; ei < ll->n; ei++) {
+                fputs("jb_list_push(&_jb_ll_", o);
+                fprintf(o, "%u, ", sid);
+                gen_expr(g, ll->elements[ei]);
+                fputs("); ", o);
+            }
+            fprintf(o, "_jb_ll_%u; })", sid);
             break;
         }
         case NODE_MAP_LITERAL:
@@ -1465,7 +1618,7 @@ static void gen_expr(GenCtx *g, ASTNode *node) {
             break;
         }
         default:
-            fprintf(o, "(jb_warn_aot(\"expr AOT tipo=%d\"), jb_new_nulo())", (int)node->type);
+            fprintf(o, "jb_warn_aot_expr(\"expr AOT tipo=%d\")", (int)node->type);
             break;
     }
 }
@@ -1507,7 +1660,12 @@ static void gen_stmt(GenCtx *g, ASTNode *node) {
             VarDeclNode *v = (VarDeclNode *)node;
             ind(g);
             fprintf(o, "jb_var_t %s = ", v->name);
-            if (v->value)
+            /* `texto x = y` debe clonar: la copia estructural de jb_var_t comparte el buffer de y. */
+            if (v->value && v->value->type == NODE_IDENTIFIER) {
+                fputs("jb_var_clone(", o);
+                gen_expr(g, v->value);
+                fputs(")", o);
+            } else if (v->value)
                 gen_expr(g, v->value);
             else if (v->type_name && strcmp(v->type_name, "mat4") == 0)
                 fputs("jb_new_mat4_zero()", o);
@@ -1555,7 +1713,9 @@ static void gen_stmt(GenCtx *g, ASTNode *node) {
         }
         case NODE_CALL: {
             ind(g);
+            g->emit_void_call_as_stmt = 1;
             gen_call(g, (CallNode *)node);
+            g->emit_void_call_as_stmt = 0;
             fputs(";\n", o);
             break;
         }
@@ -1773,27 +1933,88 @@ static void gen_stmt(GenCtx *g, ASTNode *node) {
         }
         case NODE_FOREACH: {
             ForEachNode *fe = (ForEachNode *)node;
+            const char *itn = fe->iter_name ? fe->iter_name : "_it";
+            const char *idx_nm = (fe->index_name && fe->index_name[0]) ? fe->index_name
+                                   : (fe->key_name && fe->key_name[0]) ? fe->key_name : NULL;
             ind(g);
             fputs("{\n", o);
             g->indent += 4;
-            ind(g);
-            fputs("jb_var_t __coll = ", o);
-            gen_expr(g, fe->collection);
-            fputs(";\n", o);
-            ind(g);
-            fputs("jb_var_t __len = jb_list_len(__coll);\n", o);
-            ind(g);
-            fprintf(o, "for (int64_t __i = 0; __i < __len.u.i64; __i++) {\n");
-            g->indent += 4;
-            ind(g);
-            fprintf(o, "jb_var_t %s = jb_list_get(__coll, jb_new_entero(__i));\n", fe->iter_name ? fe->iter_name : "_it");
-            if (fe->body && fe->body->type == NODE_BLOCK)
-                gen_block(g, (BlockNode *)fe->body);
-            else
-                gen_stmt(g, fe->body);
-            g->indent -= 4;
-            ind(g);
-            fputs("}\n", o);
+            if (fe->iter_type && strcmp(fe->iter_type, "caracter") == 0) {
+                ind(g);
+                fputs("jb_var_t __s = ", o);
+                gen_expr(g, fe->collection);
+                fputs(";\n", o);
+                ind(g);
+                fputs("int64_t __slen = jb_texto_len(__s).u.i64;\n", o);
+                ind(g);
+                fputs("for (int64_t __i = 0; __i < __slen; __i++) {\n", o);
+                g->indent += 4;
+                ind(g);
+                fprintf(o, "jb_var_t %s = jb_str_extraer_caracter(__s, jb_new_entero(__i));\n", itn);
+                if (idx_nm) {
+                    ind(g);
+                    fprintf(o, "jb_var_t %s = jb_new_entero(__i);\n", idx_nm);
+                }
+                if (fe->body && fe->body->type == NODE_BLOCK)
+                    gen_block(g, (BlockNode *)fe->body);
+                else
+                    gen_stmt(g, fe->body);
+                g->indent -= 4;
+                ind(g);
+                fputs("}\n", o);
+            } else if (foreach_collection_is_mapa(g, fe->collection)) {
+                ind(g);
+                fputs("jb_var_t __map = ", o);
+                gen_expr(g, fe->collection);
+                fputs(";\n", o);
+                ind(g);
+                fputs("jb_var_t __maplen = jb_map_len(__map);\n", o);
+                ind(g);
+                fputs("for (int64_t __i = 0; __i < __maplen.u.i64; __i++) {\n", o);
+                g->indent += 4;
+                ind(g);
+                fprintf(o, "jb_var_t %s = jb_map_val_at(__map, jb_new_entero(__i));\n", itn);
+                if (fe->key_name && fe->key_name[0]) {
+                    ind(g);
+                    fprintf(o, "jb_var_t %s = jb_map_key_at(__map, jb_new_entero(__i));\n", fe->key_name);
+                } else if (fe->index_name && fe->index_name[0]) {
+                    ind(g);
+                    fprintf(o, "jb_var_t %s = jb_new_entero(__i);\n", fe->index_name);
+                }
+                if (fe->body && fe->body->type == NODE_BLOCK)
+                    gen_block(g, (BlockNode *)fe->body);
+                else
+                    gen_stmt(g, fe->body);
+                g->indent -= 4;
+                ind(g);
+                fputs("}\n", o);
+            } else {
+                ind(g);
+                fputs("jb_var_t __coll = ", o);
+                gen_expr(g, fe->collection);
+                fputs(";\n", o);
+                ind(g);
+                fputs("jb_var_t __len = jb_list_len(__coll);\n", o);
+                ind(g);
+                fputs("for (int64_t __i = 0; __i < __len.u.i64; __i++) {\n", o);
+                g->indent += 4;
+                ind(g);
+                fprintf(o, "jb_var_t %s = jb_list_get(__coll, jb_new_entero(__i));\n", itn);
+                if (idx_nm) {
+                    ind(g);
+                    fprintf(
+                        o,
+                        "jb_var_t %s __attribute__((__unused__)) = jb_new_entero(__i);\n",
+                        idx_nm);
+                }
+                if (fe->body && fe->body->type == NODE_BLOCK)
+                    gen_block(g, (BlockNode *)fe->body);
+                else
+                    gen_stmt(g, fe->body);
+                g->indent -= 4;
+                ind(g);
+                fputs("}\n", o);
+            }
             g->indent -= 4;
             ind(g);
             fputs("}\n", o);
@@ -1887,8 +2108,9 @@ static void gen_stmt(GenCtx *g, ASTNode *node) {
 
 static void gen_class_method(GenCtx *g, StructDefNode *sd, FunctionNode *f) {
     FILE *o = g->out;
-    const char *cls = sd->name;
+    const char *cls = sd ? sd->name : NULL;
     if (!cls || !f || !f->name) return;
+    int saved_ty = g->n_var_types;
     g->emitting_class = cls;
     g->emitting_struct = sd;
     fprintf(o, "static jb_var_t jbf_%s_%s(jb_var_t este", cls, f->name);
@@ -1898,12 +2120,19 @@ static void gen_class_method(GenCtx *g, StructDefNode *sd, FunctionNode *f) {
         fprintf(o, "%s", pv->name ? pv->name : "_p");
     }
     fputs(") {\n", o);
+    for (size_t i = 0; i < f->n_params; i++) {
+        VarDeclNode *pv = (VarDeclNode *)f->params[i];
+        if (pv && pv->name && pv->type_name) push_var_type(g, pv->name, pv->type_name);
+    }
     g->indent = 4;
     if (f->body && f->body->type == NODE_BLOCK)
         gen_block(g, (BlockNode *)f->body);
     else
         gen_stmt(g, f->body);
-    fputs("    return jb_new_nulo();\n}\n\n", o);
+    if (!ast_body_ends_with_return(f->body))
+        fputs("    return jb_new_nulo();\n", o);
+    fputs("}\n\n", o);
+    g->n_var_types = saved_ty;
     g->indent = 0;
     g->emitting_class = NULL;
     g->emitting_struct = NULL;
@@ -1911,6 +2140,7 @@ static void gen_class_method(GenCtx *g, StructDefNode *sd, FunctionNode *f) {
 
 static void gen_func(GenCtx *g, FunctionNode *f) {
     FILE *o = g->out;
+    int saved_ty = g->n_var_types;
     fprintf(o, "static jb_var_t jbf_%s(", f->name ? f->name : "anon");
     for (size_t i = 0; i < f->n_params; i++) {
         VarDeclNode *p = (VarDeclNode *)f->params[i];
@@ -1918,18 +2148,27 @@ static void gen_func(GenCtx *g, FunctionNode *f) {
         fprintf(o, "jb_var_t %s", p->name ? p->name : "_p");
     }
     fputs(") {\n", o);
+    for (size_t i = 0; i < f->n_params; i++) {
+        VarDeclNode *p = (VarDeclNode *)f->params[i];
+        if (p && p->name && p->type_name) push_var_type(g, p->name, p->type_name);
+    }
     g->indent = 4;
     if (f->body && f->body->type == NODE_BLOCK)
         gen_block(g, (BlockNode *)f->body);
     else
         gen_stmt(g, f->body);
-    fputs("    return jb_new_nulo();\n}\n\n", o);
+    if (!ast_body_ends_with_return(f->body))
+        fputs("    return jb_new_nulo();\n", o);
+    fputs("}\n\n", o);
+    g->n_var_types = saved_ty;
     g->indent = 0;
 }
 
 static void gen_program(GenCtx *g, ProgramNode *p) {
     FILE *o = g->out;
     fputs("#include \"jasboot_rt.h\"\n#include <stdio.h>\n#include <string.h>\n#include <stdlib.h>\n#include <setjmp.h>\n\n", o);
+    fputs("#ifdef __GNUC__\n#pragma GCC diagnostic push\n#pragma GCC diagnostic ignored \"-Wunused-function\"\n#endif\n", o);
+    fputs("#ifdef _MSC_VER\n#pragma warning(push)\n#pragma warning(disable:4505)\n#endif\n\n", o);
 
     for (size_t i = 0; i < p->n_globals; i++) {
         ASTNode *gl = p->globals[i];
@@ -1983,6 +2222,8 @@ static void gen_program(GenCtx *g, ProgramNode *p) {
         }
     }
 
+    fputs("#ifdef __GNUC__\n#pragma GCC diagnostic pop\n#endif\n", o);
+    fputs("#ifdef _MSC_VER\n#pragma warning(pop)\n#endif\n\n", o);
     fputs("int main(int argc, char **argv) {\n    jb_init();\n    jb_set_argv(argc, argv);\n", o);
     g->indent = 4;
     GenCtx gm = *g;

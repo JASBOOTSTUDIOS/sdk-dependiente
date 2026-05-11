@@ -36,7 +36,7 @@ const char *const SISTEMA_LLAMADAS[] = {
     "elegir_por_peso", "elegir_por_peso_segun", "elegir_por_peso_id", "elegir_por_peso_semilla", "elegir_por_peso_seed",
     "resolver_conflictos", "resolver_conflictos_de",
     "segmentar_palabras", "palabras_de", "dividir_texto", "minusculas", "extraer_subtexto", "extraer_antes_de",
-    "extraer_despues_de",
+    "extraer_despues_de", "reemplazar", "remplazar", "reemplazar_texto",
     "imprimir_id", "longitud_texto", "propiedad_concepto", "reservar", "liberar", "ir_escribir",
     "concatenar", "longitud", "dividir", "buscar_en_texto", "contiene_texto", "termina_con",
     "leer_entrada", "percibir_teclado", "ingreso_inmediato", "entrada_flotante", "limpiar_consola", "pausa", "ahora", "obtener_ahora", "diferencia_en_segundos",

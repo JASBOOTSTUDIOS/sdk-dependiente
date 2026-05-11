@@ -13,6 +13,7 @@
 #pragma warning(disable:4505)
 #endif
 
+static jb_var_t MOD_EXPORT_K;
 
 #ifdef __GNUC__
 #pragma GCC diagnostic pop
@@ -24,8 +25,7 @@
 int main(int argc, char **argv) {
     jb_init();
     jb_set_argv(argc, argv);
-    jb_imprimir(jb_json_stringify(jb_new_nulo(), jb_new_entero(0)));
-    jb_imprimir(jb_json_stringify(jb_new_nulo(), jb_new_entero(0)));
+    MOD_EXPORT_K = jb_new_entero(42);
     jb_cleanup();
     return 0;
 }

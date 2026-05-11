@@ -107,7 +107,8 @@
 #define OP_MEM_ELEGIR_POR_PESO_IDX     0x6F
 #define OP_MEM_ELEGIR_POR_PESO_ID      0x70
 #define OP_MEM_ELEGIR_POR_PESO_SEMILLA 0x71
-#define OP_JSON_A_TEXTO      0x72
+#define OP_STR_REEMPLAZAR    0x72
+#define OP_JSON_A_TEXTO      0x4E
 #define OP_JSON_A_ENTERO     0x73
 #define OP_JSON_A_FLOTANTE   0x74
 #define OP_JSON_A_BOOL       0x75

@@ -53,7 +53,7 @@ const char *const KEYWORDS[] = {
     "tls_cliente", "tls_servidor", "tls_enviar", "tls_recibir", "tls_cerrar",
     "pausa_milisegundos", "esperar_milisegundos",
     "para", "cada", "en", "fin_para",
-    "para_cada", "fin_para_cada", "sobre",
+    "para_cada", "fin_para_cada", "sobre", "indice",
     "mem_crear", "mem_cerrar", "mem_asociar", "tiene_asociacion", "imprimir_flotante",
     "comparar_gt_flt", "mem_poner_u32_ind", "mem_obtener_u32_ind", "mem_aprender_peso_reg",
     "registrar_patron", "asociar_secuencia", "pensar_siguiente", "pensar_anterior", "corregir_secuencia", "asociar_relacion", "comparar_patrones",

@@ -1,4 +1,6 @@
 #include "jasboot_rt.h"
+#include "jasboot_rt_jmn_vm.h"
+#include "memoria_neuronal.h"
 #include <ctype.h>
 #include <errno.h>
 #include <math.h>
@@ -18,11 +20,6 @@ jb_var_t g_last_throw;
 int jb_try_depth;
 jmp_buf jb_try_stack[32];
 
-jb_var_t g_jmn_memoria;
-jb_var_t g_jmn_relaciones;
-jb_var_t g_jmn_secuencias;
-
-static char g_jmn_path[1024];
 static int g_argc;
 static char **g_argv;
 
@@ -341,6 +338,15 @@ jb_var_t jb_map_val_at(jb_var_t map, jb_var_t idx) {
     return jb_var_clone(map.u.map->vals[(size_t)i]);
 }
 
+jb_var_t jb_map_key_at(jb_var_t map, jb_var_t idx) {
+    int64_t i = 0;
+    if (map.type != JB_TYPE_MAP || !map.u.map) return jb_new_nulo();
+    if (idx.type == JB_TYPE_ENTERO) i = idx.u.i64;
+    else if (idx.type == JB_TYPE_FLOTANTE) i = (int64_t)idx.u.f64;
+    if (i < 0 || (size_t)i >= map.u.map->len) return jb_new_nulo();
+    return jb_var_clone(map.u.map->keys[(size_t)i]);
+}
+
 void jb_list_push(jb_var_t *list_var, jb_var_t item) {
     jb_list_t *L;
     if (!list_var) return;
@@ -402,6 +408,16 @@ void jb_throw_val(jb_var_t err) {
 }
 
 void jb_warn_aot(const char *msg) { fprintf(stderr, "[AOT] %s\n", msg ? msg : "?"); }
+
+jb_var_t jb_warn_aot_expr(const char *msg) {
+    jb_warn_aot(msg);
+    return jb_new_nulo();
+}
+
+jb_var_t jb_consolidar_memoria_expr(void) {
+    jb_consolidar_memoria();
+    return jb_new_nulo();
+}
 
 int jb_truthy(jb_var_t v) {
     switch (v.type) {
@@ -525,10 +541,7 @@ void jb_init(void) {
     jb_try_depth = 0;
     jb_resultado_global = jb_new_nulo();
     g_last_throw = jb_new_nulo();
-    g_jmn_memoria = jb_new_map();
-    g_jmn_relaciones = jb_new_map();
-    g_jmn_secuencias = jb_new_map();
-    g_jmn_path[0] = 0;
+    jb_jmn_vm_startup();
     g_argc = 0;
     g_argv = NULL;
     g_perc_cap = g_perc_head = g_perc_count = 0;
@@ -536,11 +549,9 @@ void jb_init(void) {
 }
 
 void jb_cleanup(void) {
+    jb_jmn_vm_shutdown();
     jb_var_clear(&jb_resultado_global);
     jb_var_clear(&g_last_throw);
-    jb_var_clear(&g_jmn_memoria);
-    jb_var_clear(&g_jmn_relaciones);
-    jb_var_clear(&g_jmn_secuencias);
 }
 
 double jb_jmn_as_f64(jb_var_t v, double def) {
@@ -575,19 +586,6 @@ void jb_jmn_set_resultado(jb_var_t v) {
     jb_resultado_global = jb_var_clone(v);
 }
 
-void jb_jmn_set_path(const char *p) {
-    snprintf(g_jmn_path, sizeof g_jmn_path, "%s", p ? p : "");
-}
-
-void jb_jmn_reset_memoria(void) {
-    jb_var_clear(&g_jmn_memoria);
-    jb_var_clear(&g_jmn_relaciones);
-    jb_var_clear(&g_jmn_secuencias);
-    g_jmn_memoria = jb_new_map();
-    g_jmn_relaciones = jb_new_map();
-    g_jmn_secuencias = jb_new_map();
-}
-
 static void jb_line_trim(char *s) {
     size_t n = strlen(s);
     while (n && (s[n - 1] == '\n' || s[n - 1] == '\r' || s[n - 1] == '\x1a')) {
@@ -601,594 +599,6 @@ static void jb_line_trim_both(char *s) {
     p = s;
     while (*p == '\r' || *p == '\n' || *p == ' ' || *p == '\t') p++;
     if (p != s) memmove(s, p, strlen(p) + 1);
-}
-
-int jb_jmn_load_from_path(const char *p) {
-    FILE *f = fopen(p, "r");
-    char line[4096];
-    if (!f) return 0;
-    jb_jmn_reset_memoria();
-    while (fgets(line, sizeof line, f)) {
-        jb_line_trim(line);
-        if (strncmp(line, "V|", 2) == 0) {
-            char *r = line + 2;
-            char *p1 = strchr(r, '|');
-            if (!p1) continue;
-            *p1++ = 0;
-            jb_map_put(&g_jmn_memoria, jb_new_texto(r), jb_new_texto(p1));
-        } else if (strncmp(line, "R|", 2) == 0) {
-            char *r = line + 2;
-            char *p1 = strchr(r, '|');
-            char *p2;
-            if (!p1) continue;
-            *p1++ = 0;
-            p2 = strchr(p1, '|');
-            if (!p2) continue;
-            *p2++ = 0;
-            jb_asociar(jb_new_texto(r), jb_new_texto(p1), jb_new_flotante_scalar(strtod(p2, NULL)));
-        } else if (strncmp(line, "Q|", 2) == 0) {
-            char *ctx = line + 2;
-            char *tail = strchr(ctx, '|');
-            jb_var_t L;
-            if (!tail) continue;
-            *tail++ = 0;
-            L = jb_new_list();
-            for (;;) {
-                char *n = strchr(tail, '|');
-                if (n) *n++ = 0;
-                jb_line_trim_both(tail);
-                if (tail[0]) jb_list_push(&L, jb_new_texto(tail));
-                if (!n) break;
-                tail = n;
-            }
-            jb_map_put(&g_jmn_secuencias, jb_new_texto(ctx), jb_var_clone(L));
-            jb_var_clear(&L);
-        }
-    }
-    fclose(f);
-    return 1;
-}
-
-void jb_jmn_save_to_path(const char *p) {
-    FILE *f;
-    size_t i, j;
-    jb_map_t *M;
-    if (!p || !p[0]) return;
-    f = fopen(p, "w");
-    if (!f) return;
-    M = g_jmn_memoria.u.map;
-    if (M)
-        for (i = 0; i < M->len; i++) {
-            jb_var_t k = jb_jmn_key_as_text(M->keys[i]);
-            jb_var_t vtxt = jb_jmn_key_as_text(M->vals[i]);
-            const char *ks = k.type == JB_TYPE_TEXTO && k.u.str ? k.u.str : "";
-            const char *vs = vtxt.type == JB_TYPE_TEXTO && vtxt.u.str ? vtxt.u.str : "";
-            fprintf(f, "V|%s|%s\n", ks, vs);
-            jb_var_clear(&k);
-            jb_var_clear(&vtxt);
-        }
-    M = g_jmn_relaciones.u.map;
-    if (M)
-        for (i = 0; i < M->len; i++) {
-            jb_var_t ko = jb_jmn_key_as_text(M->keys[i]);
-            const char *kos = ko.type == JB_TYPE_TEXTO && ko.u.str ? ko.u.str : "";
-            jb_var_t rel = jb_map_get(g_jmn_relaciones, M->keys[i]);
-            if (rel.type == JB_TYPE_MAP && rel.u.map) {
-                for (j = 0; j < rel.u.map->len; j++) {
-                    jb_var_t kd = jb_jmn_key_as_text(rel.u.map->keys[j]);
-                    const char *kds = kd.type == JB_TYPE_TEXTO && kd.u.str ? kd.u.str : "";
-                    double w = jb_jmn_as_f64(rel.u.map->vals[j], 0.0);
-                    fprintf(f, "R|%s|%s|%.17g\n", kos, kds, w);
-                    jb_var_clear(&kd);
-                }
-            }
-            jb_var_clear(&rel);
-            jb_var_clear(&ko);
-        }
-    M = g_jmn_secuencias.u.map;
-    if (M)
-        for (i = 0; i < M->len; i++) {
-            jb_var_t kc = jb_jmn_key_as_text(M->keys[i]);
-            jb_var_t lv = jb_var_clone(M->vals[i]);
-            const char *cks = kc.type == JB_TYPE_TEXTO && kc.u.str ? kc.u.str : "";
-            fprintf(f, "Q|%s", cks);
-            if (lv.type == JB_TYPE_LIST && lv.u.lst) {
-                for (j = 0; j < lv.u.lst->len; j++) {
-                    jb_var_t it = jb_jmn_key_as_text(lv.u.lst->items[j]);
-                    const char *is = it.type == JB_TYPE_TEXTO && it.u.str ? it.u.str : "";
-                    fprintf(f, "|%s", is);
-                    jb_var_clear(&it);
-                }
-            }
-            fprintf(f, "\n");
-            jb_var_clear(&kc);
-            jb_var_clear(&lv);
-        }
-    fclose(f);
-}
-
-void jb_jmn_set_peso(jb_var_t a, jb_var_t b, double w) {
-    jb_var_t rel;
-    jb_var_t ko = jb_jmn_key_as_text(a);
-    jb_var_t kd = jb_jmn_key_as_text(b);
-    rel = jb_map_get(g_jmn_relaciones, ko);
-    if (rel.type != JB_TYPE_MAP || !rel.u.map) {
-        jb_var_clear(&rel);
-        rel = jb_new_map();
-        jb_map_put(&g_jmn_relaciones, ko, rel);
-        jb_var_clear(&rel);
-        rel = jb_map_get(g_jmn_relaciones, ko);
-    }
-    jb_map_put(&rel, kd, jb_new_flotante_scalar(w));
-    jb_map_put(&g_jmn_relaciones, ko, rel);
-    jb_var_clear(&rel);
-    jb_var_clear(&ko);
-    jb_var_clear(&kd);
-}
-
-double jb_jmn_get_peso(jb_var_t a, jb_var_t b) {
-    jb_var_t ko = jb_jmn_key_as_text(a);
-    jb_var_t kd = jb_jmn_key_as_text(b);
-    jb_var_t rel = jb_map_get(g_jmn_relaciones, ko);
-    jb_var_t wv = jb_map_get(rel, kd);
-    double w = jb_jmn_as_f64(wv, 0.0);
-    jb_var_clear(&wv);
-    jb_var_clear(&rel);
-    jb_var_clear(&ko);
-    jb_var_clear(&kd);
-    return w;
-}
-
-jb_var_t jb_crear_memoria(jb_var_t path) {
-    if (path.type != JB_TYPE_TEXTO || !path.u.str || !path.u.str[0]) return jb_new_bool(false);
-    jb_jmn_set_path(path.u.str);
-    if (!jb_jmn_load_from_path(path.u.str)) jb_jmn_reset_memoria();
-    return jb_new_bool(true);
-}
-
-jb_var_t jb_abrir_memoria(jb_var_t path) { return jb_crear_memoria(path); }
-
-void jb_consolidar_memoria(void) {
-    if (g_jmn_path[0]) jb_jmn_save_to_path(g_jmn_path);
-}
-
-void jb_cerrar_memoria(void) {
-    jb_consolidar_memoria();
-    jb_jmn_reset_memoria();
-    g_jmn_path[0] = 0;
-}
-
-jb_var_t jb_aprender_concepto(jb_var_t concepto, jb_var_t peso) {
-    jb_var_t k = jb_jmn_key_as_text(concepto);
-    double w = jb_jmn_clamp01(jb_jmn_as_f64(peso, 0.1));
-    jb_jmn_set_peso(k, k, w);
-    jb_var_clear(&k);
-    return jb_new_bool(true);
-}
-
-jb_var_t jb_recordar(jb_var_t key, jb_var_t val) {
-    jb_var_t k = jb_jmn_key_as_text(key);
-    jb_map_put(&g_jmn_memoria, k, val);
-    jb_var_clear(&k);
-    jb_asociar(key, val, jb_new_flotante_scalar(0.9));
-    jb_jmn_set_resultado(val);
-    return jb_var_clone(jb_resultado_global);
-}
-
-jb_var_t jb_define_concepto(jb_var_t concepto, jb_var_t descripcion) {
-    (void)descripcion;
-    return jb_recordar(concepto, jb_var_clone(concepto));
-}
-
-jb_var_t jb_buscar(jb_var_t key) {
-    jb_var_t k = jb_jmn_key_as_text(key);
-    const char *kstr = (k.type == JB_TYPE_TEXTO && k.u.str) ? k.u.str : "";
-    jb_var_t rel = jb_map_get(g_jmn_relaciones, k);
-    if (rel.type == JB_TYPE_MAP && rel.u.map) {
-        size_t i;
-        for (i = 0; i < rel.u.map->len; i++) {
-            jb_var_t dest = rel.u.map->keys[i];
-            jb_var_t wv = rel.u.map->vals[i];
-            double wd = jb_jmn_as_f64(wv, 0.0);
-            if (wd < 0.01) continue;
-            if (dest.type != JB_TYPE_TEXTO || !dest.u.str) continue;
-            if (kstr[0] && strcmp(dest.u.str, kstr) == 0) continue;
-            {
-                jb_var_t out = jb_new_texto(dest.u.str);
-                jb_jmn_set_resultado(out);
-                jb_var_clear(&out);
-                jb_var_clear(&rel);
-                jb_var_clear(&k);
-                return jb_var_clone(jb_resultado_global);
-            }
-        }
-    }
-    jb_var_clear(&rel);
-    {
-        jb_var_t r = jb_map_get(g_jmn_memoria, k);
-        if (r.type != JB_TYPE_NULL) {
-            jb_jmn_set_resultado(r);
-            jb_var_clear(&r);
-            jb_var_clear(&k);
-            return jb_var_clone(jb_resultado_global);
-        }
-        jb_var_clear(&r);
-        jb_jmn_set_resultado(k);
-        jb_var_clear(&k);
-        return jb_var_clone(jb_resultado_global);
-    }
-}
-
-jb_var_t jb_asociar(jb_var_t origen, jb_var_t destino, jb_var_t fuerza) {
-    jb_var_t ko = jb_jmn_key_as_text(origen);
-    jb_var_t kd = jb_jmn_key_as_text(destino);
-    double w = jb_jmn_clamp01(jb_jmn_as_f64(fuerza, 1.0));
-    jb_jmn_set_peso(ko, kd, w);
-    jb_jmn_set_resultado(jb_new_flotante_scalar(w));
-    jb_var_clear(&ko);
-    jb_var_clear(&kd);
-    return jb_var_clone(jb_resultado_global);
-}
-
-static int jb_seq_text_eq(jb_var_t a, jb_var_t b) {
-    jb_var_t ta = jb_jmn_key_as_text(a);
-    jb_var_t tb = jb_jmn_key_as_text(b);
-    const char *sa = ta.type == JB_TYPE_TEXTO && ta.u.str ? ta.u.str : "";
-    const char *sb = tb.type == JB_TYPE_TEXTO && tb.u.str ? tb.u.str : "";
-    int r = strcmp(sa, sb) == 0;
-    jb_var_clear(&ta);
-    jb_var_clear(&tb);
-    return r;
-}
-
-static void jb_seq_chain_list_items(jb_var_t lista_var) {
-    jb_list_t *L;
-    size_t i;
-    if (lista_var.type != JB_TYPE_LIST || !lista_var.u.lst) return;
-    L = lista_var.u.lst;
-    for (i = 0; i + 1 < L->len; i++)
-        jb_jmn_set_peso(L->items[i], L->items[i + 1], 1.0);
-}
-
-static jb_var_t jb_seq_next_in_list(jb_var_t lista, jb_var_t paso) {
-    size_t i;
-    if (lista.type != JB_TYPE_LIST || !lista.u.lst) return jb_new_texto("");
-    for (i = 0; i + 1 < lista.u.lst->len; i++) {
-        if (jb_seq_text_eq(lista.u.lst->items[i], paso))
-            return jb_jmn_key_as_text(lista.u.lst->items[i + 1]);
-    }
-    return jb_new_texto("");
-}
-
-static jb_var_t jb_seq_prev_in_list(jb_var_t lista, jb_var_t paso) {
-    size_t i;
-    if (lista.type != JB_TYPE_LIST || !lista.u.lst) return jb_new_texto("");
-    for (i = 1; i < lista.u.lst->len; i++) {
-        if (jb_seq_text_eq(lista.u.lst->items[i], paso))
-            return jb_jmn_key_as_text(lista.u.lst->items[i - 1]);
-    }
-    return jb_new_texto("");
-}
-
-/* Sin contexto: elige el destino con mayor peso (empates: ultimo en orden del mapa, alineado con VM en casos comunes). */
-static jb_var_t jb_pensar_siguiente_global(jb_var_t paso) {
-    jb_var_t kp = jb_jmn_key_as_text(paso);
-    jb_var_t rel = jb_map_get(g_jmn_relaciones, kp);
-    jb_var_t best = jb_new_texto("");
-    double bestw = -1.0;
-    size_t i;
-    if (rel.type == JB_TYPE_MAP && rel.u.map) {
-        for (i = 0; i < rel.u.map->len; i++) {
-            double w = jb_jmn_as_f64(rel.u.map->vals[i], 0.0);
-            if (w < 0.01) continue;
-            if (jb_seq_text_eq(rel.u.map->keys[i], paso)) continue;
-            if (w >= bestw) {
-                bestw = w;
-                jb_var_clear(&best);
-                best = jb_jmn_key_as_text(rel.u.map->keys[i]);
-            }
-        }
-    }
-    jb_var_clear(&rel);
-    jb_var_clear(&kp);
-    return best;
-}
-
-static jb_var_t jb_pensar_anterior_global(jb_var_t paso) {
-    jb_map_t *R = g_jmn_relaciones.u.map;
-    jb_var_t best = jb_new_texto("");
-    double bestw = -1.0;
-    size_t oi, di;
-    if (!R) return best;
-    for (oi = 0; oi < R->len; oi++) {
-        jb_var_t rel = jb_map_get(g_jmn_relaciones, R->keys[oi]);
-        if (rel.type != JB_TYPE_MAP || !rel.u.map) {
-            jb_var_clear(&rel);
-            continue;
-        }
-        for (di = 0; di < rel.u.map->len; di++) {
-            if (!jb_seq_text_eq(rel.u.map->keys[di], paso)) continue;
-            double w = jb_jmn_as_f64(rel.u.map->vals[di], 0.0);
-            if (w < 0.01) continue;
-            if (w >= bestw) {
-                bestw = w;
-                jb_var_clear(&best);
-                best = jb_jmn_key_as_text(R->keys[oi]);
-            }
-        }
-        jb_var_clear(&rel);
-    }
-    return best;
-}
-
-jb_var_t jb_asociar_secuencia_solo(jb_var_t lista) {
-    jb_seq_chain_list_items(lista);
-    jb_jmn_set_resultado(jb_new_bool(true));
-    return jb_var_clone(jb_resultado_global);
-}
-
-jb_var_t jb_asociar_secuencia(jb_var_t a, jb_var_t b) {
-    if (a.type == JB_TYPE_TEXTO && b.type == JB_TYPE_LIST) {
-        jb_var_t kctx = jb_jmn_key_as_text(a);
-        jb_map_put(&g_jmn_secuencias, kctx, jb_var_clone(b));
-        jb_var_clear(&kctx);
-        jb_seq_chain_list_items(b);
-        jb_jmn_set_resultado(jb_new_bool(true));
-        return jb_var_clone(jb_resultado_global);
-    }
-    if (a.type == JB_TYPE_LIST && b.type == JB_TYPE_LIST) {
-        jb_list_t *La = a.u.lst, *Lb = b.u.lst;
-        if (!La || !Lb || La->len == 0 || Lb->len == 0) {
-            jb_jmn_set_resultado(jb_new_bool(false));
-            return jb_var_clone(jb_resultado_global);
-        }
-        jb_jmn_set_peso(La->items[La->len - 1], Lb->items[0], 1.0);
-        jb_jmn_set_resultado(jb_new_bool(true));
-        return jb_var_clone(jb_resultado_global);
-    }
-    if (a.type == JB_TYPE_LIST && b.type == JB_TYPE_TEXTO) {
-        jb_list_t *La = a.u.lst;
-        if (!La || La->len == 0) {
-            jb_jmn_set_resultado(jb_new_bool(false));
-            return jb_var_clone(jb_resultado_global);
-        }
-        jb_jmn_set_peso(La->items[La->len - 1], b, 1.0);
-        jb_jmn_set_resultado(jb_new_bool(true));
-        return jb_var_clone(jb_resultado_global);
-    }
-    jb_jmn_set_resultado(jb_new_bool(false));
-    return jb_var_clone(jb_resultado_global);
-}
-
-jb_var_t jb_obtener_secuencia(jb_var_t contexto) {
-    jb_var_t k = jb_jmn_key_as_text(contexto);
-    jb_var_t L = jb_map_get(g_jmn_secuencias, k);
-    jb_var_t out = (L.type == JB_TYPE_LIST) ? jb_var_clone(L) : jb_new_list();
-    jb_var_clear(&L);
-    jb_jmn_set_resultado(out);
-    jb_var_clear(&k);
-    return out;
-}
-
-jb_var_t jb_pensar_siguiente(jb_var_t paso, jb_var_t contexto_opt) {
-    jb_var_t out;
-    if (contexto_opt.type != JB_TYPE_NULL) {
-        jb_var_t kc = jb_jmn_key_as_text(contexto_opt);
-        jb_var_t L = jb_map_get(g_jmn_secuencias, kc);
-        out = jb_seq_next_in_list(L, paso);
-        jb_var_clear(&L);
-        jb_var_clear(&kc);
-    } else
-        out = jb_pensar_siguiente_global(paso);
-    jb_jmn_set_resultado(out);
-    jb_var_clear(&out);
-    return jb_var_clone(jb_resultado_global);
-}
-
-jb_var_t jb_pensar_anterior(jb_var_t paso, jb_var_t contexto_opt) {
-    jb_var_t out;
-    if (contexto_opt.type != JB_TYPE_NULL) {
-        jb_var_t kc = jb_jmn_key_as_text(contexto_opt);
-        jb_var_t L = jb_map_get(g_jmn_secuencias, kc);
-        out = jb_seq_prev_in_list(L, paso);
-        jb_var_clear(&L);
-        jb_var_clear(&kc);
-    } else
-        out = jb_pensar_anterior_global(paso);
-    jb_jmn_set_resultado(out);
-    jb_var_clear(&out);
-    return jb_var_clone(jb_resultado_global);
-}
-
-jb_var_t jb_corregir_secuencia(jb_var_t anterior, jb_var_t incorrecto, jb_var_t correcto) {
-    jb_jmn_set_peso(anterior, incorrecto, 0.01);
-    jb_jmn_set_peso(anterior, correcto, 1.0);
-    jb_jmn_set_resultado(jb_new_bool(true));
-    return jb_var_clone(jb_resultado_global);
-}
-
-jb_var_t jb_reforzar(jb_var_t origen, jb_var_t destino, jb_var_t delta) {
-    jb_var_t ko = jb_jmn_key_as_text(origen);
-    jb_var_t kd = jb_jmn_key_as_text(destino);
-    double d = jb_jmn_as_f64(delta, 0.1);
-    double w = jb_jmn_get_peso(ko, kd);
-    w = jb_jmn_clamp01(w + d);
-    jb_jmn_set_peso(ko, kd, w);
-    jb_jmn_set_resultado(jb_new_flotante_scalar(w));
-    jb_var_clear(&ko);
-    jb_var_clear(&kd);
-    return jb_var_clone(jb_resultado_global);
-}
-
-jb_var_t jb_penalizar(jb_var_t origen, jb_var_t destino, jb_var_t delta) {
-    jb_var_t ko = jb_jmn_key_as_text(origen);
-    jb_var_t kd = jb_jmn_key_as_text(destino);
-    double d = jb_jmn_as_f64(delta, 0.1);
-    double w = jb_jmn_get_peso(ko, kd);
-    w = jb_jmn_clamp01(w - d);
-    jb_jmn_set_peso(ko, kd, w);
-    jb_jmn_set_resultado(jb_new_flotante_scalar(w));
-    jb_var_clear(&ko);
-    jb_var_clear(&kd);
-    return jb_var_clone(jb_resultado_global);
-}
-
-jb_var_t jb_buscar_asociados(jb_var_t origen, jb_var_t min_peso) {
-    jb_var_t ko = jb_jmn_key_as_text(origen);
-    jb_var_t rel = jb_map_get(g_jmn_relaciones, ko);
-    jb_var_t out = jb_new_list();
-    double th = jb_jmn_clamp01(jb_jmn_as_f64(min_peso, 0.0));
-    if (rel.type == JB_TYPE_MAP && rel.u.map) {
-        size_t i;
-        for (i = 0; i < rel.u.map->len; i++) {
-            jb_var_t k = rel.u.map->keys[i];
-            jb_var_t w = rel.u.map->vals[i];
-            double wd = jb_jmn_as_f64(w, 0.0);
-            if (wd < th) continue;
-            if (k.type == JB_TYPE_TEXTO && k.u.str) jb_list_push(&out, jb_new_texto(k.u.str));
-            else
-                jb_list_push(&out, jb_var_clone(k));
-        }
-    }
-    jb_jmn_set_resultado(out);
-    jb_var_clear(&rel);
-    jb_var_clear(&ko);
-    return out;
-}
-
-jb_var_t jb_propagar_activacion(jb_var_t origen, jb_var_t decaimiento) {
-    jb_var_t ko = jb_jmn_key_as_text(origen);
-    jb_var_t rel = jb_map_get(g_jmn_relaciones, ko);
-    jb_var_t out = jb_new_map();
-    double decay = jb_jmn_clamp01(jb_jmn_as_f64(decaimiento, 0.5));
-    if (rel.type == JB_TYPE_MAP && rel.u.map) {
-        size_t i;
-        for (i = 0; i < rel.u.map->len; i++) {
-            jb_var_t k = rel.u.map->keys[i];
-            jb_var_t w = rel.u.map->vals[i];
-            jb_var_t score = jb_new_flotante_scalar(jb_jmn_clamp01(jb_jmn_as_f64(w, 0.0) * decay));
-            jb_map_put(&out, k, score);
-            jb_var_clear(&score);
-        }
-    }
-    jb_jmn_set_resultado(out);
-    jb_var_clear(&rel);
-    jb_var_clear(&ko);
-    return out;
-}
-
-jb_var_t jb_resolver_conflictos(jb_var_t origen) {
-    jb_var_t ko = jb_jmn_key_as_text(origen);
-    jb_var_t rel = jb_map_get(g_jmn_relaciones, ko);
-    jb_var_t best = jb_new_nulo();
-    double best_w = -1.0;
-    if (rel.type == JB_TYPE_MAP && rel.u.map) {
-        size_t i;
-        for (i = 0; i < rel.u.map->len; i++) {
-            jb_var_t k = rel.u.map->keys[i];
-            jb_var_t w = rel.u.map->vals[i];
-            double wd = jb_jmn_as_f64(w, 0.0);
-            if (wd > best_w) {
-                best_w = wd;
-                jb_var_clear(&best);
-                best = jb_var_clone(k);
-            }
-        }
-    }
-    jb_jmn_set_resultado(best);
-    jb_var_clear(&rel);
-    jb_var_clear(&ko);
-    return best;
-}
-
-jb_var_t jb_buscar_peso(jb_var_t concepto) {
-    jb_var_t kc = jb_jmn_key_as_text(concepto);
-    double w = jb_jmn_get_peso(kc, kc);
-    jb_var_t out = jb_new_flotante_scalar(w);
-    jb_jmn_set_resultado(out);
-    jb_var_clear(&kc);
-    return out;
-}
-
-/* Peso de la arista origen->destino (paridad con buscar_peso / mem_obtener_fuerza de dos argumentos en VM). */
-jb_var_t jb_mem_obtener_fuerza(jb_var_t origen, jb_var_t destino) {
-    double w = jb_jmn_get_peso(origen, destino);
-    jb_var_t out = jb_new_flotante_scalar(w);
-    jb_jmn_set_resultado(out);
-    return out;
-}
-
-/*
- * reforzar(concepto, magnitud) / penalizar(concepto, magnitud) en VM: magnitud 1..100 como fracción sobre
- * todas las aristas salientes del concepto. Distinto de jb_reforzar/jb_penalizar (arista origen->destino).
- */
-jb_var_t jb_reforzar_concepto(jb_var_t concepto, jb_var_t magnitud) {
-    jb_var_t ko = jb_jmn_key_as_text(concepto);
-    int mag = (int)jb_jmn_as_f64(magnitud, 10.0);
-    if (mag < 1) mag = 1;
-    if (mag > 100) mag = 100;
-    double delta = (double)mag / 100.0;
-    jb_var_t rel = jb_map_get(g_jmn_relaciones, ko);
-    if (rel.type == JB_TYPE_MAP && rel.u.map) {
-        size_t i;
-        for (i = 0; i < rel.u.map->len; i++) {
-            double w = jb_jmn_as_f64(rel.u.map->vals[i], 0.0);
-            w = jb_jmn_clamp01(w + delta);
-            jb_map_put(&rel, rel.u.map->keys[i], jb_new_flotante_scalar(w));
-        }
-    }
-    jb_map_put(&g_jmn_relaciones, ko, rel);
-    jb_var_clear(&rel);
-    jb_var_clear(&ko);
-    jb_jmn_set_resultado(jb_new_bool(true));
-    return jb_var_clone(jb_resultado_global);
-}
-
-jb_var_t jb_penalizar_concepto(jb_var_t concepto, jb_var_t magnitud) {
-    jb_var_t ko = jb_jmn_key_as_text(concepto);
-    int mag = (int)jb_jmn_as_f64(magnitud, 10.0);
-    if (mag < 1) mag = 1;
-    if (mag > 100) mag = 100;
-    double delta = (double)mag / 100.0;
-    jb_var_t rel = jb_map_get(g_jmn_relaciones, ko);
-    if (rel.type == JB_TYPE_MAP && rel.u.map) {
-        size_t i;
-        for (i = 0; i < rel.u.map->len; i++) {
-            double w = jb_jmn_as_f64(rel.u.map->vals[i], 0.0);
-            w = jb_jmn_clamp01(w - delta);
-            jb_map_put(&rel, rel.u.map->keys[i], jb_new_flotante_scalar(w));
-        }
-    }
-    jb_map_put(&g_jmn_relaciones, ko, rel);
-    jb_var_clear(&rel);
-    jb_var_clear(&ko);
-    jb_jmn_set_resultado(jb_new_bool(true));
-    return jb_var_clone(jb_resultado_global);
-}
-
-/* Elimina aristas salientes con peso estrictamente menor al umbral (0..1). */
-jb_var_t jb_olvidar_debiles(jb_var_t umbral_v) {
-    double th = jb_jmn_clamp01(jb_jmn_as_f64(umbral_v, 0.1));
-    jb_map_t *R = g_jmn_relaciones.u.map;
-    size_t oi, di;
-    if (!R) return jb_new_bool(true);
-    for (oi = 0; oi < R->len; oi++) {
-        jb_var_t ko = jb_var_clone(R->keys[oi]);
-        jb_var_t old_rel = jb_map_get(g_jmn_relaciones, ko);
-        jb_var_t new_rel = jb_new_map();
-        if (old_rel.type == JB_TYPE_MAP && old_rel.u.map) {
-            for (di = 0; di < old_rel.u.map->len; di++) {
-                double w = jb_jmn_as_f64(old_rel.u.map->vals[di], 0.0);
-                if (w >= th)
-                    jb_map_put(&new_rel, jb_var_clone(old_rel.u.map->keys[di]), jb_var_clone(old_rel.u.map->vals[di]));
-            }
-        }
-        jb_map_put(&g_jmn_relaciones, ko, new_rel);
-        jb_var_clear(&new_rel);
-        jb_var_clear(&old_rel);
-        jb_var_clear(&ko);
-    }
-    return jb_new_bool(true);
 }
 
 jb_var_t jb_recordar_stub(jb_var_t key, jb_var_t val) { return jb_recordar(key, val); }
@@ -1638,6 +1048,46 @@ jb_var_t jb_minusculas(jb_var_t s) {
         jb_var_t r = jb_new_texto(q);
         free(q);
         return r;
+    }
+}
+
+jb_var_t jb_reemplazar(jb_var_t hay, jb_var_t patron, jb_var_t reemplazo) {
+    jb_var_t th = jb_jmn_key_as_text(hay), tn = jb_jmn_key_as_text(patron), tr = jb_jmn_key_as_text(reemplazo);
+    const char *h = th.type == JB_TYPE_TEXTO && th.u.str ? th.u.str : "";
+    const char *n = tn.type == JB_TYPE_TEXTO && tn.u.str ? tn.u.str : "";
+    const char *r = tr.type == JB_TYPE_TEXTO && tr.u.str ? tr.u.str : "";
+    char out[8192];
+    out[0] = '\0';
+    size_t nlen = strlen(n);
+    if (nlen == 0) {
+        jb_var_t ret = jb_new_texto(h);
+        jb_var_clear(&th);
+        jb_var_clear(&tn);
+        jb_var_clear(&tr);
+        return ret;
+    }
+    char *wp = out;
+    const char *sp = h;
+    while (*sp && (size_t)(wp - out) < sizeof(out) - 1) {
+        const char *pos = strstr(sp, n);
+        if (!pos) {
+            while (*sp && (size_t)(wp - out) < sizeof(out) - 1)
+                *wp++ = *sp++;
+            break;
+        }
+        while (sp < pos && (size_t)(wp - out) < sizeof(out) - 1)
+            *wp++ = *sp++;
+        for (const char *rp = r; *rp && (size_t)(wp - out) < sizeof(out) - 1; )
+            *wp++ = *rp++;
+        sp = pos + nlen;
+    }
+    *wp = '\0';
+    {
+        jb_var_t ret = jb_new_texto(out);
+        jb_var_clear(&th);
+        jb_var_clear(&tn);
+        jb_var_clear(&tr);
+        return ret;
     }
 }
 
@@ -2202,48 +1652,21 @@ static void jb_rastro_push_id(int64_t id, double w) {
     if (g_rastro_count < g_rastro_cap) g_rastro_count++;
 }
 
-static int jb_mem_contains(const char *needle, const char *hay, int cs) {
-    if (!needle || !hay) return 0;
-    if (cs) return strstr(hay, needle) != NULL;
-    {
-        char *a = strdup(hay), *b = strdup(needle), *p;
-        int r;
-        if (!a || !b) {
-            free(a);
-            free(b);
-            return 0;
-        }
-        for (p = a; *p; p++) *p = (char)tolower((unsigned char)*p);
-        for (p = b; *p; p++) *p = (char)tolower((unsigned char)*p);
-        r = strstr(a, b) != NULL;
-        free(a);
-        free(b);
-        return r;
-    }
-}
-
 jb_var_t jb_buscar_en_memoria(jb_var_t termino) {
     jb_var_t t = jb_jmn_key_as_text(termino);
     const char *q = t.type == JB_TYPE_TEXTO && t.u.str ? t.u.str : "";
-    jb_map_t *M = g_jmn_memoria.u.map;
-    size_t i;
-    if (M)
-        for (i = 0; i < M->len; i++) {
-            jb_var_t ktxt = jb_jmn_key_as_text(M->keys[i]);
-            jb_var_t vtxt = jb_jmn_key_as_text(M->vals[i]);
-            const char *k = ktxt.type == JB_TYPE_TEXTO && ktxt.u.str ? ktxt.u.str : "";
-            const char *v = vtxt.type == JB_TYPE_TEXTO && vtxt.u.str ? vtxt.u.str : "";
-            int hit = jb_mem_contains(q, k, 0) || jb_mem_contains(q, v, 0);
-            jb_var_clear(&ktxt);
-            jb_var_clear(&vtxt);
-            if (hit) {
-                jb_var_t r = jb_new_texto(k);
-                jb_jmn_set_resultado(r);
-                jb_var_clear(&r);
-                jb_var_clear(&t);
-                return jb_var_clone(jb_resultado_global);
-            }
+    JMNMemoria *m = jb_jmn_rt_mem();
+    if (m && q[0]) {
+        JMNBusquedaIntrospectivaResultado res[4];
+        int n = jmn_buscar_introspectiva(m, q, res, 1u, 0);
+        if (n > 0 && res[0].texto[0]) {
+            jb_var_t r = jb_new_texto(res[0].texto);
+            jb_jmn_set_resultado(r);
+            jb_var_clear(&r);
+            jb_var_clear(&t);
+            return jb_var_clone(jb_resultado_global);
         }
+    }
     jb_var_clear(&t);
     jb_jmn_set_resultado(jb_new_texto(""));
     return jb_var_clone(jb_resultado_global);
@@ -2252,26 +1675,24 @@ jb_var_t jb_buscar_en_memoria(jb_var_t termino) {
 jb_var_t jb_buscar_en_memoria_lista(jb_var_t termino, jb_var_t maxn) {
     jb_var_t L = jb_new_list();
     int max = (int)jb_jmn_as_f64(maxn, 10);
-    int n = 0;
     jb_var_t t = jb_jmn_key_as_text(termino);
     const char *q = t.type == JB_TYPE_TEXTO && t.u.str ? t.u.str : "";
-    jb_map_t *M = g_jmn_memoria.u.map;
-    size_t i;
+    JMNMemoria *m = jb_jmn_rt_mem();
     if (max < 1) max = 1;
     if (max > 100) max = 100;
-    if (M)
-        for (i = 0; i < M->len && n < max; i++) {
-            jb_var_t ktxt = jb_jmn_key_as_text(M->keys[i]);
-            jb_var_t vtxt = jb_jmn_key_as_text(M->vals[i]);
-            const char *k = ktxt.type == JB_TYPE_TEXTO && ktxt.u.str ? ktxt.u.str : "";
-            const char *v = vtxt.type == JB_TYPE_TEXTO && vtxt.u.str ? vtxt.u.str : "";
-            if (jb_mem_contains(q, k, 0) || jb_mem_contains(q, v, 0)) {
-                jb_list_push(&L, jb_new_texto(k));
-                n++;
+    if (m && q[0]) {
+        uint32_t *ids = (uint32_t *)calloc((size_t)max, sizeof(uint32_t));
+        int n, j;
+        if (ids) {
+            n = jmn_buscar_introspectiva_lista(m, q, ids, (uint32_t)max, 0);
+            for (j = 0; j < n && j < max; j++) {
+                char buf[256];
+                if (jmn_obtener_texto(m, ids[j], buf, sizeof buf) >= 0 && buf[0])
+                    jb_list_push(&L, jb_new_texto(buf));
             }
-            jb_var_clear(&ktxt);
-            jb_var_clear(&vtxt);
+            free(ids);
         }
+    }
     jb_var_clear(&t);
     jb_jmn_set_resultado(L);
     return L;
@@ -2281,22 +1702,18 @@ jb_var_t jb_buscar_en_memoria_cs(jb_var_t termino, jb_var_t case_sens) {
     jb_var_t t = jb_jmn_key_as_text(termino);
     const char *q = t.type == JB_TYPE_TEXTO && t.u.str ? t.u.str : "";
     int cs = jb_truthy(case_sens);
-    jb_map_t *M = g_jmn_memoria.u.map;
-    size_t i;
-    if (M)
-        for (i = 0; i < M->len; i++) {
-            jb_var_t ktxt = jb_jmn_key_as_text(M->keys[i]);
-            const char *k = ktxt.type == JB_TYPE_TEXTO && ktxt.u.str ? ktxt.u.str : "";
-            if (jb_mem_contains(q, k, cs)) {
-                jb_var_t r = jb_new_texto(k);
-                jb_jmn_set_resultado(r);
-                jb_var_clear(&r);
-                jb_var_clear(&ktxt);
-                jb_var_clear(&t);
-                return jb_var_clone(jb_resultado_global);
-            }
-            jb_var_clear(&ktxt);
+    JMNMemoria *mem = jb_jmn_rt_mem();
+    if (mem && q[0]) {
+        JMNBusquedaIntrospectivaResultado res[2];
+        int n = jmn_buscar_introspectiva(mem, q, res, 1u, cs);
+        if (n > 0 && res[0].texto[0]) {
+            jb_var_t r = jb_new_texto(res[0].texto);
+            jb_jmn_set_resultado(r);
+            jb_var_clear(&r);
+            jb_var_clear(&t);
+            return jb_var_clone(jb_resultado_global);
         }
+    }
     jb_var_clear(&t);
     jb_jmn_set_resultado(jb_new_texto(""));
     return jb_var_clone(jb_resultado_global);
@@ -2307,16 +1724,29 @@ jb_var_t jb_buscar_en_memoria_detallada(jb_var_t termino, jb_var_t maxn, jb_var_
     return jb_buscar_en_memoria_lista(termino, maxn);
 }
 
+typedef struct {
+    jb_var_t *list;
+} JbRecolectarTodoCtx;
+
+static int jb_cb_recolectar_concepto_texto(JMNNodo *nodo, void *ud) {
+    JbRecolectarTodoCtx *c = (JbRecolectarTodoCtx *)ud;
+    JMNMemoria *m = jb_jmn_rt_mem();
+    char buf[256];
+    if (!m || !c || !c->list)
+        return 0;
+    if (jmn_obtener_texto(m, nodo->id, buf, sizeof buf) >= 0 && buf[0])
+        jb_list_push(c->list, jb_new_texto(buf));
+    return 0;
+}
+
 jb_var_t jb_obtener_todos_conceptos(void) {
     jb_var_t L = jb_new_list();
-    jb_map_t *M = g_jmn_memoria.u.map;
-    size_t i;
-    if (M)
-        for (i = 0; i < M->len; i++) {
-            jb_var_t ktxt = jb_jmn_key_as_text(M->keys[i]);
-            if (ktxt.type == JB_TYPE_TEXTO && ktxt.u.str) jb_list_push(&L, jb_new_texto(ktxt.u.str));
-            jb_var_clear(&ktxt);
-        }
+    JMNMemoria *m = jb_jmn_rt_mem();
+    if (m) {
+        JbRecolectarTodoCtx cx;
+        cx.list = &L;
+        (void)jmn_iterar_nodos(m, jb_cb_recolectar_concepto_texto, &cx);
+    }
     jb_jmn_set_resultado(L);
     return L;
 }
@@ -2354,25 +1784,6 @@ jb_var_t jb_comparar_patrones(jb_var_t a, jb_var_t b) {
 
 jb_var_t jb_decae_conexiones(jb_var_t factor) { return jb_decaer_conexiones(factor); }
 
-jb_var_t jb_decaer_conexiones(jb_var_t factor) {
-    double f = jb_jmn_clamp01(jb_jmn_as_f64(factor, 0.9));
-    jb_map_t *R = g_jmn_relaciones.u.map;
-    size_t i, j;
-    if (!R) return jb_new_bool(true);
-    for (i = 0; i < R->len; i++) {
-        jb_var_t rel = jb_map_get(g_jmn_relaciones, R->keys[i]);
-        if (rel.type == JB_TYPE_MAP && rel.u.map) {
-            for (j = 0; j < rel.u.map->len; j++) {
-                double w = jb_jmn_as_f64(rel.u.map->vals[j], 0) * f;
-                jb_map_put(&rel, rel.u.map->keys[j], jb_new_flotante_scalar(jb_jmn_clamp01(w)));
-            }
-        }
-        jb_map_put(&g_jmn_relaciones, R->keys[i], rel);
-        jb_var_clear(&rel);
-    }
-    return jb_new_bool(true);
-}
-
 jb_var_t jb_pensar(jb_var_t semilla) {
     jb_var_t r = jb_buscar(semilla);
     jb_rastro_push_id(jb_jmn_as_f64(r, 0), 1.0);
@@ -2405,6 +1816,23 @@ static uint32_t jb_hash32(const char *s) {
     return h;
 }
 
+static uint32_t jb_vm_hash_texto_local(const char *texto) {
+    uint32_t hash = 5381u;
+    if (!texto) return 0;
+    for (const unsigned char *p = (const unsigned char *)texto; *p; p++)
+        hash = ((hash << 5) + hash) + *p;
+    return hash;
+}
+
+static uint32_t jb_aot_concept_id_from_var(jb_var_t v) {
+    jb_var_t kt = jb_jmn_key_as_text(v);
+    const char *s = (kt.type == JB_TYPE_TEXTO && kt.u.str) ? kt.u.str : "";
+    uint32_t id = jb_vm_hash_texto_local(s);
+    if (id == 0u) id = 5381u;
+    jb_var_clear(&kt);
+    return id;
+}
+
 jb_var_t jb_elegir_por_peso(jb_var_t lista, jb_var_t ctx) { return jb_elegir_por_peso_segun(lista, ctx); }
 
 jb_var_t jb_elegir_por_peso_segun(jb_var_t lista, jb_var_t ctx) {
@@ -2413,6 +1841,8 @@ jb_var_t jb_elegir_por_peso_segun(jb_var_t lista, jb_var_t ctx) {
     jb_list_t *L;
     size_t i, n;
     double sum = 0, *w = NULL, r, acc;
+    JMNMemoria *m = jb_jmn_rt_mem();
+    uint32_t id_ctx = jb_aot_concept_id_from_var(ctx);
     (void)h;
     if (lista.type != JB_TYPE_LIST || !lista.u.lst) return jb_new_entero(0);
     L = lista.u.lst;
@@ -2421,17 +1851,15 @@ jb_var_t jb_elegir_por_peso_segun(jb_var_t lista, jb_var_t ctx) {
     w = (double *)calloc(n, sizeof(double));
     if (!w) return jb_new_entero(0);
     for (i = 0; i < n; i++) {
-        jb_var_t ko = jb_jmn_key_as_text(L->items[i]);
-        jb_var_t rel = jb_map_get(g_jmn_relaciones, ko);
         double wsum = 0;
-        if (rel.type == JB_TYPE_MAP && rel.u.map) {
-            size_t j;
-            for (j = 0; j < rel.u.map->len; j++) wsum += jb_jmn_as_f64(rel.u.map->vals[j], 0);
+        uint32_t id_item = jb_aot_concept_id_from_var(L->items[i]);
+        if (m) {
+            float s1 = jmn_obtener_fuerza_asociacion(m, id_ctx, id_item);
+            float s2 = jmn_obtener_fuerza_asociacion(m, id_item, id_ctx);
+            wsum = (double)s1 > (double)s2 ? (double)s1 : (double)s2;
         }
         w[i] = wsum <= 0 ? 1.0 : wsum;
         sum += w[i];
-        jb_var_clear(&rel);
-        jb_var_clear(&ko);
     }
     r = fmod((double)h * 0.0001 + 0.37, 1.0) * sum;
     acc = 0;

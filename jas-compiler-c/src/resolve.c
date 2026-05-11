@@ -31,11 +31,12 @@ static void resolve_emit_semantic(const char *source, const char *diag_path, int
         fprintf(stderr, "%s%s%s", RES_ANSI_RED, head, RES_ANSI_RESET);
 }
 
-/* lista, lista?, mapa, mapa? */
+/* lista, lista?, mapa, mapa?, elemento */
 static int type_is_foreach_collection(const char *type_name) {
     if (!type_name) return 0;
     return strcmp(type_name, "lista") == 0 || strcmp(type_name, "lista?") == 0 ||
-           strcmp(type_name, "mapa") == 0 || strcmp(type_name, "mapa?") == 0;
+           strcmp(type_name, "mapa") == 0 || strcmp(type_name, "mapa?") == 0 ||
+           strcmp(type_name, "elemento") == 0;
 }
 
 static void validate_foreach_types(ForEachNode *fe, SymbolTable *st, int *errs,
@@ -54,6 +55,10 @@ static void validate_foreach_types(ForEachNode *fe, SymbolTable *st, int *errs,
         return;
 
     if (!type_is_foreach_collection(ct)) {
+        /* Caso especial: para cada caracter ch sobre texto */
+        if (strcmp(ct, "texto") == 0 && strcmp(fe->iter_type, "caracter") == 0) {
+            return;
+        }
         char detail[1536];
         snprintf(detail, sizeof detail,
                  "en 'para cada' solo se puede iterar sobre lista o mapa.\n"
@@ -312,6 +317,8 @@ static void resolve_statement(ASTNode *node, SymbolTable *st, int *errs, const c
             sym_enter_scope(st, 0);
             if (fe->iter_name && fe->iter_type)
                 sym_declare(st, fe->iter_name, fe->iter_type, 8, 0, 0, NULL, SYMDECL_FLAGS_NONE);
+            if (fe->key_name)
+                sym_declare(st, fe->key_name, "entero", 8, 0, 0, NULL, SYMDECL_FLAGS_NONE);
             resolve_block(fe->body, st, errs, source, diag_path);
             sym_exit_scope(st);
             break;

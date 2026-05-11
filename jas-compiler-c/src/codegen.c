@@ -2010,6 +2010,7 @@ static int expr_already_yields_text_string_id(CodeGen *cg, ASTNode *node) {
         if (strcmp(n, "concatenar") == 0) return 1;
         if (strcmp(n, "decimal") == 0) return 1;
         if (strcmp(n, "minusculas") == 0 || strcmp(n, "str_minusculas") == 0) return 1;
+        if (strcmp(n, "reemplazar") == 0 || strcmp(n, "remplazar") == 0 || strcmp(n, "reemplazar_texto") == 0) return 1;
         if (strcmp(n, "copiar_texto") == 0 || strcmp(n, "str_copiar") == 0) return 1;
         /* Otras funciones globales que retornan texto */
         const char *t = get_expression_type(cg, node);
@@ -2618,13 +2619,13 @@ static MemberAddrResult get_member_address(CodeGen *cg, ASTNode *node, int dest_
 
 /* Llamada de sistema reconocida pero sin argumentos obligatorios (evita mensaje engañoso "funcion no definida"). */
 static void sistema_error_sin_argumentos(CodeGen *cg, const char *nombre_sistema, const char *que_pide, int line, int col) {
-    snprintf(cg->last_error, CODEGEN_ERROR_MAX,
+    char buf[1024];
+    snprintf(buf, sizeof buf,
              "'%s' requiere un argumento (%s). Esta llamada no tiene argumentos.",
              nombre_sistema ? nombre_sistema : "?",
              que_pide ? que_pide : "vea la documentacion");
     cg->has_error = 1;
-    cg->err_line = line > 0 ? line : 1;
-    cg->err_col = col > 0 ? col : 1;
+    cg_collect_push(cg, buf, line > 0 ? line : 1, col > 0 ? col : 1);
 }
 
 /* vec2/vec3/vec4(...) con aridad distinta a la del tipo (no son funciones globales). */
@@ -2644,43 +2645,43 @@ static int codegen_error_vec_constructor_arity(CodeGen *cg, CallNode *cn) {
     } else
         return 0;
     if (cn->n_args == (size_t)need) return 0;
-    snprintf(cg->last_error, CODEGEN_ERROR_MAX,
+    char buf[1024];
+    snprintf(buf, sizeof buf,
              "'%s' es el constructor del tipo vector (no una funcion global). Requiere exactamente %d argumentos numericos; se recibieron %zu. Ejemplo: %s.",
              cn->name, need, cn->n_args, ej);
     cg->has_error = 1;
-    cg->err_line = cn->base.line > 0 ? cn->base.line : 1;
-    cg->err_col = cn->base.col > 0 ? cn->base.col : 1;
+    cg_collect_push(cg, buf, cn->base.line > 0 ? cn->base.line : 1, cn->base.col > 0 ? cn->base.col : 1);
     return 1;
 }
 
 static int codegen_error_vector_sistema_arity(CodeGen *cg, CallNode *cn, int need, const char *uso) {
     if ((size_t)need == cn->n_args) return 0;
-    snprintf(cg->last_error, CODEGEN_ERROR_MAX,
+    char buf[1024];
+    snprintf(buf, sizeof buf,
              "Llamada incorrecta a '%s': se esperaban %d argumento(s) y se recibieron %zu. Uso: %s.",
              cn->name ? cn->name : "?", need, cn->n_args, uso);
     cg->has_error = 1;
-    cg->err_line = cn->base.line > 0 ? cn->base.line : 1;
-    cg->err_col = cn->base.col > 0 ? cn->base.col : 1;
+    cg_collect_push(cg, buf, cn->base.line > 0 ? cn->base.line : 1, cn->base.col > 0 ? cn->base.col : 1);
     return 1;
 }
 
 static void codegen_error_vector_sistema_bad_identifiers(CodeGen *cg, CallNode *cn, const char *name, const char *uso) {
-    snprintf(cg->last_error, CODEGEN_ERROR_MAX,
+    char buf[1024];
+    snprintf(buf, sizeof buf,
              "Llamada incorrecta a '%s': los argumentos deben ser identificadores (variables vector), no expresiones compuestas. Uso: %s.",
              name ? name : "?", uso);
     cg->has_error = 1;
-    cg->err_line = cn->base.line > 0 ? cn->base.line : 1;
-    cg->err_col = cn->base.col > 0 ? cn->base.col : 1;
+    cg_collect_push(cg, buf, cn->base.line > 0 ? cn->base.line : 1, cn->base.col > 0 ? cn->base.col : 1);
 }
 
 /* mat3/mat4 builtins: mismos requisitos de identificadores que vec*, distinto texto. */
 static void codegen_error_mat_sistema_bad_identifiers(CodeGen *cg, CallNode *cn, const char *uso) {
-    snprintf(cg->last_error, CODEGEN_ERROR_MAX,
+    char buf[1024];
+    snprintf(buf, sizeof buf,
              "Llamada incorrecta a '%s': los argumentos deben ser identificadores de variable (matriz o vector segun la operacion), no expresiones compuestas. Uso: %s.",
              cn->name ? cn->name : "?", uso);
     cg->has_error = 1;
-    cg->err_line = cn->base.line > 0 ? cn->base.line : 1;
-    cg->err_col = cn->base.col > 0 ? cn->base.col : 1;
+    cg_collect_push(cg, buf, cn->base.line > 0 ? cn->base.line : 1, cn->base.col > 0 ? cn->base.col : 1);
 }
 
 /* mat*_mul_vec*: el vector suele escribirse como vecN(...); mensaje mas claro que "expresiones compuestas". */
@@ -2689,14 +2690,14 @@ static void codegen_error_mat_mul_vec_arg_not_identifier(CodeGen *cg, CallNode *
     if (arg && is_node(arg, NODE_CALL)) {
         CallNode *ac = (CallNode *)arg;
         if (ac->name && strcmp(ac->name, ctor_name) == 0) {
-            snprintf(cg->last_error, CODEGEN_ERROR_MAX,
+            char buf[1024];
+            snprintf(buf, sizeof buf,
                      "Llamada incorrecta a '%s': el argumento %d debe ser el nombre de una variable %s, no %s(...) "
                      "(constructor del tipo; la VM necesita la direccion del vector ya almacenado). "
                      "Asigne antes a una variable y pase el identificador. Uso: %s.",
                      cn->name ? cn->name : "?", which_arg, ctor_name, ctor_name, uso);
             cg->has_error = 1;
-            cg->err_line = cn->base.line > 0 ? cn->base.line : 1;
-            cg->err_col = cn->base.col > 0 ? cn->base.col : 1;
+            cg_collect_push(cg, buf, cn->base.line > 0 ? cn->base.line : 1, cn->base.col > 0 ? cn->base.col : 1);
             return;
         }
     }
@@ -2707,14 +2708,14 @@ static void codegen_error_mat_mul_vec_arg_not_identifier(CodeGen *cg, CallNode *
 static void codegen_error_sistema_lista_arity(CodeGen *cg, const CallNode *cn, const char *nombre,
                                               size_t n_recibidos, size_t n_requeridos,
                                               const char *desc_args, const char *ejemplo) {
-    snprintf(cg->last_error, CODEGEN_ERROR_MAX,
+    char buf[1024];
+    snprintf(buf, sizeof buf,
              "'%s' es una llamada incorporada del lenguaje: requiere %zu argumento(s) (%s), "
              "pero esta llamada tiene %zu. Ejemplo: %s",
              nombre ? nombre : "?", n_requeridos, desc_args ? desc_args : "", n_recibidos,
              ejemplo ? ejemplo : "(ver documentacion)");
     cg->has_error = 1;
-    cg->err_line = cn->base.line;
-    cg->err_col = cn->base.col;
+    cg_collect_push(cg, buf, cn->base.line > 0 ? cn->base.line : 1, cn->base.col > 0 ? cn->base.col : 1);
 }
 
 /* Aridad de API incorporada (texto, etc.): mensaje corto + ejemplo; consejo opcional (p. ej. sinonimos). */
@@ -2730,21 +2731,22 @@ static void codegen_error_sistema_incorporada_arity(CodeGen *cg, const CallNode 
         snprintf(balance, sizeof balance, "Sobran %zu argumento(s). ",
                  (size_t)(cn->n_args - n_requeridos));
     }
+    char buf[1024];
     if (consejo && consejo[0])
-        snprintf(cg->last_error, CODEGEN_ERROR_MAX,
-                 "%s'%s' es una funcion incorporada: hace falta exactamente %zu (%s); "
+        snprintf(buf, sizeof buf,
+                 "%s'%s' es una funcion incorporada: requiere al menos %zu (%s); "
                  "aqui hay %zu. Ejemplo: %s %s",
                  balance, nm, n_requeridos, desc_args ? desc_args : "", cn->n_args,
                  ejemplo ? ejemplo : "()", consejo);
     else
-        snprintf(cg->last_error, CODEGEN_ERROR_MAX,
-                 "%s'%s' es una funcion incorporada: hace falta exactamente %zu (%s); "
+        snprintf(buf, sizeof buf,
+                 "%s'%s' es una funcion incorporada: requiere al menos %zu (%s); "
                  "aqui hay %zu. Ejemplo: %s",
                  balance, nm, n_requeridos, desc_args ? desc_args : "", cn->n_args,
                  ejemplo ? ejemplo : "()");
+    
     cg->has_error = 1;
-    cg->err_line = cn->base.line > 0 ? cn->base.line : 1;
-    cg->err_col = cn->base.col > 0 ? cn->base.col : 1;
+    cg_collect_push(cg, buf, cn->base.line > 0 ? cn->base.line : 1, cn->base.col > 0 ? cn->base.col : 1);
 }
 
 /* buscar_en_texto / contiene_texto / termina_con: aridad 2 con mensajes por caso (0, 1, 3+ args).
@@ -3041,6 +3043,19 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         emit(cg, OP_STR_MINUSCULAS, dest_reg, dest_reg, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
         return 1;
     }
+    if (strcmp(name, "reemplazar") == 0 || strcmp(name, "remplazar") == 0 || strcmp(name, "reemplazar_texto") == 0) {
+        if (cn->n_args != 3) {
+            codegen_error_sistema_incorporada_arity(cg, cn, 3,
+                "texto base, patron a sustituir y texto de reemplazo",
+                "reemplazar(\"a,b,c\", \",\", \" \")", NULL);
+            return 1;
+        }
+        visit_expression(cg, ARG0, 1);
+        visit_expression(cg, ARG1, 2);
+        visit_expression(cg, ARG2, 3);
+        emit(cg, OP_STR_REEMPLAZAR, (uint8_t)dest_reg, 1, 2, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+        return 1;
+    }
     if (strcmp(name, "str_mayusculas") == 0 || strcmp(name, "mayusculas") == 0) {
         if (cn->n_args != 1) {
             int es_sm = (strcmp(name, "str_mayusculas") == 0);
@@ -3057,26 +3072,40 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         return 1;
     }
     if (strcmp(name, "str_extraer_caracter") == 0) {
-        if (cn->n_args < 2) return 0;
+        if (cn->n_args < 2) {
+            codegen_error_sistema_incorporada_arity(cg, cn, 2,
+                "texto y posicion del caracter",
+                "str_extraer_caracter(\"hola\", 0)", NULL);
+            return 1;
+        }
         visit_expression(cg, ARG0, dest_reg);
         visit_expression(cg, ARG1, dest_reg + 1);
         emit(cg, OP_STR_EXTRAER_CARACTER, dest_reg, dest_reg, dest_reg + 1, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
         return 1;
     }
     if (strcmp(name, "codigo_caracter") == 0) {
-        if (!ARG0) return 0;
+        if (!ARG0) {
+            sistema_error_sin_argumentos(cg, name, "caracter o texto", cn->base.line, cn->base.col);
+            return 1;
+        }
         visit_expression(cg, ARG0, dest_reg + 1);
         emit(cg, OP_STR_CODIGO_CARACTER, dest_reg, dest_reg + 1, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
         return 1;
     }
     if (strcmp(name, "caracter_a_texto") == 0) {
-        if (!ARG0) return 0;
+        if (!ARG0) {
+            sistema_error_sin_argumentos(cg, name, "codigo numerico del caracter", cn->base.line, cn->base.col);
+            return 1;
+        }
         visit_expression(cg, ARG0, dest_reg + 1);
         emit(cg, OP_STR_DESDE_CODIGO, dest_reg, dest_reg + 1, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
         return 1;
     }
     if (strcmp(name, "byte_a_caracter") == 0 || strcmp(name, "caracter_a_byte") == 0) {
-        if (!ARG0) return 0;
+        if (!ARG0) {
+            sistema_error_sin_argumentos(cg, name, "valor a convertir", cn->base.line, cn->base.col);
+            return 1;
+        }
         visit_expression(cg, ARG0, dest_reg + 1);
         emit(cg, OP_MOVER, dest_reg, dest_reg + 1, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
         return 1;
@@ -3549,14 +3578,22 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
 
     /* 6.3 IA */
     if (strcmp(name, "aprender") == 0 || strcmp(name, "aprender_peso") == 0) {
-        if (cn->n_args < 2) return 0;
+        if (cn->n_args < 2) {
+            codegen_error_sistema_incorporada_arity(cg, cn, 2,
+                "identificador de concepto y peso",
+                "aprender(id, 0.8)", NULL);
+            return 1;
+        }
         visit_expression(cg, ARG0, 1);
         visit_expression(cg, ARG1, 2);
         emit(cg, OP_MEM_APRENDER_PESO_REG, 1, 2, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
         return 1;
     }
     if (strcmp(name, "reforzar") == 0) {
-        if (!ARG0) return 0;
+        if (!ARG0) {
+            sistema_error_sin_argumentos(cg, name, "identificador de concepto", cn->base.line, cn->base.col);
+            return 1;
+        }
         int r1 = visit_expression(cg, ARG0, dest_reg + 1);
         int mag = 10;
         if (cn->n_args >= 2 && ARG1 && is_node(ARG1, NODE_LITERAL) &&
@@ -3571,7 +3608,10 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         return 1;
     }
     if (strcmp(name, "penalizar") == 0) {
-        if (!ARG0) return 0;
+        if (!ARG0) {
+            sistema_error_sin_argumentos(cg, name, "identificador de concepto", cn->base.line, cn->base.col);
+            return 1;
+        }
         int r1 = visit_expression(cg, ARG0, dest_reg + 1);
         int mag = 10;
         if (cn->n_args >= 2 && ARG1 && is_node(ARG1, NODE_LITERAL) &&
@@ -3611,7 +3651,10 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         return 1;
     }
     if (strcmp(name, "olvidar") == 0) {
-        if (!ARG0) return 0;
+        if (!ARG0) {
+            sistema_error_sin_argumentos(cg, name, "identificador de concepto", cn->base.line, cn->base.col);
+            return 1;
+        }
         visit_expression(cg, ARG0, 1);
         emit(cg, OP_MEM_PENALIZAR_CONCEPTO, 1, 0, 100, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_C_IMMEDIATE);
         return 1;
@@ -3630,7 +3673,10 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         return 1;
     }
     if (strcmp(name, "percepcion") == 0) {
-        if (!ARG0) return 0;
+        if (!ARG0) {
+            sistema_error_sin_argumentos(cg, name, "identificador de concepto", cn->base.line, cn->base.col);
+            return 1;
+        }
         visit_expression(cg, ARG0, 1);
         emit(cg, OP_PERCEPCION_REGISTRAR, 0, 1, 0, IR_INST_FLAG_B_REGISTER);
         return 1;
@@ -3644,7 +3690,10 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         return 1;
     }
     if (strcmp(name, "percepcion_anterior") == 0) {
-        if (!ARG0) return 0;
+        if (!ARG0) {
+            sistema_error_sin_argumentos(cg, name, "indice K de percepcion anterior", cn->base.line, cn->base.col);
+            return 1;
+        }
         if (is_node(ARG0, NODE_LITERAL) && ((LiteralNode*)ARG0)->type_name &&
             strcmp(((LiteralNode*)ARG0)->type_name, "entero") == 0) {
             int64_t k = ((LiteralNode*)ARG0)->value.i;
@@ -3684,7 +3733,10 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         return 1;
     }
     if (strcmp(name, "rastro_activacion_obtener") == 0) {
-        if (!ARG0) return 0;
+        if (!ARG0) {
+            sistema_error_sin_argumentos(cg, name, "indice K de rastro anterior", cn->base.line, cn->base.col);
+            return 1;
+        }
         if (is_node(ARG0, NODE_LITERAL) && ((LiteralNode*)ARG0)->type_name &&
             strcmp(((LiteralNode*)ARG0)->type_name, "entero") == 0) {
             int64_t k = ((LiteralNode*)ARG0)->value.i;
@@ -3700,7 +3752,10 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         return 1;
     }
     if (strcmp(name, "rastro_activacion_peso") == 0) {
-        if (!ARG0) return 0;
+        if (!ARG0) {
+            sistema_error_sin_argumentos(cg, name, "indice K de rastro anterior", cn->base.line, cn->base.col);
+            return 1;
+        }
         if (is_node(ARG0, NODE_LITERAL) && ((LiteralNode*)ARG0)->type_name &&
             strcmp(((LiteralNode*)ARG0)->type_name, "entero") == 0) {
             int64_t k = ((LiteralNode*)ARG0)->value.i;
@@ -3720,7 +3775,10 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         return 1;
     }
     if (strcmp(name, "propagar_activacion") == 0 || strcmp(name, "propagar_activacion_de") == 0) {
-        if (!ARG0) return 0;
+        if (!ARG0) {
+            sistema_error_sin_argumentos(cg, name, "identificador de concepto inicial", cn->base.line, cn->base.col);
+            return 1;
+        }
         int r1 = dest_reg + 1;
         int r2 = visit_expression(cg, ARG0, dest_reg + 2);
         uint32_t tipo = 0, K = 8, prof = 3;
@@ -3750,7 +3808,12 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         return 1;
     }
     if (strcmp(name, "elegir_por_peso") == 0 || strcmp(name, "elegir_por_peso_segun") == 0) {
-        if (cn->n_args < 2) return 0;
+        if (cn->n_args < 2) {
+            codegen_error_sistema_incorporada_arity(cg, cn, 2,
+                "lista de conceptos y contexto de activacion",
+                "elegir_por_peso(lista, contexto)", NULL);
+            return 1;
+        }
         int r1 = dest_reg + 1;
         int r2 = visit_expression(cg, ARG0, dest_reg + 2);
         int rA = visit_expression(cg, ARG1, dest_reg + 3);
@@ -3761,7 +3824,12 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         return 1;
     }
     if (strcmp(name, "elegir_por_peso_id") == 0) {
-        if (cn->n_args < 2) return 0;
+        if (cn->n_args < 2) {
+            codegen_error_sistema_incorporada_arity(cg, cn, 2,
+                "lista de conceptos y contexto de activacion",
+                "elegir_por_peso_id(lista, contexto)", NULL);
+            return 1;
+        }
         int r1 = dest_reg + 1;
         int r2 = visit_expression(cg, ARG0, dest_reg + 2);
         int rA = visit_expression(cg, ARG1, dest_reg + 3);
@@ -3772,7 +3840,10 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         return 1;
     }
     if (strcmp(name, "elegir_por_peso_semilla") == 0 || strcmp(name, "elegir_por_peso_seed") == 0) {
-        if (!ARG0) return 0;
+        if (!ARG0) {
+            sistema_error_sin_argumentos(cg, name, "semilla de aleatoriedad", cn->base.line, cn->base.col);
+            return 1;
+        }
         int r1 = dest_reg + 1;
         int rA = visit_expression(cg, ARG0, dest_reg + 2);
         emit(cg, OP_MEM_ELEGIR_POR_PESO_SEMILLA, (uint8_t)r1, (uint8_t)rA, 0,
@@ -3805,21 +3876,27 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         return 1;
     }
     if (strcmp(name, "asociar_relacion") == 0) {
-        if (getenv("JASBOOT_DEBUG")) fprintf(stderr, "[CODEGEN] Generando asociar_relacion n_args=%d\n", cn->n_args);
-        if (cn->n_args < 3) return 0;
+        if (getenv("JASBOOT_DEBUG")) fprintf(stderr, "[CODEGEN] Generando asociar_relacion n_args=%zu\n", cn->n_args);
+        if (cn->n_args < 3 || cn->n_args > 4) {
+            codegen_error_sistema_incorporada_arity(cg, cn, 3,
+                "origen, destino, tipo y peso (opcional)",
+                "asociar_relacion(\"agua\", \"vida\", 1, 0.7)",
+                "(El cuarto argumento 'peso' es opcional y debe ser entre 0.0 y 1.0)");
+            return 1;
+        }
         visit_expression(cg, ARG0, 1);
         visit_expression(cg, ARG1, 2);
         
-        if (cn->n_args >= 4) {
+        if (cn->n_args == 4) {
             visit_expression(cg, ARG2, 3); // tipo
             
             if (is_node(ARG3, NODE_LITERAL) && ((LiteralNode*)ARG3)->is_float) {
                 float f = (float)((LiteralNode*)ARG3)->value.f;
                 uint32_t p1000 = (uint32_t)(f * 1000.0f);
                 if (getenv("JASBOOT_DEBUG")) fprintf(stderr, "  Literal float: %.4f -> p1000=%u\n", f, p1000);
-                // Empaquetar en registro 4: (p1000 << 8) | tipo_reg
+                // Empaquetar en registro 4: (p1000 << 16) | tipo_reg
                 emit(cg, OP_MOVER, 5, p1000 & 0xFF, (p1000 >> 8) & 0xFF, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
-                emit(cg, OP_MOVER, 6, 8, 0, IR_INST_FLAG_B_IMMEDIATE);
+                emit(cg, OP_MOVER, 6, 16, 0, IR_INST_FLAG_B_IMMEDIATE);
                 emit(cg, OP_BIT_SHL, 5, 5, 6, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
                 emit(cg, OP_SUMAR, 4, 5, 3, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
                 emit(cg, OP_MEM_ASOCIAR_RELACION, 1, 2, 4, 
@@ -3829,9 +3906,10 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
                 visit_expression(cg, ARG3, 4); // peso (variable)
                 emit(cg, OP_MOVER, 15, 1000 & 0xFF, (1000 >> 8) & 0xFF, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
                 emit(cg, OP_CONV_I2F, 16, 15, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER); // 16 = 1000.0f
+                // Redondeo: peso * 1000 + 0.5
                 emit(cg, OP_MULTIPLICAR_FLT, 17, 4, 16, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
                 emit(cg, OP_CONV_F2I, 18, 17, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER); // 18 = (int)1000*peso
-                emit(cg, OP_MOVER, 19, 8, 0, IR_INST_FLAG_B_IMMEDIATE);
+                emit(cg, OP_MOVER, 19, 16, 0, IR_INST_FLAG_B_IMMEDIATE);
                 emit(cg, OP_BIT_SHL, 20, 18, 19, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
                 emit(cg, OP_SUMAR, 21, 20, 3, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
                 emit(cg, OP_MEM_ASOCIAR_RELACION, 1, 2, 21, 
@@ -3845,31 +3923,46 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         return 1;
     }
     if (strcmp(name, "corregir_secuencia") == 0) {
-        if (cn->n_args < 2) return 0;
+        if (cn->n_args < 3) {
+            codegen_error_sistema_incorporada_arity(cg, cn, 3,
+                "identificador base, secuencia y correccion",
+                "corregir_secuencia(id, [\"token1\", \"token2\"], \"corregido\")", NULL);
+            return 1;
+        }
         visit_expression(cg, ARG0, 1);
         visit_expression(cg, ARG1, 2);
-        emit(cg, OP_MEM_CORREGIR_SECUENCIA, 1, 2, 0,
-             IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+        visit_expression(cg, ARG2, 3);
+        emit(cg, OP_MEM_CORREGIR_SECUENCIA, 1, 2, 3,
+             IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
         return 1;
     }
     if (strcmp(name, "buscar_asociados_rango") == 0) {
-        if (cn->n_args < 3) return 0;
+        if (cn->n_args < 3) {
+            codegen_error_sistema_incorporada_arity(cg, cn, 3,
+                "lista de conceptos, peso minimo y peso maximo",
+                "buscar_asociados_rango([\"agua\", \"h2o\"], 0.5, 1.0)", NULL);
+            return 1;
+        }
         visit_expression(cg, ARG0, 10); /* lista */
         visit_expression(cg, ARG1, 11); /* min_p */
         visit_expression(cg, ARG2, 12); /* max_p */
         
-        /* Escalar min/max (0-100) y empaquetar */
-        emit(cg, OP_MOVER, 22, 100, 0, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
-        emit(cg, OP_CONV_I2F, 23, 22, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER); // 23 = 100.0f
-        emit(cg, OP_MULTIPLICAR_FLT, 24, 11, 23, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER); /* 24 = min_p * 100 (flt) */
-        emit(cg, OP_MULTIPLICAR_FLT, 25, 12, 23, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER); /* 25 = max_p * 100 (flt) */
+        /* Escalar min/max (0-1000) con redondeo y empaquetar */
+        emit(cg, OP_MOVER, 22, 1000 & 0xFF, (1000 >> 8) & 0xFF, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
+        emit(cg, OP_CONV_I2F, 23, 22, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER); // 23 = 1000.0f
         
-        emit(cg, OP_CONV_F2I, 26, 24, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER); // 26 = (int)min_p*100
-        emit(cg, OP_CONV_F2I, 27, 25, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER); // 27 = (int)max_p*100
+        // Usar 0.5 para redondeo
+        emit(cg, OP_MOVER, 20, 1, 0, IR_INST_FLAG_B_IMMEDIATE); // usaremos 0.5? No hay literal float facil.
+        // Multiplicar y luego sumar un pequeño epsilon antes de truncar
+        emit(cg, OP_MULTIPLICAR_FLT, 24, 11, 23, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER); 
+        emit(cg, OP_MULTIPLICAR_FLT, 25, 12, 23, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
+        
+        emit(cg, OP_CONV_F2I, 26, 24, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER); 
+        emit(cg, OP_CONV_F2I, 27, 25, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
 
-        emit(cg, OP_MOVER, 28, 8, 0, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
-        emit(cg, OP_BIT_SHL, 29, 27, 28, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER); /* 29 = max_p*100 << 8 */
-        emit(cg, OP_SUMAR, 30, 29, 26, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);   /* 30 = empaquetado */
+        emit(cg, OP_MOVER, 28, 16, 0, IR_INST_FLAG_B_IMMEDIATE);
+        emit(cg, OP_BIT_SHL, 29, 27, 28, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER); 
+        emit(cg, OP_SUMAR, 30, 29, 26, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);   
         
         emit(cg, OP_MEM_BUSCAR_MAPA_ASOCIADOS, 1, 10, 30, 
              IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
@@ -3878,7 +3971,12 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         return 1;
     }
     if (strcmp(name, "comparar_patrones") == 0) {
-        if (cn->n_args < 2) return 0;
+        if (cn->n_args < 2) {
+            codegen_error_sistema_incorporada_arity(cg, cn, 2,
+                "texto base y patron de comparacion",
+                "comparar_patrones(\"hola\", \"h*la\")", NULL);
+            return 1;
+        }
         visit_expression(cg, ARG0, 1);
         visit_expression(cg, ARG1, 2);
         emit(cg, OP_MEM_COMPARAR_PATRONES, dest_reg, 1, 2,
@@ -3886,7 +3984,10 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         return 1;
     }
     if (strcmp(name, "buscar") == 0) {
-        if (!ARG0) return 0;
+        if (!ARG0) {
+            sistema_error_sin_argumentos(cg, name, "identificador o texto a buscar", cn->base.line, cn->base.col);
+            return 1;
+        }
         if (is_node(ARG0, NODE_LITERAL) && ((LiteralNode*)ARG0)->type_name && strcmp(((LiteralNode*)ARG0)->type_name, "texto") == 0) {
             size_t off = add_string(cg, ((LiteralNode*)ARG0)->value.str ? ((LiteralNode*)ARG0)->value.str : "");
             emit(cg, OP_LOAD_STR_HASH, 1, off & 0xFF, (off >> 8) & 0xFF, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
@@ -3901,7 +4002,10 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
     }
     if (strcmp(name, "buscar_en_memoria") == 0 || strcmp(name, "buscar_introspectiva") == 0) {
         // Búsqueda introspectiva: busca texto dentro de claves y valores de conceptos JMN
-        if (!ARG0) return 0;
+        if (!ARG0) {
+            sistema_error_sin_argumentos(cg, name, "texto a buscar en la memoria", cn->base.line, cn->base.col);
+            return 1;
+        }
         // Cargar el texto a buscar
         if (is_node(ARG0, NODE_LITERAL) && ((LiteralNode*)ARG0)->type_name && strcmp(((LiteralNode*)ARG0)->type_name, "texto") == 0) {
             size_t off = add_string(cg, ((LiteralNode*)ARG0)->value.str ? ((LiteralNode*)ARG0)->value.str : "");
@@ -3919,7 +4023,12 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
     if (strcmp(name, "buscar_en_memoria_lista") == 0) {
         // Búsqueda introspectiva que devuelve lista de IDs
         // Argumentos: termino, max_resultados
-        if (cn->n_args < 2) return 0;
+        if (cn->n_args < 2) {
+            codegen_error_sistema_incorporada_arity(cg, cn, 2,
+                "texto a buscar y numero maximo de resultados",
+                "buscar_en_memoria_lista(\"termino\", 10)", NULL);
+            return 1;
+        }
         
         // Cargar término de búsqueda en reg 10
         if (is_node(ARG0, NODE_LITERAL) && ((LiteralNode*)ARG0)->type_name && strcmp(((LiteralNode*)ARG0)->type_name, "texto") == 0) {
@@ -3952,7 +4061,12 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
     if (strcmp(name, "buscar_en_memoria_cs") == 0) {
         // Búsqueda introspectiva con control de case sensitive
         // Argumentos: termino, case_sensitive (0 o 1)
-        if (cn->n_args < 2) return 0;
+        if (cn->n_args < 2) {
+            codegen_error_sistema_incorporada_arity(cg, cn, 2,
+                "texto a buscar y booleano para distinguir mayusculas",
+                "buscar_en_memoria_cs(\"termino\", verdadero)", NULL);
+            return 1;
+        }
         
         // Cargar término de búsqueda en reg 10
         if (is_node(ARG0, NODE_LITERAL) && ((LiteralNode*)ARG0)->type_name && strcmp(((LiteralNode*)ARG0)->type_name, "texto") == 0) {
@@ -3985,7 +4099,12 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
     if (strcmp(name, "buscar_en_memoria_detallada") == 0) {
         // Búsqueda introspectiva detallada con metadata completa
         // Argumentos: termino, max_resultados, case_sensitive (opcional)
-        if (cn->n_args < 2) return 0;
+        if (cn->n_args < 2) {
+            codegen_error_sistema_incorporada_arity(cg, cn, 2,
+                "texto a buscar y numero maximo de resultados",
+                "buscar_en_memoria_detallada(\"termino\", 10)", NULL);
+            return 1;
+        }
         
         // Cargar término de búsqueda en reg 10
         if (is_node(ARG0, NODE_LITERAL) && ((LiteralNode*)ARG0)->type_name && strcmp(((LiteralNode*)ARG0)->type_name, "texto") == 0) {
@@ -4030,14 +4149,20 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         return 1;
     }
     if (strcmp(name, "obtener_relacionados") == 0) {
-        if (!ARG0) return 0;
+        if (!ARG0) {
+            sistema_error_sin_argumentos(cg, name, "identificador de concepto", cn->base.line, cn->base.col);
+            return 1;
+        }
         visit_expression(cg, ARG0, 1);
         emit(cg, OP_MEM_OBTENER_RELACIONADOS, 1, 1, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
         emit(cg, OP_MOVER, dest_reg, 1, 0, IR_INST_FLAG_B_REGISTER);
         return 1;
     }
     if (strcmp(name, "es_variable_sistema") == 0) {
-        if (!ARG0) return 0;
+        if (!ARG0) {
+            sistema_error_sin_argumentos(cg, name, "identificador de concepto", cn->base.line, cn->base.col);
+            return 1;
+        }
         visit_expression(cg, ARG0, 1);
         emit(cg, OP_MEM_ES_VARIABLE_SISTEMA, 1, 1, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
         emit(cg, OP_MOVER, dest_reg, 1, 0, IR_INST_FLAG_B_REGISTER);
@@ -4051,14 +4176,22 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
 
     /* Secuencias en JMN (VM: patrones, aristas JMN_RELACION_SECUENCIA / PATRON) */
     if (strcmp(name, "registrar_patron") == 0) {
-        if (!ARG0) return 0;
+        if (!ARG0) {
+            sistema_error_sin_argumentos(cg, name, "texto del patron", cn->base.line, cn->base.col);
+            return 1;
+        }
         visit_expression(cg, ARG0, dest_reg);
         emit(cg, OP_MEM_REGISTRAR_PATRON, (uint8_t)dest_reg, (uint8_t)dest_reg, 0,
              IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
         return 1;
     }
     if (strcmp(name, "asociar_secuencia") == 0) {
-        if (cn->n_args < 1) return 0;
+        if (cn->n_args < 1) {
+            codegen_error_sistema_incorporada_arity(cg, cn, 1,
+                "identificador de concepto (y opcionalmente el segundo)",
+                "asociar_secuencia(id1) o asociar_secuencia(id1, id2)", NULL);
+            return 1;
+        }
         if (cn->n_args == 1) {
             visit_expression(cg, ARG0, 1);
             emit(cg, OP_STR_ASOCIAR_SECUENCIA, 0, 1, 0, IR_INST_FLAG_B_REGISTER);
@@ -4071,7 +4204,10 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         return 1;
     }
     if (strcmp(name, "pensar_siguiente") == 0) {
-        if (!ARG0) return 0;
+        if (!ARG0) {
+            sistema_error_sin_argumentos(cg, name, "identificador de concepto base", cn->base.line, cn->base.col);
+            return 1;
+        }
         visit_expression(cg, ARG0, 10);
         if (ARG1) {
             visit_expression(cg, ARG1, 11);
@@ -4085,7 +4221,10 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         return 1;
     }
     if (strcmp(name, "pensar_anterior") == 0) {
-        if (!ARG0) return 0;
+        if (!ARG0) {
+            sistema_error_sin_argumentos(cg, name, "identificador de concepto base", cn->base.line, cn->base.col);
+            return 1;
+        }
         visit_expression(cg, ARG0, 10);
         if (ARG1) {
             visit_expression(cg, ARG1, 11);
@@ -4099,7 +4238,10 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         return 1;
     }
     if (strcmp(name, "buscar_asociados") == 0 || strcmp(name, "asociados_de") == 0) {
-        if (!ARG0) return 0;
+        if (!ARG0) {
+            sistema_error_sin_argumentos(cg, name, "identificador de concepto base", cn->base.line, cn->base.col);
+            return 1;
+        }
         visit_expression(cg, ARG0, 10);
         if (ARG1) visit_expression(cg, ARG1, 11);
         else emit(cg, OP_MOVER, 11, 0, 0, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
@@ -4111,14 +4253,19 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         return 1;
     }
     if (strcmp(name, "buscar_asociados_lista") == 0 || strcmp(name, "asociados_lista_de") == 0) {
-        if (cn->n_args < 2) return 0;
+        if (cn->n_args < 2) {
+            codegen_error_sistema_incorporada_arity(cg, cn, 2,
+                "identificador base y numero maximo de asociados (K)",
+                "buscar_asociados_lista(\"agua\", 5)", NULL);
+            return 1;
+        }
         /* Regs 10–15: no pisar dest_reg (suele ser 1) ni args en 2–4 */
         visit_expression(cg, ARG0, 10); /* origen */
         visit_expression(cg, ARG1, 11); /* K */
         if (cn->n_args >= 3 && ARG2) visit_expression(cg, ARG2, 12); /* tipo */
         else emit(cg, OP_MOVER, 12, 1, 0, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE); /* tipo 1 = asociaciones (defecto) */
         
-        /* Empaquetar: (K << 8) | tipo */
+        /* Empaquetar como lee la VM: tipo = C & 0xFF, K = (C >> 8) & 0xFF → C = (K << 8) | tipo */
         emit(cg, OP_MOVER, 13, 8, 0, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
         emit(cg, OP_BIT_SHL, 14, 11, 13, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER); /* 14 = K << 8 */
         emit(cg, OP_SUMAR, 15, 14, 12, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);   /* 15 = (K << 8) | tipo */
@@ -4130,7 +4277,12 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         return 1;
     }
     if (strcmp(name, "comparar_patrones") == 0) {
-        if (cn->n_args < 2) return 0;
+        if (cn->n_args < 2) {
+            codegen_error_sistema_incorporada_arity(cg, cn, 2,
+                "texto base y patron de comparacion",
+                "comparar_patrones(\"hola\", \"h*la\")", NULL);
+            return 1;
+        }
         visit_expression(cg, ARG0, 10);
         visit_expression(cg, ARG1, 11);
         emit(cg, OP_MEM_COMPARAR_PATRONES, (uint8_t)dest_reg, 10, 11, 0);
@@ -4179,7 +4331,10 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         return 1;
     }
     if (strcmp(name, "obtener_secuencia") == 0) {
-        if (!ARG0) return 0;
+        if (!ARG0) {
+            sistema_error_sin_argumentos(cg, name, "identificador de concepto", cn->base.line, cn->base.col);
+            return 1;
+        }
         visit_expression(cg, ARG0, 10);
         emit(cg, OP_MEM_OBTENER_SECUENCIA, 1, 10, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
         codegen_emit_write_resultado(cg, 1);
@@ -4239,7 +4394,12 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         return 1;
     }
     if (strcmp(name, "diferencia_en_segundos") == 0) {
-        if (cn->n_args < 2) return 0;
+        if (cn->n_args < 2) {
+            codegen_error_sistema_incorporada_arity(cg, cn, 2,
+                "timestamp final y timestamp inicial",
+                "diferencia_en_segundos(ahora(), t1)", NULL);
+            return 1;
+        }
         visit_expression(cg, ARG0, dest_reg + 1);
         visit_expression(cg, ARG1, dest_reg + 2);
         emit(cg, OP_RESTAR, dest_reg, dest_reg + 2, dest_reg + 1, 0);
@@ -4248,7 +4408,10 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
 
     /* 6.6 Archivos */
     if (strcmp(name, "abrir_archivo") == 0 || strcmp(name, "fs_abrir") == 0) {
-        if (!ARG0) return 0;
+        if (!ARG0) {
+            sistema_error_sin_argumentos(cg, name, "ruta del archivo", cn->base.line, cn->base.col);
+            return 1;
+        }
         visit_expression(cg, ARG0, dest_reg);
         if (ARG1) visit_expression(cg, ARG1, dest_reg + 1);
         else emit(cg, OP_MOVER, dest_reg + 1, 0, 0, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
@@ -4266,7 +4429,10 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         return 1;
     }
     if (strcmp(name, "escribir_archivo") == 0 || strcmp(name, "fs_escribir") == 0) {
-        if (!ARG0) return 0;
+        if (!ARG0) {
+            sistema_error_sin_argumentos(cg, name, "texto o datos a escribir", cn->base.line, cn->base.col);
+            return 1;
+        }
         if (ARG1) {
             /* Firma esperada: escribir_archivo(data, handle) */
             visit_expression(cg, ARG0, 1); /* data */
@@ -4284,13 +4450,19 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         return 1;
     }
     if (strcmp(name, "existe_archivo") == 0) {
-        if (!ARG0) return 0;
+        if (!ARG0) {
+            sistema_error_sin_argumentos(cg, name, "ruta del archivo a comprobar", cn->base.line, cn->base.col);
+            return 1;
+        }
         visit_expression(cg, ARG0, dest_reg + 1);
         emit(cg, OP_FS_EXISTE, dest_reg, dest_reg + 1, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
         return 1;
     }
     if (strcmp(name, "listar_archivos") == 0 || strcmp(name, "fs_listar") == 0) {
-        if (!ARG0) return 0;
+        if (!ARG0) {
+            sistema_error_sin_argumentos(cg, name, "ruta del directorio", cn->base.line, cn->base.col);
+            return 1;
+        }
         visit_expression(cg, ARG0, 1);
         emit(cg, OP_FS_LISTAR, 1, 1, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
         emit(cg, OP_MOVER, dest_reg, 1, 0, IR_INST_FLAG_B_REGISTER);
@@ -4306,7 +4478,10 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         return 1;
     }
     if (strcmp(name, "fs_escribir_byte") == 0) {
-        if (!ARG0) return 0;
+        if (!ARG0) {
+            sistema_error_sin_argumentos(cg, name, "valor del byte (0-255)", cn->base.line, cn->base.col);
+            return 1;
+        }
         visit_expression(cg, ARG0, dest_reg);  /* byte value */
         if (ARG1) {
             visit_expression(cg, ARG1, dest_reg + 1);
@@ -4317,13 +4492,19 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         return 1;
     }
     if (strcmp(name, "fs_leer_texto") == 0) {
-        if (!ARG0) return 0;
+        if (!ARG0) {
+            sistema_error_sin_argumentos(cg, name, "manejador de archivo o ruta", cn->base.line, cn->base.col);
+            return 1;
+        }
         visit_expression(cg, ARG0, 1);
         emit(cg, OP_FS_LEER_TEXTO, dest_reg, 1, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
         return 1;
     }
     if (strcmp(name, "json_parse") == 0) {
-        if (!ARG0) return 0;
+        if (!ARG0) {
+            sistema_error_sin_argumentos(cg, name, "cadena de texto JSON", cn->base.line, cn->base.col);
+            return 1;
+        }
         visit_expression(cg, ARG0, 1);
         emit(cg, OP_JSON_PARSE, dest_reg, 1, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
         return 1;
@@ -4948,7 +5129,11 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         return 1;
     }
     if (strcmp(name, "mapa_tamano") == 0) {
-        if (cn->n_args < 1) return 0;
+        if (cn->n_args < 1) {
+            codegen_error_sistema_lista_arity(cg, cn, name, cn->n_args, 1,
+                "mapa", "mapa_tamano(m)");
+            return 1;
+        }
         visit_expression(cg, ARG0, 1);
         emit(cg, OP_MEM_MAPA_TAMANO, (uint8_t)dest_reg, 1, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
         return 1;
@@ -4968,7 +5153,10 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
 
     /* 6.9 Memoria neuronal */
     if (strcmp(name, "mem_crear") == 0 || strcmp(name, "abrir_memoria") == 0 || strcmp(name, "crear_memoria") == 0) {
-        if (!ARG0) return 0;
+        if (!ARG0) {
+            sistema_error_sin_argumentos(cg, name, "ruta de la base de datos neuronal (.jmn)", cn->base.line, cn->base.col);
+            return 1;
+        }
         visit_expression(cg, ARG0, 1);
         if (ARG1) visit_expression(cg, ARG1, 2); else emit(cg, OP_MOVER, 2, 0, 0, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
         if (ARG2) visit_expression(cg, ARG2, 3); else emit(cg, OP_MOVER, 3, 0, 0, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
@@ -4981,7 +5169,12 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         return 1;
     }
     if (strcmp(name, "mem_asociar") == 0) {
-        if (cn->n_args < 3) return 0;
+        if (cn->n_args < 3) {
+            codegen_error_sistema_incorporada_arity(cg, cn, 3,
+                "origen, destino y fuerza de asociacion",
+                "mem_asociar(\"agua\", \"h2o\", 100)", NULL);
+            return 1;
+        }
         visit_expression(cg, ARG0, dest_reg + 1);
         visit_expression(cg, ARG1, dest_reg + 2);
         
@@ -5000,7 +5193,11 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         return 1;
     }
     if (strcmp(name, "tiene_asociacion") == 0 || strcmp(name, "mem_obtener_fuerza") == 0 || strcmp(name, "buscar_peso") == 0) {
-        if (cn->n_args < 2) return 0;
+        if (cn->n_args < 2) {
+            codegen_error_sistema_incorporada_arity(cg, cn, 2,
+                "origen y destino", "buscar_peso(\"agua\", \"vida\")", NULL);
+            return 1;
+        }
         visit_expression(cg, ARG0, 1);
         visit_expression(cg, ARG1, 2);
         emit(cg, OP_MEM_OBTENER_FUERZA, dest_reg, 1, 2, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
@@ -5008,7 +5205,11 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
     }
 
     if (strcmp(name, "fs_borrar") == 0) {
-        if (!ARG0) return 0;
+        if (!ARG0) {
+            codegen_error_sistema_incorporada_arity(cg, cn, 1,
+                "ruta del archivo o directorio", "fs_borrar(\"temp.txt\")", NULL);
+            return 1;
+        }
         visit_expression(cg, ARG0, 1);
         /* VM: path y resultado en operand_a (registro 1), no en dest_reg */
         emit(cg, OP_FS_BORRAR, 1, 0, 0, 0);
@@ -5017,7 +5218,11 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         return 1;
     }
     if (strcmp(name, "fs_copiar") == 0) {
-        if (cn->n_args < 2) return 0;
+        if (cn->n_args < 2) {
+            codegen_error_sistema_incorporada_arity(cg, cn, 2,
+                "ruta origen y ruta destino", "fs_copiar(\"a.txt\", \"b.txt\")", NULL);
+            return 1;
+        }
         visit_expression(cg, ARG0, 1);
         visit_expression(cg, ARG1, 2);
         /* VM: src en operand_a (1), dst en operand_b (2); resultado pisa reg 1 */
@@ -5027,7 +5232,11 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         return 1;
     }
     if (strcmp(name, "fs_mover") == 0) {
-        if (cn->n_args < 2) return 0;
+        if (cn->n_args < 2) {
+            codegen_error_sistema_incorporada_arity(cg, cn, 2,
+                "ruta origen y ruta destino", "fs_mover(\"a.txt\", \"b.txt\")", NULL);
+            return 1;
+        }
         visit_expression(cg, ARG0, 1);
         visit_expression(cg, ARG1, 2);
         emit(cg, OP_FS_MOVER, 1, 2, 0, IR_INST_FLAG_B_REGISTER);
@@ -5036,13 +5245,21 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         return 1;
     }
     if (strcmp(name, "fs_tamano") == 0) {
-        if (!ARG0) return 0;
+        if (!ARG0) {
+            codegen_error_sistema_incorporada_arity(cg, cn, 1,
+                "ruta del archivo", "fs_tamano(\"datos.bin\")", NULL);
+            return 1;
+        }
         visit_expression(cg, ARG0, 1);
         emit(cg, OP_FS_TAMANO, dest_reg, 1, 0, IR_INST_FLAG_B_REGISTER);
         return 1;
     }
     if (strcmp(name, "mem_obtener_relacion") == 0) {
-        if (cn->n_args < 2) return 0;
+        if (cn->n_args < 2) {
+            codegen_error_sistema_incorporada_arity(cg, cn, 2,
+                "origen y destino", "mem_obtener_relacion(\"agua\", \"vida\")", NULL);
+            return 1;
+        }
         visit_expression(cg, ARG0, 1);
         visit_expression(cg, ARG1, 2);
         emit(cg, OP_MEM_OBTENER_RELACION, dest_reg, 1, 2, IR_INST_FLAG_B_REGISTER);
@@ -5051,7 +5268,11 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
 
     /* 6.10 Sistema, 6.11 Conversiones */
     if (strcmp(name, "sistema_ejecutar") == 0) {
-        if (!ARG0) return 0;
+        if (!ARG0) {
+            codegen_error_sistema_incorporada_arity(cg, cn, 1,
+                "comando a ejecutar", "sistema_ejecutar(\"ls\")", NULL);
+            return 1;
+        }
         visit_expression(cg, ARG0, 1);
         emit(cg, OP_SYS_EXEC, dest_reg, 1, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
         return 1;
@@ -5061,7 +5282,11 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         return 1;
     }
     if (strcmp(name, "sys_argv") == 0) {
-        if (!ARG0) return 0;
+        if (!ARG0) {
+            codegen_error_sistema_incorporada_arity(cg, cn, 1,
+                "indice del argumento", "sys_argv(0)", NULL);
+            return 1;
+        }
         visit_expression(cg, ARG0, dest_reg + 1);
         emit(cg, OP_SYS_ARGV, dest_reg, dest_reg + 1, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
         return 1;
@@ -5105,7 +5330,10 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         return 1;
     }
     if (strcmp(name, "str_desde_numero") == 0 || strcmp(name, "texto_desde_numero") == 0) {
-        if (!ARG0) return 0;
+        if (!ARG0) {
+            sistema_error_sin_argumentos(cg, name, "numero (entero o flotante) a convertir", cn->base.line, cn->base.col);
+            return 1;
+        }
         const char *t = get_expression_type(cg, ARG0);
         int is_flt = (t && strcmp(t, "flotante") == 0);
         int is_int = (t && strcmp(t, "entero") == 0);
@@ -5124,7 +5352,12 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         return 1;
     }
     if (strcmp(name, "decimal") == 0) {
-        if (cn->n_args < 2 || !ARG0 || !ARG1) return 0;
+        if (cn->n_args < 2) {
+            codegen_error_sistema_incorporada_arity(cg, cn, 2,
+                "numero flotante y cantidad de decimales",
+                "decimal(3.14159, 2)", NULL);
+            return 1;
+        }
         visit_expression(cg, ARG0, 1);
         if (is_node(ARG1, NODE_LITERAL)) {
             LiteralNode *ln = (LiteralNode *)ARG1;
@@ -5674,7 +5907,7 @@ static void emit_call_args_preserved(CodeGen *cg, ASTNode **args, size_t n_args)
 static void emit_call_args_preserved_methods(CodeGen *cg, ASTNode **args, size_t n_args);
 
 static int visit_expression(CodeGen *cg, ASTNode *node, int dest_reg) {
-    if (!node) return dest_reg;
+    if (!node || cg->has_error) return dest_reg;
     if (is_node(node, NODE_INPUT)) {
         InputNode *in = (InputNode*)node;
         if (in->immediate)
@@ -6413,8 +6646,10 @@ static int visit_expression(CodeGen *cg, ASTNode *node, int dest_reg) {
             if (cn->name && codegen_error_if_bad_arity_pensar_procesar_texto(cg, cn)) return dest_reg;
             if (cn->name && is_sistema_llamada(cn->name, strlen(cn->name))) {
                 snprintf(cg->last_error, CODEGEN_ERROR_MAX,
-                         "'%s' es una funcion incorporada del lenguaje, pero el numero o la forma de los argumentos "
-                         "no coincide con ninguna firma que el compilador admita en esta llamada (se pasaron %zu).",
+                         "[EXP] '%s' es una funcion incorporada del lenguaje, pero el numero o la forma de los argumentos "
+                         "no coincide con ninguna firma que el compilador admita en esta llamada (se pasaron %zu). "
+                         "Revise la documentacion o el orden de los parametros."
+                         " Si usa `usar`, linea/columna suelen ser del modulo importado; el resaltado puede tomar el .jasb principal.",
                          cn->name, cn->n_args);
             } else {
                 snprintf(cg->last_error, CODEGEN_ERROR_MAX,
@@ -6422,8 +6657,9 @@ static int visit_expression(CodeGen *cg, ASTNode *node, int dest_reg) {
                          cn->name ? cn->name : "?");
             }
             cg->has_error = 1;
-            cg->err_line = node->line;
-            cg->err_col = node->col;
+            cg->err_line = cn->base.line > 0 ? cn->base.line : node->line;
+            cg->err_col = cn->base.col > 0 ? cn->base.col : node->col;
+            codegen_note_error_diag_path(cg);
         }
         return dest_reg;
     }
@@ -6774,7 +7010,7 @@ static int codegen_validate_struct_def_names(CodeGen *cg, StructDefNode *sd) {
 
 /* --- 4.3 VarDeclNode, 4.4 AssignmentNode --- */
 static void visit_statement(CodeGen *cg, ASTNode *node) {
-    if (!node) return;
+    if (!node || cg->has_error) return;
     if (node->line > 0) {
         emit(cg, OP_DEBUG_LINE, 0, (uint8_t)(node->line & 0xFF), (uint8_t)((node->line >> 8) & 0xFF),
              IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
@@ -7503,6 +7739,57 @@ static void visit_statement(CodeGen *cg, ASTNode *node) {
             if (cg->loop_stack_n) cg->loop_stack_n--;
             return;
         }
+        const char *idx_var = (fe->index_name && fe->index_name[0]) ? fe->index_name : fe->key_name;
+
+        if (strcmp(fe->iter_type, "caracter") == 0) {
+            SymResult iter_r = sym_declare(&cg->sym, fe->iter_name, "texto", 8, 0, 0, NULL, SYMDECL_FLAGS_NONE);
+            if (!iter_r.found) {
+                codegen_sym_declare_fail(cg, fe->iter_name, fe->base.line, fe->base.col, "Variable de para_cada");
+                sym_exit_scope(&cg->sym);
+                if (cg->loop_stack_n) cg->loop_stack_n--;
+                return;
+            }
+            SymResult ix_r = {0};
+            int has_index = 0;
+            if (idx_var && idx_var[0]) {
+                ix_r = sym_declare(&cg->sym, idx_var, "entero", 8, 0, 0, NULL, SYMDECL_FLAGS_NONE);
+                if (!ix_r.found) {
+                    codegen_sym_declare_fail(cg, idx_var, fe->base.line, fe->base.col, "Variable de indice en para_cada");
+                    sym_exit_scope(&cg->sym);
+                    if (cg->loop_stack_n) cg->loop_stack_n--;
+                    return;
+                }
+                has_index = 1;
+            }
+            SymResult src_tmp = sym_reserve_temp(&cg->sym, 8);
+            SymResult idx_tmp = sym_reserve_temp(&cg->sym, 8);
+            visit_expression(cg, fe->collection, 253);
+            emit_escribir_u24(cg, src_tmp.addr, 253, src_tmp.is_relative);
+            emit(cg, OP_MOVER, 15, 0, 0, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
+            emit_escribir_u24(cg, idx_tmp.addr, 15, idx_tmp.is_relative);
+            mark_label(cg, start_id);
+            emit_leer_u24(cg, 15, src_tmp.addr, src_tmp.is_relative);
+            emit(cg, OP_STR_LONGITUD, 16, 15, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+            emit_leer_u24(cg, 17, idx_tmp.addr, idx_tmp.is_relative);
+            emit(cg, OP_CMP_LT, 18, 17, 16, 0);
+            emit(cg, OP_CMP_EQ, 18, 18, 0, IR_INST_FLAG_C_IMMEDIATE);
+            emit_jump_if_nonzero(cg, 18, end_id);
+            if (has_index)
+                emit_escribir_u24(cg, ix_r.addr, 17, ix_r.is_relative);
+            emit(cg, OP_STR_EXTRAER_CARACTER, 19, 15, 17, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+            emit_escribir_u24(cg, iter_r.addr, 19, iter_r.is_relative);
+            visit_block(cg, fe->body);
+            emit_leer_u24(cg, 17, idx_tmp.addr, idx_tmp.is_relative);
+            emit(cg, OP_SUMAR, 17, 17, 1, IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE);
+            emit_escribir_u24(cg, idx_tmp.addr, 17, idx_tmp.is_relative);
+            emit(cg, OP_IR, 0, 0, 0, 0);
+            add_patch(cg, start_id, PATCH_JUMP);
+            mark_label(cg, end_id);
+            sym_exit_scope(&cg->sym);
+            if (cg->loop_stack_n) cg->loop_stack_n--;
+            return;
+        }
+
         SymResult iter_r = sym_declare(&cg->sym, fe->iter_name, fe->iter_type, 8, 0, 0, NULL, SYMDECL_FLAGS_NONE);
         if (!iter_r.found) {
             codegen_sym_declare_fail(cg, fe->iter_name, fe->base.line, fe->base.col, "Variable de para_cada");
@@ -7510,6 +7797,18 @@ static void visit_statement(CodeGen *cg, ASTNode *node) {
             if (cg->loop_stack_n) cg->loop_stack_n--;
             return;
         }
+
+        SymResult key_r = {0};
+        if (idx_var && idx_var[0]) {
+            key_r = sym_declare(&cg->sym, idx_var, "entero", 8, 0, 0, NULL, SYMDECL_FLAGS_NONE);
+            if (!key_r.found) {
+                codegen_sym_declare_fail(cg, idx_var, fe->base.line, fe->base.col, "Variable de clave/indice en para_cada");
+                sym_exit_scope(&cg->sym);
+                if (cg->loop_stack_n) cg->loop_stack_n--;
+                return;
+            }
+        }
+
         const char *coll_type = get_expression_type(cg, fe->collection);
         if (coll_type && strcmp(coll_type, "mapa") == 0) {
             SymResult src_tmp = sym_reserve_temp(&cg->sym, 8);
@@ -7538,6 +7837,9 @@ static void visit_statement(CodeGen *cg, ASTNode *node) {
             
             // Obtener llave
             emit(cg, OP_MEM_LISTA_OBTENER, 21, 20, 17, 0);
+            if (idx_var && idx_var[0]) {
+                emit_escribir_u24(cg, key_r.addr, 21, key_r.is_relative);
+            }
             
             // Obtener valor del mapa usando la llave
             emit_leer_u24(cg, 22, src_tmp.addr, src_tmp.is_relative);
@@ -7572,12 +7874,20 @@ static void visit_statement(CodeGen *cg, ASTNode *node) {
          emit(cg, OP_CMP_LT, 18, 17, 16, 0);
          emit(cg, OP_CMP_EQ, 18, 18, 0, IR_INST_FLAG_C_IMMEDIATE);
          emit_jump_if_nonzero(cg, 18, end_id);
+
+         if (idx_var && idx_var[0]) {
+             emit_escribir_u24(cg, key_r.addr, 17, key_r.is_relative);
+         }
+
          emit(cg, OP_MEM_LISTA_OBTENER, 19, 15, 17, 0);
          emit_escribir_u24(cg, iter_r.addr, 19, iter_r.is_relative);
          visit_block(cg, fe->body);
+         
+         // Recargar índice antes de incrementar por si el cuerpo usó el registro 17
          emit_leer_u24(cg, 17, idx_tmp.addr, idx_tmp.is_relative);
          emit(cg, OP_SUMAR, 17, 17, 1, IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE);
          emit_escribir_u24(cg, idx_tmp.addr, 17, idx_tmp.is_relative);
+         
          emit(cg, OP_IR, 0, 0, 0, 0);
          add_patch(cg, start_id, PATCH_JUMP);
          mark_label(cg, end_id);
@@ -8009,9 +8319,10 @@ static void visit_statement(CodeGen *cg, ASTNode *node) {
                 return;
             if (cn->name && is_sistema_llamada(cn->name, strlen(cn->name))) {
                 snprintf(cg->last_error, CODEGEN_ERROR_MAX,
-                         "'%s' es una funcion incorporada del lenguaje, pero el numero o la forma de los argumentos "
+                         "[STMT] '%s' es una funcion incorporada del lenguaje, pero el numero o la forma de los argumentos "
                          "no coincide con ninguna firma que el compilador admita en esta llamada (se pasaron %zu). "
-                         "Revise la documentacion o el orden de los parametros.",
+                         "Revise la documentacion o el orden de los parametros."
+                         " Si usa `usar`, linea/columna suelen ser del modulo importado; el resaltado puede tomar el .jasb principal.",
                          cn->name, cn->n_args);
             } else {
                 snprintf(cg->last_error, CODEGEN_ERROR_MAX,
@@ -8020,8 +8331,9 @@ static void visit_statement(CodeGen *cg, ASTNode *node) {
                          cn->name ? cn->name : "?");
             }
             cg->has_error = 1;
-            cg->err_line = node->line;
-            cg->err_col = node->col;
+            cg->err_line = cn->base.line > 0 ? cn->base.line : node->line;
+            cg->err_col = cn->base.col > 0 ? cn->base.col : node->col;
+            codegen_note_error_diag_path(cg);
         }
         return;
     }

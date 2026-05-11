@@ -1766,6 +1766,37 @@ static int vm_leer_u32(const uint8_t* data, size_t size, size_t offset, uint32_t
     return 0;
 }
 
+static char* vm_str_replace_all(const char* original, const char* pattern, const char* replacement) {
+    if (!original || !pattern || !replacement) return NULL;
+    size_t pat_len = strlen(pattern);
+    if (pat_len == 0) return strdup(original);
+    size_t rep_len = strlen(replacement);
+    
+    size_t count = 0;
+    const char* tmp = original;
+    while ((tmp = strstr(tmp, pattern))) {
+        count++;
+        tmp += pat_len;
+    }
+    
+    size_t new_len = strlen(original) + count * (rep_len - pat_len);
+    char* result = (char*)malloc(new_len + 1);
+    if (!result) return NULL;
+    
+    char* dst = result;
+    const char* src = original;
+    while ((tmp = strstr(src, pattern))) {
+        size_t prefix_len = tmp - src;
+        memcpy(dst, src, prefix_len);
+        dst += prefix_len;
+        memcpy(dst, replacement, rep_len);
+        dst += rep_len;
+        src = tmp + pat_len;
+    }
+    strcpy(dst, src);
+    return result;
+}
+
 static uint32_t vm_hash_texto(const char* texto) {
     uint32_t hash = 5381;
     if (!texto) return 0;
@@ -2938,7 +2969,11 @@ int vm_load(VM* vm, IRFile* ir) {
     {
         IRValidationInfo info = ir_validate_memory(ir);
         if (info.result != IR_VALID_OK) {
-            fprintf(stderr, "Error de validación: %s\n", info.message);
+            fprintf(stderr, "Error de validacion (VM, fase carga del IR — no es ejecucion del programa aun):\n%s",
+                    info.message ? info.message : "(sin mensaje)");
+            if (vm->ir_path && vm->ir_path[0])
+                fprintf(stderr, "\n  Archivo IR: %s", vm->ir_path);
+            fputc('\n', stderr);
             vm->exit_code = 1;
             return -1;
         }
@@ -5685,6 +5720,10 @@ int vm_step(VM* vm) {
                  vm_leer_u32(vm->ir->data, vm->ir->header.data_size, off24+4, &id_patron);
                  vm_leer_u32(vm->ir->data, vm->ir->header.data_size, off24+8, &id_dest);
                  jmn_extraer_antes_de(vm->mem_neuronal, id_frase, id_patron, id_dest);
+                 char buf[4096];
+                 if (jmn_obtener_texto(vm->mem_neuronal, id_dest, buf, sizeof(buf)) >= 0) {
+                     vm_text_cache_put(vm, id_dest, buf);
+                 }
             }
 #endif
             vm->pc += IR_INSTRUCTION_SIZE;
@@ -5700,6 +5739,10 @@ int vm_step(VM* vm) {
                  vm_leer_u32(vm->ir->data, vm->ir->header.data_size, off24+4, &id_patron);
                  vm_leer_u32(vm->ir->data, vm->ir->header.data_size, off24+8, &id_dest);
                  jmn_extraer_despues_de(vm->mem_neuronal, id_frase, id_patron, id_dest);
+                 char buf[4096];
+                 if (jmn_obtener_texto(vm->mem_neuronal, id_dest, buf, sizeof(buf)) >= 0) {
+                     vm_text_cache_put(vm, id_dest, buf);
+                 }
             }
 #endif
             vm->pc += IR_INSTRUCTION_SIZE;
@@ -5715,6 +5758,10 @@ int vm_step(VM* vm) {
                  vm_leer_u32(vm->ir->data, vm->ir->header.data_size, off24+4, &id_der);
                  vm_leer_u32(vm->ir->data, vm->ir->header.data_size, off24+8, &id_dest);
                  jmn_concatenar_texto(vm->mem_neuronal, id_izq, id_der, id_dest);
+                 char buf[8192];
+                 if (jmn_obtener_texto(vm->mem_neuronal, id_dest, buf, sizeof(buf)) >= 0) {
+                     vm_text_cache_put(vm, id_dest, buf);
+                 }
             }
 #endif
             vm->pc += IR_INSTRUCTION_SIZE;
@@ -5727,8 +5774,8 @@ int vm_step(VM* vm) {
             uint32_t id_res = 0;
             /* Evitar aplanar ropes grandes durante concatenar: solo necesitamos longitudes para la ruta perezosa. */
             {
-                char jbuf_l[2048];
-                char jbuf_r[2048];
+                char jbuf_l[4096];
+                char jbuf_r[4096];
                 const char* s1 = NULL;
                 const char* s2 = NULL;
                 size_t l1 = 0, l2 = 0;
@@ -5741,16 +5788,27 @@ int vm_step(VM* vm) {
                     if (total_len >= 4096) {
                         id_res = vm_alloc_runtime_text_id(vm);
                         vm_text_cache_put_concat(vm, id_res, id_izq, id_der, total_len);
+#ifdef JASBOOT_LANG_INTEGRATION
+                        if (vm->mem_neuronal) {
+                            char* full = (char*)malloc(total_len + 1);
+                            if (full) {
+                                vm_text_extract_range(vm, id_res, 0, (uint32_t)total_len, full);
+                                full[total_len] = '\0';
+                                jmn_guardar_texto(vm->mem_neuronal, id_res, full);
+                                free(full);
+                            }
+                        }
+#endif
                     } else {
                         char left_small[4096];
                         char right_small[4096];
                         if (!s1) {
-                            size_t wrote = vm_text_extract_range(vm, id_izq, 0, l1, left_small);
+                            size_t wrote = vm_text_extract_range(vm, id_izq, 0, (uint32_t)l1, left_small);
                             left_small[wrote] = '\0';
                             s1 = left_small;
                         }
                         if (!s2) {
-                            size_t wrote = vm_text_extract_range(vm, id_der, 0, l2, right_small);
+                            size_t wrote = vm_text_extract_range(vm, id_der, 0, (uint32_t)l2, right_small);
                             right_small[wrote] = '\0';
                             s2 = right_small;
                         }
@@ -5761,6 +5819,11 @@ int vm_step(VM* vm) {
                             combined[total_len] = '\0';
                             id_res = vm_alloc_runtime_text_id(vm);
                             vm_text_cache_put_owned(vm, id_res, combined, total_len);
+#ifdef JASBOOT_LANG_INTEGRATION
+                            if (vm->mem_neuronal) {
+                                jmn_guardar_texto(vm->mem_neuronal, id_res, combined);
+                            }
+#endif
                         }
                     }
                 }
@@ -5889,6 +5952,9 @@ int vm_step(VM* vm) {
             
             uint32_t id_res = vm_hash_texto(buf);
             vm_text_cache_put(vm, id_res, buf);
+#ifdef JASBOOT_LANG_INTEGRATION
+            if (vm->mem_neuronal) jmn_guardar_texto(vm->mem_neuronal, id_res, buf);
+#endif
             vm_set_register(vm, inst.operand_a, (uint64_t)id_res);
             vm->pc += IR_INSTRUCTION_SIZE;
             break;
@@ -5958,6 +6024,9 @@ int vm_step(VM* vm) {
 
             uint32_t id_res = vm_hash_texto(buf);
             vm_text_cache_put(vm, id_res, buf);
+#ifdef JASBOOT_LANG_INTEGRATION
+            if (vm->mem_neuronal) jmn_guardar_texto(vm->mem_neuronal, id_res, buf);
+#endif
             vm_set_register(vm, inst.operand_a, (uint64_t)id_res);
             vm->pc += IR_INSTRUCTION_SIZE;
             break;
@@ -5969,6 +6038,9 @@ int vm_step(VM* vm) {
             char buf[2] = { (char)(codigo & 0xFF), '\0' };
             uint32_t id_res = vm_hash_texto(buf);
             vm_text_cache_put(vm, id_res, buf);
+#ifdef JASBOOT_LANG_INTEGRATION
+            if (vm->mem_neuronal) jmn_guardar_texto(vm->mem_neuronal, id_res, buf);
+#endif
             vm_set_register(vm, inst.operand_a, (uint64_t)id_res);
             vm->pc += IR_INSTRUCTION_SIZE;
             break;
@@ -6018,70 +6090,54 @@ int vm_step(VM* vm) {
             size_t f_len = 0;
             VMTextCacheEntry* ent = vm_text_cache_find(vm, id_frase);
             if (ent) f_len = ent->text_len;
-            if (ent && start == 0 && ent->preview && ent->preview_len > 0) {
-                uint32_t prefix_len = len;
-                if (prefix_len > ent->preview_len) prefix_len = ent->preview_len;
-                if (ent->preview_id != 0 && ent->preview_id_len == prefix_len) {
-                    vm_set_register(vm, inst.operand_a, (uint64_t)ent->preview_id);
-                    vm->pc += IR_INSTRUCTION_SIZE;
-                    break;
-                }
-            }
+            
+            // Fast path: cache de subtextos
             uint32_t cached_id = 0;
             if (vm_substring_cache_get(vm, id_frase, start, len, &cached_id)) {
                 vm_set_register(vm, inst.operand_a, (uint64_t)cached_id);
                 vm->pc += IR_INSTRUCTION_SIZE;
                 break;
             }
+
+            char salida[4096];
+            size_t wrote = 0;
+            int hallado = 0;
+
 #ifdef JASBOOT_LANG_INTEGRATION
-            char frase_stack[4096];
-            const char* frase = NULL;
-            if (!ent && vm->mem_neuronal &&
-                jmn_obtener_texto(vm->mem_neuronal, id_frase, frase_stack, sizeof(frase_stack)) >= 0) {
-                frase = frase_stack;
-                f_len = strlen(frase_stack);
-                if (f_len > 0) {
-                if (start < f_len) {
-                    if ((size_t)start + (size_t)len > f_len)
-                        len = (uint32_t)(f_len - start);
-                    if (len >= 4096) len = 4095;
-                    char salida[4096];
-                    memcpy(salida, frase + start, len);
-                    salida[len] = '\0';
-                        uint32_t id_res = vm_hash_texto(salida);
-                        if (vm->mem_neuronal) jmn_guardar_texto(vm->mem_neuronal, id_res, salida);
-                        vm_text_cache_put(vm, id_res, salida);
-                        vm_substring_cache_put(vm, id_frase, start, len, id_res);
-                        vm_set_register(vm, inst.operand_a, (uint64_t)id_res);
-                    } else {
-                        vm_set_register(vm, inst.operand_a, 5381);
+            if (!ent && vm->mem_neuronal) {
+                if (jmn_obtener_texto(vm->mem_neuronal, id_frase, salida, sizeof(salida)) >= 0) {
+                    f_len = strlen(salida);
+                    if (start < f_len) {
+                        if ((size_t)start + (size_t)len > f_len) len = (uint32_t)(f_len - start);
+                        if (len >= 4096) len = 4095;
+                        memmove(salida, salida + start, len);
+                        salida[len] = '\0';
+                        wrote = len;
+                        hallado = 1;
                     }
-                    vm->pc += IR_INSTRUCTION_SIZE;
-                    break;
                 }
             }
 #endif
-            if (ent && f_len > 0) {
+            if (!hallado && ent && f_len > 0) {
                 if (start < f_len) {
-                    if ((size_t)start + (size_t)len > f_len)
-                        len = (uint32_t)(f_len - start);
+                    if ((size_t)start + (size_t)len > f_len) len = (uint32_t)(f_len - start);
                     if (len >= 4096) len = 4095;
-                    char salida[4096];
-                    size_t wrote = 0;
                     wrote = vm_text_extract_range(vm, id_frase, start, len, salida);
                     salida[wrote] = '\0';
-                    uint32_t id_res = vm_hash_texto(salida);
-#ifdef JASBOOT_LANG_INTEGRATION
-                    if (vm->mem_neuronal) jmn_guardar_texto(vm->mem_neuronal, id_res, salida);
-#endif
-                    vm_text_cache_put(vm, id_res, salida);
-                    vm_substring_cache_put(vm, id_frase, start, len, id_res);
-                    vm_set_register(vm, inst.operand_a, (uint64_t)id_res);
-                } else {
-                    vm_set_register(vm, inst.operand_a, 5381);
+                    hallado = 1;
                 }
+            }
+
+            if (hallado) {
+                uint32_t id_res = vm_hash_texto(salida);
+                vm_text_cache_put(vm, id_res, salida);
+#ifdef JASBOOT_LANG_INTEGRATION
+                if (vm->mem_neuronal) jmn_guardar_texto(vm->mem_neuronal, id_res, salida);
+#endif
+                vm_substring_cache_put(vm, id_frase, start, len, id_res);
+                vm_set_register(vm, inst.operand_a, (uint64_t)id_res);
             } else {
-                vm_set_register(vm, inst.operand_a, 5381);
+                vm_set_register(vm, inst.operand_a, 5381); // Nada
             }
             vm->pc += IR_INSTRUCTION_SIZE;
             break;
@@ -8014,14 +8070,14 @@ int vm_step(VM* vm) {
         }
 
         case OP_MEM_BUSCAR_ASOCIADOS_LISTA: {
-            // A <- lista (id) con hasta K conceptos asociados a B; C = tipo (8 low) | (K << 8). Búsqueda en mem_neuronal, lista en mem_colecciones.
+            // A <- lista (id) con hasta K conceptos asociados a B; C = tipo (16 low) | (K << 16). Búsqueda en mem_neuronal, lista en mem_colecciones.
 #ifdef JASBOOT_LANG_INTEGRATION
             if (vm->mem_neuronal) {
                 uint64_t b_val = vm_get_register(vm, inst.operand_b);
                 uint64_t c_val = vm_get_register(vm, inst.operand_c);
                 uint32_t origen_id = (uint32_t)b_val;
-                uint32_t tipo_relacion = (uint32_t)(c_val & 0xFFu);
-                uint32_t K = (uint32_t)((c_val >> 8) & 0xFFu);
+                uint32_t tipo_relacion = (uint32_t)(c_val & 0xFFFFu);
+                uint32_t K = (uint32_t)((c_val >> 16) & 0xFFFFu);
                 if (tipo_relacion > JMN_RELACION_MAX) tipo_relacion = 0;
                 if (K == 0 || K > 64) K = 16;
                 JMNBusquedaResultado resultados[64];
@@ -8080,17 +8136,17 @@ int vm_step(VM* vm) {
 
         case 0x3F: { // OP_MEM_BUSCAR_MAPA_ASOCIADOS
             // A <- mapa {concepto: [asociados...]} 
-            // B = lista_origen, C = (max_p*100 << 8) | min_p*100
+            // B = lista_origen, C = (max_p*1000 << 16) | min_p*1000
 #ifdef JASBOOT_LANG_INTEGRATION
             if (vm->mem_neuronal || vm->mem_colecciones) {
                 uint32_t list_id = (uint32_t)vm_get_register(vm, inst.operand_b);
                 uint64_t c_val = vm_get_register(vm, inst.operand_c);
-                float min_p = (float)(c_val & 0xFF) / 100.0f;
-                float max_p = (float)((c_val >> 8) & 0xFF) / 100.0f;
+                float min_p = (float)(c_val & 0xFFFF) / 1000.0f;
+                float max_p = (float)((c_val >> 16) & 0xFFFF) / 1000.0f;
                 if (max_p == 0.0f) max_p = 1.0f;
 
                 if (getenv("JASBOOT_DEBUG")) {
-                    fprintf(stderr, "[VM] BUSCAR_MAPA_ASOCIADOS list=%u min=%.2f max=%.2f\n", list_id, min_p, max_p);
+                    fprintf(stderr, "[VM] BUSCAR_MAPA_ASOCIADOS list=%u min=%.3f max=%.3f\n", list_id, min_p, max_p);
                 }
 
                 uint32_t map_id = vm_alloc_runtime_text_id(vm); // Usar ID temporal para mapa
@@ -8103,21 +8159,30 @@ int vm_step(VM* vm) {
                     uint32_t concept_id = jmn_lista_obtener(m_src, list_id, i).u;
                     if (concept_id == 0) continue;
 
-                    JMNBusquedaResultado resultados[32];
+                    JMNBusquedaResultado resultados[128];
                     // Profundidad 1 para ser rápido y preciso según el pedido
-                    int n_asoc = jmn_buscar_asociaciones(vm->mem_neuronal, concept_id, 0, min_p, 1, resultados, 32);
+                    // Usamos un umbral ligeramente menor para compensar errores de punto flotante
+                    int n_asoc = jmn_buscar_asociaciones(vm->mem_neuronal, concept_id, 0, min_p - 0.005f, 1, resultados, 128);
                     
-                    if (getenv("JASBOOT_DEBUG")) {
-                        fprintf(stderr, "  Concepto %u -> n_asoc=%d\n", concept_id, n_asoc);
-                    }
-
                     if (n_asoc > 0) {
+                        // Ordenar por fuerza DESC
+                        for (int i_sort = 0; i_sort < n_asoc - 1; i_sort++) {
+                            for (int j_sort = 0; j_sort < n_asoc - i_sort - 1; j_sort++) {
+                                if (resultados[j_sort].fuerza < resultados[j_sort+1].fuerza) {
+                                    JMNBusquedaResultado tmp = resultados[j_sort];
+                                    resultados[j_sort] = resultados[j_sort+1];
+                                    resultados[j_sort+1] = tmp;
+                                }
+                            }
+                        }
+
                         uint32_t sub_list_id = vm_alloc_runtime_text_id(vm);
                         jmn_crear_lista(vm->mem_colecciones, sub_list_id);
                         
                         int count = 0;
                         for (int j = 0; j < n_asoc; j++) {
-                            if (resultados[j].fuerza <= max_p) {
+                            // Aplicar rango inclusivo con margen de error para punto flotante
+                            if (resultados[j].fuerza >= (min_p - 0.005f) && resultados[j].fuerza <= (max_p + 0.005f)) {
                                 JMNValor v; v.u = resultados[j].id;
                                 jmn_lista_agregar(vm->mem_colecciones, sub_list_id, v);
                                 count++;
@@ -8205,6 +8270,53 @@ int vm_step(VM* vm) {
 #endif
                 vm_set_register(vm, inst.operand_a, (uint64_t)hash);
                 free(upper);
+            } else {
+                vm_set_register(vm, inst.operand_a, 5381);
+            }
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
+        case OP_STR_REEMPLAZAR: {
+            /* A = dest; B = texto (hay); C = patron; registro C+1 = reemplazo (paridad compilador / AOT). */
+            uint32_t hid = (uint32_t)vm_get_register(vm, inst.operand_b);
+            uint32_t nid = (uint32_t)vm_get_register(vm, inst.operand_c);
+            uint32_t rid = (uint32_t)vm_get_register(vm, inst.operand_c + 1);
+            char hay[4096], ndl[4096], rpl[4096];
+            hay[0] = ndl[0] = rpl[0] = '\0';
+            int ok_h = vm_text_cache_get_copy(vm, hid, hay, sizeof(hay));
+            if (!ok_h && vm->mem_neuronal) ok_h = (jmn_obtener_texto(vm->mem_neuronal, hid, hay, sizeof(hay)) >= 0);
+            int ok_n = vm_text_cache_get_copy(vm, nid, ndl, sizeof(ndl));
+            if (!ok_n && vm->mem_neuronal) ok_n = (jmn_obtener_texto(vm->mem_neuronal, nid, ndl, sizeof(ndl)) >= 0);
+            int ok_r = vm_text_cache_get_copy(vm, rid, rpl, sizeof(rpl));
+            if (!ok_r && vm->mem_neuronal) ok_r = (jmn_obtener_texto(vm->mem_neuronal, rid, rpl, sizeof(rpl)) >= 0);
+            if (!ok_h || !ok_n || !ok_r) {
+                vm_set_register(vm, inst.operand_a, 5381);
+                vm->pc += IR_INSTRUCTION_SIZE;
+                break;
+            }
+            size_t nlen = strlen(ndl);
+            if (nlen == 0) {
+                uint32_t id0 = vm_hash_texto(hay);
+                vm_text_cache_put(vm, id0, hay);
+#ifdef JASBOOT_LANG_INTEGRATION
+                if (vm->mem_neuronal)
+                    jmn_guardar_texto(vm->mem_neuronal, id0, hay);
+#endif
+                vm_set_register(vm, inst.operand_a, (uint64_t)id0);
+                vm->pc += IR_INSTRUCTION_SIZE;
+                break;
+            }
+            char *res = vm_str_replace_all(hay, ndl, rpl);
+            if (res) {
+                uint32_t id_res = vm_hash_texto(res);
+                vm_text_cache_put(vm, id_res, res);
+#ifdef JASBOOT_LANG_INTEGRATION
+                if (vm->mem_neuronal)
+                    jmn_guardar_texto(vm->mem_neuronal, id_res, res);
+#endif
+                vm_set_register(vm, inst.operand_a, (uint64_t)id_res);
+                free(res);
             } else {
                 vm_set_register(vm, inst.operand_a, 5381);
             }
@@ -8572,11 +8684,11 @@ int vm_step(VM* vm) {
             uint32_t id_inc = (uint32_t)b_val;
             uint32_t id_cor = (uint32_t)c_val;
             
-            // 1. Penalizar relación antigua
-            jmn_penalizar_asociacion(vm->mem_neuronal, id_ant, id_inc, 0.5f);
-            
-            // 2. Reforzar relación correcta
-            JMNValor v_cor = { .f = 0.5f };
+            /* Anular arista incorrecta y fijar la correcta (paridad AOT / pensar con umbral). */
+            float w_bad = jmn_obtener_fuerza_asociacion(vm->mem_neuronal, id_ant, id_inc);
+            if (w_bad > 0.f)
+                jmn_penalizar_asociacion(vm->mem_neuronal, id_ant, id_inc, w_bad);
+            JMNValor v_cor = { .f = 1.0f };
             jmn_agregar_conexion(vm->mem_neuronal, id_ant, id_cor, v_cor, JMN_RELACION_SECUENCIA);
         }
 #endif
@@ -8584,29 +8696,34 @@ int vm_step(VM* vm) {
         break;
     }
 
-    case 0xC7: { // OP_MEM_ASOCIAR_RELACION
-        // A = id1, B = id2, C = tipo (low 8 bits) + peso*1000 (bits 8-23); si bits 8-23 == 0 → peso 1.0
+        case 0xC7: { // OP_MEM_ASOCIAR_RELACION
+            // A = id1, B = id2, C = tipo (low 16 bits) + peso*1000 (bits 16-31); si bits 16-31 == 0 → peso 1.0
 #ifdef JASBOOT_LANG_INTEGRATION
-        if (vm->mem_neuronal) {
-            uint64_t a_val = vm_get_register(vm, inst.operand_a);
-            uint64_t b_val = vm_get_register(vm, inst.operand_b);
-            uint64_t c_val = vm_get_register(vm, inst.operand_c);
-            uint32_t id1 = (uint32_t)a_val;
-            uint32_t id2 = (uint32_t)b_val;
-            uint32_t tipo = (uint32_t)(c_val & 0xFFu);
+            if (vm->mem_neuronal) {
+                uint64_t a_val = vm_get_register(vm, inst.operand_a);
+                uint64_t b_val = vm_get_register(vm, inst.operand_b);
+                uint64_t c_val = vm_get_register(vm, inst.operand_c);
+                uint32_t id1 = (uint32_t)a_val;
+                uint32_t id2 = (uint32_t)b_val;
+                uint32_t tipo = (uint32_t)(c_val & 0xFFFFu);
+                uint32_t peso_x1000 = (uint32_t)((c_val >> 16) & 0xFFFFu);
+                
+                // Si peso_x1000 es > 0, usarlo. Si es 1000, es 1.0.
+                // Usamos un pequeño margen para que 1000 sea 1.0 exactamente.
+                float peso = (peso_x1000 != 0) ? ((float)peso_x1000 / 1000.0f) : 1.0f;
+                if (peso > 1.0f) peso = 1.0f;
+
+            if (tipo == 0) tipo = 1; // Default a asociación si no se especifica
             
-            // Robustez: Si tipo es un ID de cadena (p.ej. "secuencia"), resolverlo
-            if (c_val > 255) {
-                const char* t_str = vm_text_cache_get(vm, (uint32_t)c_val);
+            // Si el tipo es un ID de cadena (p.ej. "secuencia"), resolverlo
+            if (tipo > 255) {
+                const char* t_str = vm_text_cache_get(vm, (uint32_t)tipo);
                 if (t_str) {
-                    if (strcmp(t_str, "secuencia") == 0) tipo = 3; // JMN_RELACION_SECUENCIA
-                    else if (strcmp(t_str, "similitud") == 0) tipo = 1; // JMN_RELACION_SIMILITUD
-                    else if (strcmp(t_str, "oposicion") == 0) tipo = 2; // JMN_RELACION_OPOSICION
+                    if (strcmp(t_str, "secuencia") == 0) tipo = 3; 
+                    else if (strcmp(t_str, "similitud") == 0) tipo = 1; 
+                    else if (strcmp(t_str, "oposicion") == 0) tipo = 2; 
                 }
             }
-
-            uint32_t peso_x1000 = (uint32_t)((c_val >> 8) & 0xFFFFu);
-            float peso = (peso_x1000 != 0) ? ((float)peso_x1000 / 1000.0f) : 1.0f;
 
             if (tipo > 0 && tipo <= JMN_RELACION_MAX) {
                 JMNValor v_peso = { .f = peso };

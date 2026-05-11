@@ -290,8 +290,7 @@ int jmn_io_cargar(JMNMemoria* mem, const char* ruta) {
         if (toread > 256) toread = 256; /* Máximo incluyendo el nulo */
         
         char dummy[256];
-        void* target = (toread <= 256) ? mem->textos[slot].texto : dummy;
-        
+
         /* Si slen+1 es > 256, leemos el excedente en dummy para no desalinear el archivo */
         if (fread(mem->textos[slot].texto, 1, (toread > 256 ? 256 : toread), f) != (toread > 256 ? 256 : toread)) break;
         crc = jmn_crc32_update(crc, mem->textos[slot].texto, (toread > 256 ? 256 : toread));

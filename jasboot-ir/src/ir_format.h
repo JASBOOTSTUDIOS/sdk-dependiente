@@ -250,7 +250,8 @@ typedef enum {
     OP_JSON_OBJETO_OBTENER = 0x8A,   // A <- json_get(objeto B, clave texto C)
     OP_JSON_LISTA_OBTENER = 0x8B,    // A <- json_index(lista B, índice C)
     OP_JSON_LISTA_TAMANO = 0x8C,     // A <- tamaño de array JSON en B
-    OP_JSON_A_TEXTO = 0x72,          // A <- texto desde valor JSON en B
+    OP_STR_REEMPLAZAR = 0x72,        // A <- replace(B, pattern_data, replacement_data)
+    OP_JSON_A_TEXTO = 0x4E,          // A <- texto desde valor JSON en B
     OP_JSON_A_ENTERO = 0x73,         // A <- entero desde valor JSON en B
     OP_JSON_A_FLOTANTE = 0x74,       // A <- flotante(bits) desde valor JSON en B
     OP_JSON_A_BOOL = 0x75,           // A <- bool(0/1) desde valor JSON en B

@@ -323,22 +323,54 @@ int main(int argc, char **argv) {
     char exe_dir[4096];
     get_exe_dir(exe_dir, sizeof exe_dir);
 
-    char rt_c[4096], rt_json_c[4096], rt_inc[4096];
+    char rt_c[4096], rt_json_c[4096], rt_jmn_vm[4096], rt_inc[4096];
+    char sdk_jmn_src[4096], jmn_neu_inc[4096];
     path_join2(rt_c, sizeof rt_c, exe_dir, "runtime/jasboot_rt.c");
     path_join2(rt_json_c, sizeof rt_json_c, exe_dir, "runtime/jasboot_rt_json.c");
+    path_join2(rt_jmn_vm, sizeof rt_jmn_vm, exe_dir, "runtime/jasboot_rt_jmn_vm.c");
     path_join2(rt_inc, sizeof rt_inc, exe_dir, "runtime");
+    path_join2(sdk_jmn_src, sizeof sdk_jmn_src, exe_dir, "../jasboot-jmn-core/src");
+    path_join2(jmn_neu_inc, sizeof jmn_neu_inc, exe_dir, "../jasboot-jmn-core/src/memoria_neuronal");
 
-    char q_c[8192], q_rt[8192], q_rtj[8192], q_inc[8192], q_out[8192];
+    char q_c[8192], q_rt[8192], q_rtj[8192], q_rtjmn[8192], q_inc[8192], q_out[8192];
+    char q_sdk_jmn[8192], q_jmn_neu[8192];
+    char jmn_objs[8192];
+    static const char *jmn_rel_paths[] = {
+        "memoria_neuronal/memoria_neuronal_core.c",
+        "memoria_neuronal/memoria_neuronal_nodos.c",
+        "memoria_neuronal/memoria_neuronal_conexiones.c",
+        "memoria_neuronal/memoria_neuronal_io.c",
+        "memoria_neuronal/memoria_neuronal_busqueda.c",
+        "memoria_neuronal/memoria_neuronal_cognitivo.c",
+        "memoria_neuronal/memoria_neuronal_utilidades.c",
+        "memoria_neuronal/memoria_neuronal_estructuras.c",
+        "memoria_neuronal/memoria_neuronal_texto_fix.c",
+        "platform_compat.c",
+    };
+    size_t ji;
     quote_shell_path(output_c, q_c, sizeof q_c);
     quote_shell_path(rt_c, q_rt, sizeof q_rt);
     quote_shell_path(rt_json_c, q_rtj, sizeof q_rtj);
+    quote_shell_path(rt_jmn_vm, q_rtjmn, sizeof q_rtjmn);
     quote_shell_path(rt_inc, q_inc, sizeof q_inc);
     quote_shell_path(output_exe_buf, q_out, sizeof q_out);
+    quote_shell_path(sdk_jmn_src, q_sdk_jmn, sizeof q_sdk_jmn);
+    quote_shell_path(jmn_neu_inc, q_jmn_neu, sizeof q_jmn_neu);
 
-    char cmd[16384];
+    jmn_objs[0] = '\0';
+    for (ji = 0; ji < sizeof jmn_rel_paths / sizeof jmn_rel_paths[0]; ji++) {
+        char absf[4096], qf[8192];
+        path_join2(absf, sizeof absf, sdk_jmn_src, jmn_rel_paths[ji]);
+        quote_shell_path(absf, qf, sizeof qf);
+        if (jmn_objs[0])
+            strncat(jmn_objs, " ", sizeof jmn_objs - strlen(jmn_objs) - 1u);
+        strncat(jmn_objs, qf, sizeof jmn_objs - strlen(jmn_objs) - 1u);
+    }
+
+    char cmd[131072];
     snprintf(cmd, sizeof cmd,
-             "gcc -std=c11 -Wall %s %s %s -I%s -o %s -lm",
-             q_c, q_rt, q_rtj, q_inc, q_out);
+             "gcc -std=c11 -Wall %s %s %s %s %s -I%s -I%s -I%s -o %s -lm",
+             q_c, q_rt, q_rtj, q_rtjmn, jmn_objs, q_inc, q_jmn_neu, q_sdk_jmn, q_out);
 
     fprintf(stderr, "Compilando: %s\n", output_exe_buf);
     int ret = system(cmd);

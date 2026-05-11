@@ -17,6 +17,8 @@ const path = require("path");
 
 const workspaceRoot = path.resolve(__dirname, "../../..");
 const childEnv = { ...process.env, JASBOOT_REPO_ROOT: workspaceRoot };
+/* La VM escribe trazas extra a stdout con JASBOOT_DEBUG; rompe la comparación línea a línea. */
+delete childEnv.JASBOOT_DEBUG;
 
 const defaultSuite = [
   path.join(__dirname, "lenguaje", "102_parity_vm_aot.jasb"),
@@ -124,7 +126,12 @@ function canonParityLine(line) {
   /* VM suele imprimir flotantes con decimales; AOT puede usar %g ("2" vs "2.0000"). */
   if (/^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(t)) {
     const x = parseFloat(t);
-    if (!Number.isNaN(x)) return String(x);
+    if (!Number.isNaN(x)) {
+      /* Redondeo fino: float IEEE en AOT vs VM formateada (p. ej. 0.9 vs 0.899999976158142). */
+      if (Number.isFinite(x) && Math.floor(x) !== x)
+        return String(Math.round(x * 1e6) / 1e6);
+      return String(x);
+    }
   }
   return t;
 }
@@ -151,6 +158,38 @@ function resolveExeFromJasb(jasbPath) {
   const stem = path.basename(jasbPath, ".jasb");
   const name = process.platform === "win32" ? stem + ".exe" : stem;
   return path.join(dir, name);
+}
+
+/** Borra artefactos .jmn fijos usados por pruebas de paridad (misma ruta en VM y AOT). */
+function unlinkSilent(p) {
+  try {
+    if (fs.existsSync(p)) fs.unlinkSync(p);
+  } catch (_) {
+    /* ignorar */
+  }
+}
+
+/**
+ * Los programas abren .jmn con jmn_abrir_escritura (carga si existe) y recordar/asociar
+ * suman fuerza en la arista. El verificador ejecuta VM y luego el exe AOT: sin limpiar
+ * entre ambos, el AOT re-aprende sobre el grafo ya persistido por la VM y la salida difiere.
+ */
+function resetJmnParitySidecars() {
+  const lenguajeDir = path.join(
+    workspaceRoot,
+    "sdk-dependiente",
+    "jasboot-to-c",
+    "tests",
+    "lenguaje",
+  );
+  if (fs.existsSync(lenguajeDir)) {
+    for (const name of fs.readdirSync(lenguajeDir)) {
+      if (name.endsWith("_mem.jmn")) {
+        unlinkSilent(path.join(lenguajeDir, name));
+      }
+    }
+  }
+  unlinkSilent(path.join(workspaceRoot, "test_gestion_fresca.jmn"));
 }
 
 /**
@@ -193,6 +232,7 @@ function runOne(jasbPath, jbc, vm, jbcToC) {
   };
   if (stdinData !== null) runOpts.input = stdinData;
 
+  resetJmnParitySidecars();
   const vmRun = spawnSync(vm, [jboPath], runOpts);
   if (vmRun.status !== 0) {
     return {
@@ -202,6 +242,7 @@ function runOne(jasbPath, jbc, vm, jbcToC) {
     };
   }
 
+  resetJmnParitySidecars();
   const compileAot = spawnSync(jbcToC, [jasbPath], {
     cwd: workspaceRoot,
     env: childEnv,

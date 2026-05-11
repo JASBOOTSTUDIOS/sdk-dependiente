@@ -101,6 +101,8 @@ void ast_free(ASTNode *node) {
             ForEachNode *fe = (ForEachNode*)node;
             free_str(fe->iter_type);
             free_str(fe->iter_name);
+            free_str(fe->key_name);
+            free_str(fe->index_name);
             ast_free(fe->collection);
             ast_free(fe->body);
             break;

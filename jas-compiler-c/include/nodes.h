@@ -171,11 +171,13 @@ typedef struct {
     ASTNode *body;
 } WhileNode;
 
-/* para_cada T id sobre expr hacer ... fin_para_cada */
+/* para_cada T id [sobre key_id] en expr hacer ... fin_para_cada */
 typedef struct {
     ASTNode base;
     char *iter_type;
     char *iter_name;
+    char *key_name;         /* opcional: clave en mapa o indice legado en lista */
+    char *index_name;       /* opcional: `indice nombre` en para_cada */
     ASTNode *collection;
     ASTNode *body;
 } ForEachNode;

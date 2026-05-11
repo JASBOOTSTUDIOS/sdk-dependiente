@@ -13,6 +13,11 @@
 #pragma warning(disable:4505)
 #endif
 
+static jb_var_t jbf_multiplicar_dos(jb_var_t num_a, jb_var_t num_b);
+
+static jb_var_t jbf_multiplicar_dos(jb_var_t num_a, jb_var_t num_b) {
+    return jb_mul(num_a, num_b);
+}
 
 #ifdef __GNUC__
 #pragma GCC diagnostic pop
@@ -24,8 +29,6 @@
 int main(int argc, char **argv) {
     jb_init();
     jb_set_argv(argc, argv);
-    jb_imprimir(jb_json_stringify(jb_new_nulo(), jb_new_entero(0)));
-    jb_imprimir(jb_json_stringify(jb_new_nulo(), jb_new_entero(0)));
     jb_cleanup();
     return 0;
 }
