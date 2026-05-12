@@ -207,6 +207,9 @@ typedef struct {
     size_t pc_hits_len;                    // Longitud de pc_hits en número de instrucciones
     int profile_enabled;                   // Activado por entorno para imprimir resumen al final
     void* mai_system;                      // Memoria Activa Independiente (MAISystem*)
+    /** Últimos IDs de concepto tocados por MAI/JMN (buffer circular 10; plan 3.1). */
+    uint32_t mai_ctx_ring[10];
+    uint32_t mai_ctx_write_idx;
 } VM;
 
 // Crear y destruir VM

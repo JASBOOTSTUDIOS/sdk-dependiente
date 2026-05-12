@@ -189,6 +189,7 @@ JMNMemoria* jmn_abrir_escritura_cap(const char* ruta, uint32_t cap_nodos, uint32
     if (jmn_io_cargar(m, ruta) == 0) {
         m->dirty = 0;
     }
+    jmn_journal_log_size_if_any(m);
     return m;
 }
 

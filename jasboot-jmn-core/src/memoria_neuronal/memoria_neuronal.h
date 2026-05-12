@@ -119,6 +119,8 @@ void jmn_sincronizar_disco(JMNMemoria* mem);
 void jmn_journal_op_nodo(JMNMemoria* mem, uint32_t id, uint32_t peso_u);
 void jmn_journal_op_conex(JMNMemoria* mem, uint32_t ori, uint32_t dest, uint32_t tipo, uint32_t fuerza_u);
 void jmn_journal_commit(JMNMemoria* mem);
+/** Si existe `JASBOOT_JWL_STAT`, imprime tamaño del .jwl (apertura / diagnóstico). */
+void jmn_journal_log_size_if_any(const JMNMemoria* mem);
 
 /* Listas y mapas (colecciones) */
 void jmn_crear_lista(JMNMemoria* mem, uint32_t id);

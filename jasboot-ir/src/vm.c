@@ -1297,6 +1297,12 @@ static void vm_init_test_str_table(void) {
     init = 1;
 }
 
+static void vm_mai_note_context(VM* vm, uint32_t concept_id) {
+    if (!vm || concept_id == 0) return;
+    vm->mai_ctx_ring[vm->mai_ctx_write_idx % 10u] = concept_id;
+    vm->mai_ctx_write_idx++;
+}
+
 VM* vm_create(void) {
     setvbuf(stdout, NULL, _IONBF, 0);
     vm_init_int_str_table();
@@ -3448,6 +3454,7 @@ int vm_step(VM* vm) {
 #endif
                  if (vm->mai_system) {
                      mai_send_message((MAISystem*)vm->mai_system, 0, hash, 0.1f, MAI_MSG_ACTIVATION);
+                     vm_mai_note_context(vm, hash);
                  }
             }
             vm_set_register(vm, inst.operand_a, (uint64_t)hash);
@@ -4998,6 +5005,7 @@ int vm_step(VM* vm) {
                     v_peso.f = peso;
                     jmn_agregar_nodo(vm->mem_neuronal, concepto_id, v_peso);
                 }
+                vm_mai_note_context(vm, concepto_id);
             }
 #endif
             vm_percepcion_push(vm, concepto_id);
@@ -5015,6 +5023,7 @@ int vm_step(VM* vm) {
                 vm_set_register(vm, inst.operand_b, valor);
                 if (vm->mai_system) {
                     mai_send_message((MAISystem*)vm->mai_system, 0, concepto_id, 0.2f, MAI_MSG_ACTIVATION);
+                    vm_mai_note_context(vm, concepto_id);
                 }
             } else vm_set_register(vm, inst.operand_b, 0);
 #else
@@ -5054,6 +5063,8 @@ int vm_step(VM* vm) {
                 if (vm->mai_system) {
                     mai_send_message((MAISystem*)vm->mai_system, id1, id2, peso, MAI_MSG_ACTIVATION);
                     mai_send_message_ex((MAISystem*)vm->mai_system, id1, id2, peso, MAI_MSG_REFUERSO, 48);
+                    vm_mai_note_context(vm, id1);
+                    vm_mai_note_context(vm, id2);
                 }
                 if (getenv("JASBOOT_DEBUG")) {
                     const char* t1 = vm_text_cache_get(vm, id1);
@@ -5331,6 +5342,7 @@ int vm_step(VM* vm) {
             }
             if (vm->mai_system && id_in != 0) {
                 mai_send_message((MAISystem*)vm->mai_system, 0, id_in, 0.8f, MAI_MSG_ACTIVATION);
+                vm_mai_note_context(vm, id_in);
             }
 #endif
             vm_set_register(vm, inst.operand_a, (uint64_t)out_id);
@@ -6310,6 +6322,7 @@ int vm_step(VM* vm) {
 
                 if (vm->mai_system) {
                     mai_send_message((MAISystem*)vm->mai_system, 0, hash, 0.5f, MAI_MSG_ACTIVATION);
+                    vm_mai_note_context(vm, hash);
                 }
             }
 #endif
@@ -8837,6 +8850,8 @@ int vm_step(VM* vm) {
                 if (vm->mai_system) {
                     mai_send_message((MAISystem*)vm->mai_system, id1, id2, peso, MAI_MSG_ACTIVATION);
                     mai_send_message_ex((MAISystem*)vm->mai_system, id1, id2, peso, MAI_MSG_REFUERSO, 40);
+                    vm_mai_note_context(vm, id1);
+                    vm_mai_note_context(vm, id2);
                 }
                 if (tipo == JMN_RELACION_SIMILITUD || tipo == JMN_RELACION_OPOSICION) {
                     jmn_agregar_conexion(vm->mem_neuronal, id2, id1, v_peso, tipo);

@@ -322,6 +322,49 @@ void mai_destroy(MAISystem* mai) {
     free(mai);
 }
 
+static int mai_reflect_env_on(void) {
+    const char* e = getenv("MAI_REFLECT");
+    return e && e[0] && strcmp(e, "0") != 0;
+}
+
+static void mai_reflect_from_jmn(MAISystem* mai) {
+    static uint32_t throttle;
+    if (++throttle % 3u != 0u) return;
+
+    JMNBusquedaResultado buf[32];
+    uint32_t seeds[12];
+    int ns = 0;
+    void* jmn_ptr = NULL;
+
+    pthread_mutex_lock(&mai->mutex);
+    jmn_ptr = mai->jmn_base;
+    if (jmn_ptr && mai->count > 0) {
+        uint32_t base = (uint32_t)(mai->global_tick % 7919u + 1u);
+        for (uint32_t t = 0; t < mai->count && ns < 12; t++) {
+            uint32_t k = (base + t * 1103515245u) % mai->count;
+            MAIActiveNeuron* n = &mai->neurons[k];
+            if (n->id_hash != 0 && n->energy >= 0.28f)
+                seeds[ns++] = n->id_hash;
+        }
+    }
+    pthread_mutex_unlock(&mai->mutex);
+
+    if (!jmn_ptr || ns == 0) return;
+
+    JMNMemoria* mem = (JMNMemoria*)jmn_ptr;
+    int budget = 28;
+    for (int s = 0; s < ns && budget > 0; s++) {
+        int nr = jmn_buscar_asociaciones(mem, seeds[s], 0u, 0.07f, 1u, buf, 32);
+        for (int i = 0; i < nr && budget > 0; i++) {
+            if (buf[i].id == 0 || buf[i].id == seeds[s]) continue;
+            float amp = buf[i].fuerza * 0.055f;
+            if (amp < 0.015f) amp = 0.015f;
+            mai_send_message_ex(mai, seeds[s], buf[i].id, amp, MAI_MSG_ACTIVATION, 58);
+            budget--;
+        }
+    }
+}
+
 void mai_process_cycle(MAISystem* mai, uint32_t delta_ms) {
     if (!mai) return;
     uint32_t d = delta_ms ? delta_ms : 1u;
@@ -355,6 +398,9 @@ void mai_process_cycle(MAISystem* mai, uint32_t delta_ms) {
 
     mai_maybe_lra(mai);
     pthread_mutex_unlock(&mai->mutex);
+
+    if (mai_reflect_env_on())
+        mai_reflect_from_jmn(mai);
 }
 
 void mai_scheduler_tick(MAISystem* mai) {

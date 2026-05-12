@@ -4,8 +4,10 @@
 #include "memoria_neuronal.h"
 #include "jmn_interno.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <sys/stat.h>
 
 static void jmn_journal_make_path(const JMNMemoria* mem, char* out, size_t outsz) {
     if (!mem || !mem->ruta_archivo[0]) {
@@ -60,4 +62,13 @@ void jmn_journal_commit(JMNMemoria* mem) {
     fwrite(&mark, 4, 1, f);
     fwrite(&t, 4, 1, f);
     fclose(f);
+}
+
+void jmn_journal_log_size_if_any(const JMNMemoria* mem) {
+    if (!getenv("JASBOOT_JWL_STAT") || !mem || !mem->ruta_archivo[0]) return;
+    char p[512];
+    jmn_journal_make_path(mem, p, sizeof p);
+    struct stat st;
+    if (stat(p, &st) != 0 || st.st_size <= 0) return;
+    fprintf(stderr, "[JMN JWL] journal existente %s (%lld bytes)\n", p, (long long)st.st_size);
 }
