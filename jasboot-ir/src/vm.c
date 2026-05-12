@@ -1411,7 +1411,7 @@ static void vm_escribir_flotante(uint64_t valor) {
         vm_escribir_cadena("nan");
         return;
     }
-    printf("%.4f", u.f);
+    printf("%.6g", (double)u.f);
     fflush(stdout);
 }
 
@@ -4184,14 +4184,9 @@ int vm_step(VM* vm) {
 #endif
 
             if (found) {
-                uint32_t tid = vm_alloc_runtime_text_id(vm);
-                char* owned = strdup(buf);
-                if (owned) {
-                    vm_text_cache_put_owned(vm, tid, owned, strlen(owned));
-                    vm_set_register(vm, inst.operand_a, (uint64_t)tid);
-                } else {
-                    vm_set_register(vm, inst.operand_a, (uint64_t)id);
-                }
+                uint32_t tid = vm_hash_texto(buf);
+                vm_text_cache_put(vm, tid, buf);
+                vm_set_register(vm, inst.operand_a, (uint64_t)tid);
             } else {
                 vm_set_register(vm, inst.operand_a, 5381); // "" si no hay texto
             }
@@ -5929,16 +5924,31 @@ int vm_step(VM* vm) {
             }
 #endif
 
-            char buf[64];
-            // Flag de tipo en operand_c (1=entero, 0=float)
-            int is_int = 0;
+            char buf[96];
+            /* operand_c inmediato o registro: 0=float, 1=entero, 2=bool (texto verdadero/falso) */
+            int fmt_mode = 0;
             if (inst.flags & IR_INST_FLAG_C_IMMEDIATE) {
-                is_int = (inst.operand_c == 1);
+                fmt_mode = (int)inst.operand_c;
+                if (fmt_mode < 0 || fmt_mode > 2)
+                    fmt_mode = (fmt_mode == 1) ? 1 : 0;
             } else {
-                is_int = (vm_get_register(vm, inst.operand_c) == 1);
+                uint64_t cv = vm_get_register(vm, inst.operand_c);
+                fmt_mode = (cv == 1) ? 1 : ((cv == 2) ? 2 : 0);
             }
 
-            if (is_int) {
+            if (fmt_mode == 2) {
+                const char *s = id ? "verdadero" : "falso";
+                uint32_t id_res = vm_hash_texto(s);
+                vm_text_cache_put(vm, id_res, s);
+#ifdef JASBOOT_LANG_INTEGRATION
+                if (vm->mem_neuronal) jmn_guardar_texto(vm->mem_neuronal, id_res, s);
+#endif
+                vm_set_register(vm, inst.operand_a, (uint64_t)id_res);
+                vm->pc += IR_INSTRUCTION_SIZE;
+                break;
+            }
+
+            if (fmt_mode == 1) {
                 snprintf(buf, sizeof(buf), "%lld", (long long)id);
             } else {
                 union { uint32_t u32; float f32; } u;
@@ -5947,7 +5957,7 @@ int vm_step(VM* vm) {
                 if (val == (float)((long long)val))
                     snprintf(buf, sizeof(buf), "%lld", (long long)val);
                 else
-                    snprintf(buf, sizeof(buf), "%.4f", (double)val);
+                    snprintf(buf, sizeof(buf), "%.6g", (double)val);
             }
             
             uint32_t id_res = vm_hash_texto(buf);
@@ -8105,6 +8115,7 @@ int vm_step(VM* vm) {
                     }
                 }
                 uint32_t list_id = (origen_id ^ 0xA5A5A5A5u) | 0x80000000u;
+                vm_list_size_cache_set(vm, list_id, (uint32_t)n); // Actualizar cache de tamaño
                 ensure_jmn_col(vm);
                 if (vm->mem_colecciones) {
                     jmn_crear_lista(vm->mem_colecciones, list_id);
@@ -8610,6 +8621,14 @@ int vm_step(VM* vm) {
             if (context_id != 0) tipo = jmn_relacion_con_contexto(tipo, context_id);
 
             int n = jmn_buscar_asociaciones(mem, (uint32_t)b_val, tipo, 0.01f, 1, resultados, 8);
+            if (getenv("JASBOOT_DEBUG")) {
+                fprintf(stderr, "[VM] PENSAR_SIGUIENTE origen=%u ('%s') tipo=%u n=%d\n", 
+                        (uint32_t)b_val, vm_text_cache_get(vm, (uint32_t)b_val), tipo, n);
+                for (int k = 0; k < n; k++) {
+                    fprintf(stderr, "  [%d] dest=%u ('%s') fuerza=%.4f\n", 
+                            k, resultados[k].id, vm_text_cache_get(vm, resultados[k].id), resultados[k].fuerza);
+                }
+            }
             if (n > 1) {
                 // Ordenar resultados por fuerza (descendente)
                 for (int i = 0; i < n - 1; i++) {

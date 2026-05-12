@@ -2944,7 +2944,7 @@ static ASTNode *parse_para_cada_statement(Parser *p) {
         return NULL;
 
     const Token *ity = peek(p, 0);
-    static const char *ok_it[] = {"entero", "flotante", "texto", "bool", "caracter", NULL};
+    static const char *ok_it[] = {"entero", "flotante", "texto", "bool", "caracter", "elemento", NULL};
     int it_ok = 0;
     if (ity && ity->type == TOK_KEYWORD && ity->value.str) {
         for (int i = 0; ok_it[i]; i++) {

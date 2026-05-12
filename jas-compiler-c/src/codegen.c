@@ -1701,6 +1701,8 @@ static const char *get_return_type_from_block(CodeGen *cg, ASTNode *node) {
 
 static const char *get_array_element_type(CodeGen *cg, const char *type_name) {
     if (!type_name) return NULL;
+    /* Caso 0: lista o mapa (sin genericos) */
+    if (strcmp(type_name, "lista") == 0 || strcmp(type_name, "mapa") == 0) return "elemento";
     /* Caso 1: T[] */
     size_t len = strlen(type_name);
     if (len > 2 && type_name[len-2] == '[' && type_name[len-1] == ']') {
@@ -1857,6 +1859,8 @@ static const char *get_expression_type(CodeGen *cg, ASTNode *node) {
                 return "entero";
             if (strcmp(cn->name, "formatear_timestamp") == 0)
                 return "texto";
+            if (strcmp(cn->name, "pensar_siguiente") == 0 || strcmp(cn->name, "pensar_anterior") == 0)
+                return "texto";
         }
         if (cn->name && !cn->callee) {
             /* 1. Buscar si es un constructor de clase/registro */
@@ -1911,7 +1915,9 @@ static const char *get_expression_type(CodeGen *cg, ASTNode *node) {
         if (cn->name && strcmp(cn->name, "tls_servidor") == 0) return "tls";
         if (cn->name && strcmp(cn->name, "entrada_flotante") == 0) return "flotante";
         if (cn->name && (strcmp(cn->name, "lista_mapear") == 0 || strcmp(cn->name, "mem_lista_mapear") == 0 ||
-                         strcmp(cn->name, "lista_filtrar") == 0 || strcmp(cn->name, "mem_lista_filtrar") == 0))
+                         strcmp(cn->name, "lista_filtrar") == 0 || strcmp(cn->name, "mem_lista_filtrar") == 0 ||
+                         strcmp(cn->name, "buscar_asociados_lista") == 0 || strcmp(cn->name, "asociados_lista_de") == 0 ||
+                         strcmp(cn->name, "obtener_todos_conceptos") == 0))
             return "lista";
         /* mem_lista_obtener / lista_obtener / mapa_obtener: mismo tipo que lista<T> o mapa<T> si la variable declaro T. */
         if (cn->name && (strcmp(cn->name, "mem_lista_obtener") == 0 || strcmp(cn->name, "lista_obtener") == 0 ||
@@ -2276,9 +2282,11 @@ static void emit_format_struct_string_reg(CodeGen *cg, const char *struct_name, 
             }
         } else {
             emit_leer_at_offset(cg, base, (uint32_t)fo, CG_STRUCT_VAL_TMP);
-            int is_int = ft && (strcmp(ft, "entero") == 0 || strcmp(ft, "bool") == 0 || strcmp(ft, "u32") == 0 ||
+            int is_bool_f = ft && (strcmp(ft, "bool") == 0 || strcmp(ft, "booleano") == 0);
+            int is_int = ft && (strcmp(ft, "entero") == 0 || strcmp(ft, "u32") == 0 ||
                                 strcmp(ft, "u8") == 0 || strcmp(ft, "byte") == 0 || strcmp(ft, "u64") == 0);
-            emit(cg, OP_STR_DESDE_NUMERO, frag, CG_STRUCT_VAL_TMP, is_int ? 1 : 0,
+            uint8_t num_c = (uint8_t)(is_bool_f ? 2 : (is_int ? 1 : 0));
+            emit(cg, OP_STR_DESDE_NUMERO, frag, CG_STRUCT_VAL_TMP, num_c,
                  IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE);
             emit_str_concat_regs(cg, acc_reg, frag);
         }
@@ -4265,10 +4273,10 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         if (cn->n_args >= 3 && ARG2) visit_expression(cg, ARG2, 12); /* tipo */
         else emit(cg, OP_MOVER, 12, 1, 0, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE); /* tipo 1 = asociaciones (defecto) */
         
-        /* Empaquetar como lee la VM: tipo = C & 0xFF, K = (C >> 8) & 0xFF → C = (K << 8) | tipo */
-        emit(cg, OP_MOVER, 13, 8, 0, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
-        emit(cg, OP_BIT_SHL, 14, 11, 13, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER); /* 14 = K << 8 */
-        emit(cg, OP_SUMAR, 15, 14, 12, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);   /* 15 = (K << 8) | tipo */
+        /* Empaquetar como lee la VM: tipo = C & 0xFFFF, K = (C >> 16) & 0xFFFF → C = (K << 16) | tipo */
+        emit(cg, OP_MOVER, 13, 16, 0, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
+        emit(cg, OP_BIT_SHL, 14, 11, 13, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER); /* 14 = K << 16 */
+        emit(cg, OP_SUMAR, 15, 14, 12, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);   /* 15 = (K << 16) | tipo */
         
         emit(cg, OP_MEM_BUSCAR_ASOCIADOS_LISTA, 1, 10, 15, 
              IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
@@ -5336,10 +5344,14 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         }
         const char *t = get_expression_type(cg, ARG0);
         int is_flt = (t && strcmp(t, "flotante") == 0);
+        int is_bool = (t && (strcmp(t, "bool") == 0 || strcmp(t, "booleano") == 0));
         int is_int = (t && strcmp(t, "entero") == 0);
         visit_expression(cg, ARG0, dest_reg + 1);
         if (is_flt) {
             emit(cg, OP_STR_DESDE_NUMERO, (uint8_t)dest_reg, (uint8_t)(dest_reg + 1), 0, 
+                 IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE);
+        } else if (is_bool) {
+            emit(cg, OP_STR_DESDE_NUMERO, (uint8_t)dest_reg, (uint8_t)(dest_reg + 1), 2,
                  IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE);
         } else if (is_int) {
             emit(cg, OP_STR_DESDE_NUMERO, (uint8_t)dest_reg, (uint8_t)(dest_reg + 1), 1, 
@@ -5678,8 +5690,10 @@ static void emit_build_interpolated_string(CodeGen *cg, const char *text, int de
                 (void)visit_expression(cg, expr_node, expr_reg);
                 const char *t = get_expression_type(cg, expr_node);
                 if (t && strcmp(t, "texto") != 0 && strcmp(t, "concepto") != 0) {
+                    int is_bool_t = (t && (strcmp(t, "bool") == 0 || strcmp(t, "booleano") == 0));
                     int is_int = (t && strcmp(t, "entero") == 0);
-                    emit(cg, OP_STR_DESDE_NUMERO, expr_reg, expr_reg, is_int ? 1 : 0,
+                    uint8_t ic = (uint8_t)(is_bool_t ? 2 : (is_int ? 1 : 0));
+                    emit(cg, OP_STR_DESDE_NUMERO, expr_reg, expr_reg, ic,
                          IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE);
                 }
                 if (!first) {
@@ -6348,16 +6362,18 @@ static int visit_expression(CodeGen *cg, ASTNode *node, int dest_reg) {
             int rt_is_flt = (rt && strcmp(rt, "flotante") == 0);
             int lt_is_car = (lt && strcmp(lt, "caracter") == 0);
             int rt_is_car = (rt && strcmp(rt, "caracter") == 0);
-            int lt_is_bool = (lt && strcmp(lt, "booleano") == 0);
-            int rt_is_bool = (rt && strcmp(rt, "booleano") == 0);
+            int lt_is_bool = (lt && (strcmp(lt, "booleano") == 0 || strcmp(lt, "bool") == 0));
+            int rt_is_bool = (rt && (strcmp(rt, "booleano") == 0 || strcmp(rt, "bool") == 0));
             int lt_is_u32 = (lt && (strcmp(lt, "u32") == 0 || strcmp(lt, "u64") == 0));
             int rt_is_u32 = (rt && (strcmp(rt, "u32") == 0 || strcmp(rt, "u64") == 0));
+            uint8_t lt_num_c = (uint8_t)(lt_is_bool ? 2 : ((lt_is_int || lt_is_u32) ? 1 : 0));
+            uint8_t rt_num_c = (uint8_t)(rt_is_bool ? 2 : ((rt_is_int || rt_is_u32) ? 1 : 0));
 
             if (lt && (lt_is_int || lt_is_flt || lt_is_car || lt_is_u32 || lt_is_bool) && !expr_already_yields_text_string_id(cg, bn->left))
-                emit(cg, lt_is_car ? OP_STR_DESDE_CODIGO : OP_STR_DESDE_NUMERO, rL, rL, (lt_is_int || lt_is_u32 || lt_is_bool) ? 1 : 0,
+                emit(cg, lt_is_car ? OP_STR_DESDE_CODIGO : OP_STR_DESDE_NUMERO, rL, rL, lt_is_car ? 0 : lt_num_c,
                      IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | (lt_is_car ? 0 : IR_INST_FLAG_C_IMMEDIATE));
             if (rt && (rt_is_int || rt_is_flt || rt_is_car || rt_is_u32 || rt_is_bool) && !expr_already_yields_text_string_id(cg, bn->right))
-                emit(cg, rt_is_car ? OP_STR_DESDE_CODIGO : OP_STR_DESDE_NUMERO, rR_reg, rR_reg, (rt_is_int || rt_is_u32 || rt_is_bool) ? 1 : 0,
+                emit(cg, rt_is_car ? OP_STR_DESDE_CODIGO : OP_STR_DESDE_NUMERO, rR_reg, rR_reg, rt_is_car ? 0 : rt_num_c,
                      IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | (rt_is_car ? 0 : IR_INST_FLAG_C_IMMEDIATE));
             emit(cg, OP_STR_CONCATENAR_REG, dest_reg, rL, rR_reg, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
             return dest_reg;
@@ -6850,9 +6866,13 @@ static void emit_conv_for_store(CodeGen *cg, const char *dest_type, const char *
         emit(cg, OP_CONV_F2I, reg, reg, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
     else if (strcmp(dest_type, "flotante") == 0 && strcmp(expr_type, "entero") == 0)
         emit(cg, OP_CONV_I2F, reg, reg, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
-    else if (strcmp(dest_type, "texto") == 0 && (strcmp(expr_type, "entero") == 0 || strcmp(expr_type, "flotante") == 0)) {
+    else if (strcmp(dest_type, "texto") == 0 &&
+             (strcmp(expr_type, "entero") == 0 || strcmp(expr_type, "flotante") == 0 ||
+              strcmp(expr_type, "bool") == 0 || strcmp(expr_type, "booleano") == 0)) {
+        int is_bool_e = (strcmp(expr_type, "bool") == 0 || strcmp(expr_type, "booleano") == 0);
         int is_int = (strcmp(expr_type, "entero") == 0);
-        emit(cg, OP_STR_DESDE_NUMERO, (uint8_t)reg, (uint8_t)reg, is_int ? 1 : 0, 
+        uint8_t ic = (uint8_t)(is_bool_e ? 2 : (is_int ? 1 : 0));
+        emit(cg, OP_STR_DESDE_NUMERO, (uint8_t)reg, (uint8_t)reg, ic,
              IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE);
     }
 }

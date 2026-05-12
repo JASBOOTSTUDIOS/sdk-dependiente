@@ -153,7 +153,7 @@ typedef enum {
     OP_COS = 0x96,         // A <- cos(B) radianes, flotante
     OP_TAN = 0x97,         // A <- tan(B) radianes, flotante
     OP_STR_FLOTANTE_PREC = 0x8F, // A ← id texto: formatear (float)B con C decimales (C inm 0..20 o reg entero)
-    OP_STR_DESDE_NUMERO = 0x98, // A ← string(B)
+    OP_STR_DESDE_NUMERO = 0x98, // A ← string(B); C inm/reg: 0=float, 1=entero, 2=bool→"verdadero"/"falso"
     OP_STR_DESDE_ANY = 0x49,    // A ← string(B) heuristico
     OP_CONV_ANY2F = 0x4A,       // A ← (float)B (int/float heuristico)
     OP_CONV_ANY2I = 0x4B,       // A ← (int)B (int/float heuristico)
