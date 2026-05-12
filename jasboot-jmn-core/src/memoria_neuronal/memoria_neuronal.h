@@ -61,6 +61,8 @@ typedef struct JMNConflictoResultado {
 
 /* Apertura/cierre y persistencia */
 JMNMemoria* jmn_abrir_escritura(const char* ruta);
+/** Igual que jmn_abrir_escritura pero reserva cap_nodos/cap_conexiones (p. ej. crear_memoria con capacidades). */
+JMNMemoria* jmn_abrir_escritura_cap(const char* ruta, uint32_t cap_nodos, uint32_t cap_conexiones);
 JMNMemoria* jmn_abrir_lectura(const char* ruta);
 JMNMemoria* jmn_crear(const char* ruta);
 void jmn_finalizar_escritura(JMNMemoria* mem);
@@ -109,6 +111,14 @@ uint32_t jmn_registrar_texto_dinamico(JMNMemoria* mem, const char* texto);
 int jmn_imprimir_texto(JMNMemoria* mem, uint32_t id);
 int jmn_leer_archivo(JMNMemoria* mem, const char* ruta, uint32_t id_destino);
 int jmn_escribir_archivo(JMNMemoria* mem, const char* ruta, uint32_t id_origen);
+
+/** Sincroniza los cambios en memoria mapeada al disco */
+void jmn_sincronizar_disco(JMNMemoria* mem);
+
+/** Journal append-only (.jwl) — paso hacia 2.2 del plan (integridad incremental). */
+void jmn_journal_op_nodo(JMNMemoria* mem, uint32_t id, uint32_t peso_u);
+void jmn_journal_op_conex(JMNMemoria* mem, uint32_t ori, uint32_t dest, uint32_t tipo, uint32_t fuerza_u);
+void jmn_journal_commit(JMNMemoria* mem);
 
 /* Listas y mapas (colecciones) */
 void jmn_crear_lista(JMNMemoria* mem, uint32_t id);

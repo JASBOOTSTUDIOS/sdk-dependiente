@@ -2,6 +2,7 @@
 #include "jmn_interno.h"
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 static uint32_t alloc_conex_slot(JMNMemoria* mem, uint32_t ori, uint32_t dest) {
     uint32_t slot = ((ori * 31u) + dest) % mem->cap_conexiones;
@@ -78,6 +79,8 @@ void jmn_agregar_conexion(JMNMemoria* mem, uint32_t origen, uint32_t dest, JMNVa
         mem->conexiones[slot].key_id = tipo;
     }
     if (!mem->es_ram) mem->dirty = 1;
+    if (!mem->es_ram)
+        jmn_journal_op_conex(mem, origen, dest, mem->conexiones[slot].key_id, mem->conexiones[slot].fuerza.u);
 }
 
 JMNConexion* jmn_obtener_conexiones(JMNMemoria* mem, JMNNodo* nodo, uint32_t* count) {

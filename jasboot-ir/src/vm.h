@@ -206,6 +206,7 @@ typedef struct {
     uint64_t* pc_hits;                     // Perfil simple por instrucción
     size_t pc_hits_len;                    // Longitud de pc_hits en número de instrucciones
     int profile_enabled;                   // Activado por entorno para imprimir resumen al final
+    void* mai_system;                      // Memoria Activa Independiente (MAISystem*)
 } VM;
 
 // Crear y destruir VM

@@ -15,8 +15,17 @@ static uint32_t find_texto_slot(JMNMemoria* mem, uint32_t id) {
 }
 
 static uint32_t alloc_texto_slot(JMNMemoria* mem, uint32_t id) {
+    if (mem->num_textos >= mem->cap_textos) {
+        // En un sistema real aquí redimensionaríamos, por ahora evitamos el bucle infinito
+        fprintf(stderr, "[JMN ERROR] Capacidad de textos agotada (%u/%u)\n", mem->num_textos, mem->cap_textos);
+        return 0; // Slot 0 suele ser reservado o ignorado en fallos
+    }
     uint32_t slot = id % mem->cap_textos;
-    while (mem->textos[slot].used) slot = (slot + 1) % mem->cap_textos;
+    uint32_t start_slot = slot;
+    while (mem->textos[slot].used) {
+        slot = (slot + 1) % mem->cap_textos;
+        if (slot == start_slot) break; // No debería pasar por el check inicial
+    }
     uint32_t h = jmn_hash_u32(id) % JMN_HASH_SIZE;
     mem->textos[slot].id = id;
     mem->textos[slot].texto[0] = '\0';

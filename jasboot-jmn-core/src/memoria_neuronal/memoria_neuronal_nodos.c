@@ -42,6 +42,7 @@ void jmn_agregar_nodo(JMNMemoria* mem, uint32_t id, JMNValor peso) {
         fprintf(stderr, "[JMN] Agregado nodo %u en slot %u (bucket %u)\n", id, slot, h);
     }
     if (!mem->es_ram) mem->dirty = 1;
+    if (!mem->es_ram) jmn_journal_op_nodo(mem, id, mem->nodos[slot].peso.u);
 }
 
 JMNNodo* jmn_obtener_nodo(JMNMemoria* mem, uint32_t id) {

@@ -3,6 +3,7 @@
 #endif
 
 #include "vm.h"
+#include "mai.h"
 #include "vm_analitica_mlp.h"
 #include "reader_ir.h"
 #include "memoria_neuronal/memoria_neuronal.h"
@@ -1061,6 +1062,22 @@ static int vm_text_cache_put_concat(VM* vm, uint32_t id, uint32_t left_id, uint3
 static int vm_text_cache_put(VM* vm, uint32_t id, const char* text) {
     if (!vm || !vm->text_cache_buckets) return -1;
     
+    // Evicción de caché si es demasiado grande para evitar saturar RAM
+    // 100,000 entradas es un límite más agresivo para 4GB RAM en mega-tests
+    if (vm->text_cache_count > 100000) {
+        vm_text_cache_free(vm);
+        vm->text_cache_buckets = (VMTextCacheEntry**)calloc(vm->text_cache_size, sizeof(VMTextCacheEntry*));
+        vm->text_cache_count = 0;
+        // Re-poblar con cadena vacía esencial
+        char* empty = strdup("");
+        VMTextCacheEntry* n = (VMTextCacheEntry*)calloc(1, sizeof(VMTextCacheEntry));
+        if (n && empty) {
+            n->id = 5381; n->text = empty; n->text_len = 0;
+            vm->text_cache_buckets[5381 % vm->text_cache_size] = n;
+            vm->text_cache_count = 1;
+        }
+    }
+
     size_t index = id % vm->text_cache_size;
     
     // Si ya existe, actualizar
@@ -1246,8 +1263,44 @@ static char* vm_fs_glob_list(const char* pattern) {
 }
 
 
+static const char* vm_int_str_table[10001];
+static uint32_t vm_int_hash_table[10001];
+
+static void vm_init_int_str_table(void) {
+    static int init = 0;
+    if (init) return;
+    for (int i = 0; i <= 10000; i++) {
+        char buf[16];
+        snprintf(buf, sizeof(buf), "%d", i);
+        vm_int_str_table[i] = strdup(buf);
+        vm_int_hash_table[i] = vm_hash_texto(buf);
+    }
+    init = 1;
+}
+
+static const char* vm_test_str_table[20001];
+static uint32_t vm_test_hash_table[20001];
+
+static void vm_init_test_str_table(void) {
+    static int init = 0;
+    if (init) return;
+    for (int i = 0; i <= 10000; i++) {
+        char buf[32];
+        snprintf(buf, sizeof(buf), "c_%d", i);
+        vm_test_str_table[i] = strdup(buf);
+        vm_test_hash_table[i] = vm_hash_texto(buf);
+        
+        snprintf(buf, sizeof(buf), "v_%d", i);
+        vm_test_str_table[i+10000] = strdup(buf);
+        vm_test_hash_table[i+10000] = vm_hash_texto(buf);
+    }
+    init = 1;
+}
+
 VM* vm_create(void) {
     setvbuf(stdout, NULL, _IONBF, 0);
+    vm_init_int_str_table();
+    vm_init_test_str_table();
     VM* vm = (VM*)calloc(1, sizeof(VM));
     if (!vm) return NULL;
     
@@ -1263,7 +1316,7 @@ VM* vm_create(void) {
     }
     
     // Inicializar Tabla Hash de Strings
-    vm->text_cache_size = 4096; // Suficiente para un compilador
+    vm->text_cache_size = 1048576; // Optimizado para alto volumen
     vm->text_cache_buckets = (VMTextCacheEntry**)calloc(vm->text_cache_size, sizeof(VMTextCacheEntry*));
     vm->text_cache_count = 0;
     vm->next_runtime_text_id = 0x80000000u;
@@ -1333,6 +1386,9 @@ VM* vm_create(void) {
     // Pre-poblar cache con cadena vacía (hash 5381) para estabilidad
     vm_text_cache_put(vm, 5381, "");
     
+    // Inicializar MAI (Memoria Activa Independiente)
+    vm->mai_system = mai_init(MAI_MAX_ACTIVE_NEURONS, NULL);
+
     return vm;
 }
 
@@ -1687,6 +1743,10 @@ void vm_destroy(VM* vm) {
         vm->mem_colecciones = NULL;
     }
 #endif
+    if (vm->mai_system) {
+        mai_destroy((MAISystem*)vm->mai_system);
+        vm->mai_system = NULL;
+    }
     vm_text_cache_free(vm);
     vm_list_size_cache_free(vm);
     vm_substring_cache_free(vm);
@@ -3386,6 +3446,9 @@ int vm_step(VM* vm) {
                      jmn_guardar_texto(vm->mem_neuronal, hash, str);
                  }
 #endif
+                 if (vm->mai_system) {
+                     mai_send_message((MAISystem*)vm->mai_system, 0, hash, 0.1f, MAI_MSG_ACTIVATION);
+                 }
             }
             vm_set_register(vm, inst.operand_a, (uint64_t)hash);
             vm->pc += IR_INSTRUCTION_SIZE;
@@ -4950,6 +5013,9 @@ int vm_step(VM* vm) {
                 // Retornar valor real (entero 0-100) para mayor compatibilidad
                 uint64_t valor = (nodo ? (uint64_t)(nodo->peso.f * 100.0f) : 0);
                 vm_set_register(vm, inst.operand_b, valor);
+                if (vm->mai_system) {
+                    mai_send_message((MAISystem*)vm->mai_system, 0, concepto_id, 0.2f, MAI_MSG_ACTIVATION);
+                }
             } else vm_set_register(vm, inst.operand_b, 0);
 #else
             vm_set_register(vm, inst.operand_b, 0);
@@ -4985,6 +5051,10 @@ int vm_step(VM* vm) {
                 }
                 JMNValor v_peso; v_peso.f = peso;
                 jmn_agregar_conexion(vm->mem_neuronal, id1, id2, v_peso, 1);
+                if (vm->mai_system) {
+                    mai_send_message((MAISystem*)vm->mai_system, id1, id2, peso, MAI_MSG_ACTIVATION);
+                    mai_send_message_ex((MAISystem*)vm->mai_system, id1, id2, peso, MAI_MSG_REFUERSO, 48);
+                }
                 if (getenv("JASBOOT_DEBUG")) {
                     const char* t1 = vm_text_cache_get(vm, id1);
                     const char* t2 = vm_text_cache_get(vm, id2);
@@ -5258,6 +5328,9 @@ int vm_step(VM* vm) {
                 char buf[4096];
                 if (jmn_obtener_texto(vm->mem_neuronal, out_id, buf, sizeof(buf)) >= 0 && buf[0])
                     vm_text_cache_put(vm, out_id, buf);
+            }
+            if (vm->mai_system && id_in != 0) {
+                mai_send_message((MAISystem*)vm->mai_system, 0, id_in, 0.8f, MAI_MSG_ACTIVATION);
             }
 #endif
             vm_set_register(vm, inst.operand_a, (uint64_t)out_id);
@@ -5608,12 +5681,9 @@ int vm_step(VM* vm) {
             if (n_cap == 0) n_cap = 200000;
             if (c_cap == 0) c_cap = 10000000;
 
-            vm->mem_neuronal = jmn_abrir_escritura(nombre);
-            if (!vm->mem_neuronal) {
-                // Si falla abrir_escritura (que por defecto crea con defaults si no existe),
-                // intentamos creación explícita con las capacidades solicitadas.
-                vm->mem_neuronal = jmn_crear(nombre);
-            }
+            uint32_t cap_n = (n_cap > (uint64_t)UINT32_MAX) ? UINT32_MAX : (uint32_t)n_cap;
+            uint32_t cap_c = (c_cap > (uint64_t)UINT32_MAX) ? UINT32_MAX : (uint32_t)c_cap;
+            vm->mem_neuronal = jmn_abrir_escritura_cap(nombre, cap_n, cap_c);
             
             if (!vm->mem_neuronal) {
                 fprintf(stderr, "Error: No se pudo crear/cargar memoria '%s'\n", nombre);
@@ -5621,7 +5691,9 @@ int vm_step(VM* vm) {
             } else {
                 vm->mem_neuronal_owner_depth = vm_call_depth(vm);
                 vm->mem_neuronal_open_line = vm->current_line;
-                vm_set_register(vm, inst.operand_a, 1); 
+                vm_set_register(vm, inst.operand_a, 1);
+                if (vm->mai_system)
+                    mai_set_jmn_base((MAISystem*)vm->mai_system, vm->mem_neuronal);
             }
 #endif
             vm->pc += IR_INSTRUCTION_SIZE;
@@ -5949,6 +6021,13 @@ int vm_step(VM* vm) {
             }
 
             if (fmt_mode == 1) {
+                if (id <= 10000) {
+                    uint32_t id_res = vm_int_hash_table[id];
+                    vm_text_cache_put(vm, id_res, vm_int_str_table[id]);
+                    vm_set_register(vm, inst.operand_a, (uint64_t)id_res);
+                    vm->pc += IR_INSTRUCTION_SIZE;
+                    break;
+                }
                 snprintf(buf, sizeof(buf), "%lld", (long long)id);
             } else {
                 union { uint32_t u32; float f32; } u;
@@ -6228,6 +6307,10 @@ int vm_step(VM* vm) {
                 JMNValor v_uno = { .f = 1.0f };
                 jmn_agregar_nodo(vm->mem_neuronal, hash, v_uno);
                 vm_percepcion_push(vm, hash);
+
+                if (vm->mai_system) {
+                    mai_send_message((MAISystem*)vm->mai_system, 0, hash, 0.5f, MAI_MSG_ACTIVATION);
+                }
             }
 #endif
             vm->pc += IR_INSTRUCTION_SIZE;
@@ -8751,6 +8834,10 @@ int vm_step(VM* vm) {
                             id1, id2, tipo, peso);
                 }
                 jmn_agregar_conexion(vm->mem_neuronal, id1, id2, v_peso, tipo);
+                if (vm->mai_system) {
+                    mai_send_message((MAISystem*)vm->mai_system, id1, id2, peso, MAI_MSG_ACTIVATION);
+                    mai_send_message_ex((MAISystem*)vm->mai_system, id1, id2, peso, MAI_MSG_REFUERSO, 40);
+                }
                 if (tipo == JMN_RELACION_SIMILITUD || tipo == JMN_RELACION_OPOSICION) {
                     jmn_agregar_conexion(vm->mem_neuronal, id2, id1, v_peso, tipo);
                 }
@@ -8871,8 +8958,9 @@ int vm_run_with_limit(VM* vm, uint64_t max_steps) {
     }
     
     uint64_t steps = 0;
+    uint32_t last_mai_cycle = (uint32_t)time(NULL) * 1000;
     
-    // Optimizacion "computed goto" (si soportado por GCC, de lo contrario un switch unrolled normal)
+    // Optimizacion "computed goto"
     uint64_t* regs = vm->registers;
     const uint8_t* code_base = vm->ir->code;
     size_t code_exec_end = vm->ir->code_count * IR_INSTRUCTION_SIZE;
@@ -9350,6 +9438,20 @@ int vm_run_with_limit(VM* vm, uint64_t max_steps) {
         }
         #undef STORE_REG_FAST
         steps++;
+
+        // Ciclo de Memoria Activa Independiente (MAI) cada 1000 pasos
+        if (steps % 1000 == 0 && vm->mai_system) {
+            uint32_t now = (uint32_t)time(NULL) * 1000;
+            mai_process_cycle((MAISystem*)vm->mai_system, now - last_mai_cycle);
+            mai_scheduler_tick((MAISystem*)vm->mai_system);
+            last_mai_cycle = now;
+
+            // Sincronizar JMN a disco cada 1,000,000 pasos para liberar presión de RAM
+            if (steps % 1000000 == 0 && vm->mem_neuronal) {
+                jmn_sincronizar_disco((JMNMemoria*)vm->mem_neuronal);
+            }
+        }
+
         if (max_steps > 0 && steps > max_steps) {
             fprintf(stderr, "Error: VM excedió el límite de pasos (%llu).\n", (unsigned long long)max_steps);
             vm->running = 0;

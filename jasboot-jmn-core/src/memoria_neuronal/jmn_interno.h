@@ -4,7 +4,7 @@
 #include "memoria_neuronal.h"
 #include <stddef.h>
 
-#define JMN_HASH_SIZE 131071
+#define JMN_HASH_SIZE 16777216
 #define JMN_DEFAULT_NODOS  200000
 #define JMN_DEFAULT_CONEX  10000000
 #define JMN_MAX_TEXTO_LEN  4096
@@ -53,6 +53,7 @@ struct JMNMemoria {
     int es_ram;
     char ruta_archivo[512];
     int dirty;
+    int es_mapeado;        /* 1 si usa archivos mapeados en memoria */
 
     JMNEntradaNodo* nodos;
     uint32_t cap_nodos;
@@ -77,6 +78,14 @@ struct JMNMemoria {
     JMNMapa* mapas;
     uint32_t* hash_mapas;
     uint32_t num_mapas;
+
+    /* Handles para mapeo en Windows/Linux */
+#if defined(_WIN32) || defined(_WIN64)
+    void* h_file;
+    void* h_map;
+#else
+    int fd;
+#endif
 };
 
 uint32_t jmn_hash_u32(uint32_t x);
