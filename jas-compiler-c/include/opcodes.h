@@ -19,6 +19,7 @@
 #define IR_INST_FLAG_B_IMMEDIATE (1 << 1)
 #define IR_INST_FLAG_C_IMMEDIATE (1 << 2)
 #define IR_INST_FLAG_RELATIVE    (1 << 3)
+#define IR_INST_FLAG_SAFE        (1 << 4) /* Paridad ir_format.h; p. ej. MAI sobre opcode 0xE8 */
 #define IR_INST_FLAG_A_REGISTER  (1 << 6)
 #define IR_INST_FLAG_B_REGISTER  (1 << 7)
 #define IR_INST_FLAG_C_REGISTER (1 << 5)
@@ -92,6 +93,8 @@
 #define OP_MEM_PENALIZAR_CONCEPTO  0xA6
 #define OP_MEM_CONSOLIDAR_SUENO    0xA7  /* A=reg éxito; B,C inm factor‰/umbral (ver VM) */
 #define OP_MEM_OLVIDAR_DEBILES     0xA8  /* A=reg cuenta; C inm umbral milésimas */
+/* Mismo byte que OP_MEM_ASOCIAR; el compilador pone IR_INST_FLAG_SAFE (vm.c lo despacha como MAI). */
+#define OP_MAI_CONTEXTO_LISTA      0xE8
 #define OP_PERCEPCION_REGISTRAR    0xA9
 #define OP_PERCEPCION_VENTANA      0xAA
 #define OP_PERCEPCION_LIMPIAR      0xAB

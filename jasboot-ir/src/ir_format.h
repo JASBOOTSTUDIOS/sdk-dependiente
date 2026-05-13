@@ -304,7 +304,7 @@ typedef enum {
     OP_MEM_TERMINA_CON = 0xD5,      // Verifica sufijo (id_frase, id_sufijo) -> reg
     OP_MEM_ULTIMA_SILABA = 0xD6,    // Extrae última sílaba (concept ID -> dest_var_addr)
     
-    OP_MEM_ASOCIAR = 0xE8,           // Crear asociación entre dos conceptos
+    OP_MEM_ASOCIAR = 0xE8,           // Asociar legacy; si IR_INST_FLAG_SAFE y !A_IMM → mai_contexto (ver vm.c)
     OP_MEM_ECO = 0xFD,               // Eco de concepto (imitación)
     OP_TCP_ENVIAR = 0x19,            // A <- enviar socket B, payload bytes/texto C
     OP_TCP_RECIBIR = 0x1A,           // A <- bytes recibidos de socket B hasta max C

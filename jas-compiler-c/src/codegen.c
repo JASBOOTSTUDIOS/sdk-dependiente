@@ -1917,7 +1917,8 @@ static const char *get_expression_type(CodeGen *cg, ASTNode *node) {
         if (cn->name && (strcmp(cn->name, "lista_mapear") == 0 || strcmp(cn->name, "mem_lista_mapear") == 0 ||
                          strcmp(cn->name, "lista_filtrar") == 0 || strcmp(cn->name, "mem_lista_filtrar") == 0 ||
                          strcmp(cn->name, "buscar_asociados_lista") == 0 || strcmp(cn->name, "asociados_lista_de") == 0 ||
-                         strcmp(cn->name, "obtener_todos_conceptos") == 0))
+                         strcmp(cn->name, "obtener_todos_conceptos") == 0 || strcmp(cn->name, "percepcion_recientes") == 0 ||
+                         strcmp(cn->name, "mai_contexto_recientes") == 0 || strcmp(cn->name, "mai_contexto") == 0))
             return "lista";
         /* mem_lista_obtener / lista_obtener / mapa_obtener: mismo tipo que lista<T> o mapa<T> si la variable declaro T. */
         if (cn->name && (strcmp(cn->name, "mem_lista_obtener") == 0 || strcmp(cn->name, "lista_obtener") == 0 ||
@@ -3639,7 +3640,7 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         return 1;
     }
     if (strcmp(name, "consolidar_memoria") == 0 || strcmp(name, "dormir") == 0 ||
-        strcmp(name, "consolidar") == 0) {
+        strcmp(name, "consolidar") == 0 || strcmp(name, "consolidar_sueno") == 0) {
         if (cn->n_args != 0) {
             snprintf(cg->last_error, CODEGEN_ERROR_MAX,
                      "`%s` no admite argumentos (se recibieron %zu).",
@@ -3717,6 +3718,26 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
     }
     if (strcmp(name, "percepcion_recientes") == 0) {
         emit(cg, OP_PERCEPCION_LISTA, (uint8_t)dest_reg, 0, 0, IR_INST_FLAG_A_REGISTER);
+        return 1;
+    }
+    if (strcmp(name, "mai_contexto_recientes") == 0 || strcmp(name, "mai_contexto") == 0) {
+        uint8_t flags = (uint8_t)(IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_SAFE);
+        int mag = 10;
+        if (cn->n_args >= 1 && ARG0) {
+            if (is_node(ARG0, NODE_LITERAL) && ((LiteralNode*)ARG0)->type_name &&
+                strcmp(((LiteralNode*)ARG0)->type_name, "entero") == 0) {
+                int64_t v = ((LiteralNode*)ARG0)->value.i;
+                if (v < 1) v = 1;
+                if (v > 10) v = 10;
+                mag = (int)v;
+            } else {
+                int r1 = visit_expression(cg, ARG0, dest_reg + 1);
+                flags = (uint8_t)(IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_SAFE);
+                emit(cg, OP_MAI_CONTEXTO_LISTA, (uint8_t)dest_reg, (uint8_t)r1, 0, flags);
+                return 1;
+            }
+        }
+        emit(cg, OP_MAI_CONTEXTO_LISTA, (uint8_t)dest_reg, (uint8_t)mag, 0, flags);
         return 1;
     }
     if (strcmp(name, "ventana_rastro_activacion") == 0 || strcmp(name, "rastro_activacion_ventana") == 0) {

@@ -52,7 +52,11 @@ static void* jmn_huge_alloc(JMNMemoria* m, size_t size, const char* name) {
                 CloseHandle(hFile);
                 if (ptr) {
                     m->es_mapeado = 1;
-                    fprintf(stderr, "[JMN] Huge alloc %zu bytes mapped to %s\n", size, file_path);
+                    {
+                        const char* dbg = getenv("JASBOOT_DEBUG");
+                        if (dbg && dbg[0] && strcmp(dbg, "0") != 0)
+                            fprintf(stderr, "[JMN] Huge alloc %zu bytes mapped to %s\n", size, file_path);
+                    }
                     return ptr;
                 }
             } else {
@@ -178,6 +182,53 @@ JMNMemoria* jmn_crear(const char* ruta) {
     return m;
 }
 
+/** Vacía nodos/conexiones/textos/listas/mapas sin liberar caps (tras fallo de carga o antes de replay). */
+static void jmn_reiniciar_contenido_vacio(JMNMemoria* m) {
+    if (!m) return;
+    if (m->nodos)
+        memset(m->nodos, 0, (size_t)m->cap_nodos * sizeof(JMNEntradaNodo));
+    if (m->conexiones)
+        memset(m->conexiones, 0, (size_t)m->cap_conexiones * sizeof(JMNEntradaConexion));
+    if (m->textos)
+        memset(m->textos, 0, (size_t)m->cap_textos * sizeof(JMNEntradaTexto));
+    for (uint32_t i = 0; i < JMN_HASH_SIZE; i++) {
+        if (m->hash_nodos) m->hash_nodos[i] = 0xFFFFFFFFu;
+        if (m->hash_conexiones) m->hash_conexiones[i] = 0xFFFFFFFFu;
+        if (m->hash_textos) m->hash_textos[i] = 0xFFFFFFFFu;
+    }
+    if (m->cabeza_origen) {
+        for (uint32_t i = 0; i <= m->cap_nodos; i++)
+            m->cabeza_origen[i] = 0xFFFFFFFFu;
+    }
+    m->num_nodos = 0;
+    m->num_conexiones = 0;
+    m->num_textos = 0;
+    if (m->listas) {
+        for (uint32_t i = 0; i < 10000; i++) {
+            if (m->listas[i].items) free(m->listas[i].items);
+            memset(&m->listas[i], 0, sizeof(JMNLista));
+            m->listas[i].next_hash = 0xFFFFFFFFu;
+        }
+    }
+    if (m->hash_listas) {
+        for (uint32_t i = 0; i < JMN_HASH_SIZE; i++)
+            m->hash_listas[i] = 0xFFFFFFFFu;
+    }
+    m->num_listas = 0;
+    if (m->mapas) {
+        for (uint32_t i = 0; i < 10000; i++) {
+            if (m->mapas[i].keys) free(m->mapas[i].keys);
+            if (m->mapas[i].vals) free(m->mapas[i].vals);
+            memset(&m->mapas[i], 0, sizeof(JMNMapa));
+        }
+    }
+    if (m->hash_mapas) {
+        for (uint32_t i = 0; i < JMN_HASH_SIZE; i++)
+            m->hash_mapas[i] = 0xFFFFFFFFu;
+    }
+    m->num_mapas = 0;
+}
+
 JMNMemoria* jmn_abrir_escritura_cap(const char* ruta, uint32_t cap_nodos, uint32_t cap_conexiones) {
     if (!ruta || !ruta[0]) return NULL;
     uint32_t cn = cap_nodos ? cap_nodos : JMN_DEFAULT_NODOS;
@@ -188,6 +239,25 @@ JMNMemoria* jmn_abrir_escritura_cap(const char* ruta, uint32_t cap_nodos, uint32
     m->dirty = 0;
     if (jmn_io_cargar(m, ruta) == 0) {
         m->dirty = 0;
+    } else {
+        FILE* probe = fopen(ruta, "rb");
+        int main_exists = (probe != NULL);
+        if (probe) fclose(probe);
+        const char* rep = getenv("JASBOOT_JWL_REPLAY");
+        int want_replay = rep && rep[0] != '\0' && rep[0] != '0';
+        if (want_replay) {
+            if (!main_exists) {
+                if (jmn_journal_replay(m) == 0 && (m->num_nodos > 0 || m->num_conexiones > 0))
+                    m->dirty = 1;
+            } else {
+                const char* dbg = getenv("JASBOOT_JWL_REPLAY_DBG");
+                if (dbg && dbg[0] != '\0' && strcmp(dbg, "0") != 0)
+                    fprintf(stderr, "[JMN JWL] .jmn ilegible o corrupto: vaciando memoria y replay desde .jwl\n");
+                jmn_reiniciar_contenido_vacio(m);
+                if (jmn_journal_replay(m) == 0 && (m->num_nodos > 0 || m->num_conexiones > 0))
+                    m->dirty = 1;
+            }
+        }
     }
     jmn_journal_log_size_if_any(m);
     return m;
@@ -208,13 +278,22 @@ void jmn_finalizar_escritura(JMNMemoria* mem) {
         if (jmn_io_guardar(mem, mem->ruta_archivo) == 0) {
             mem->dirty = 0;
             jmn_journal_commit(mem);
+            {
+                const char* cp = getenv("JASBOOT_JWL_CHECKPOINT");
+                if (cp && cp[0] != '\0' && cp[0] != '0')
+                    jmn_journal_truncate_desde_checkpoint(mem);
+            }
         }
     }
 }
 
 void jmn_cerrar(JMNMemoria* mem) {
     if (!mem) return;
-    jmn_finalizar_escritura(mem);
+    {
+        const char* skip = getenv("JASBOOT_JMN_NO_FINAL_SAVE");
+        if (!(skip && skip[0] != '\0' && skip[0] != '0'))
+            jmn_finalizar_escritura(mem);
+    }
     jmn_free_data(mem);
     free(mem);
 }

@@ -370,6 +370,7 @@ static void vm_io_pausa(const char* mensaje) {
 #define VM_PERCEPCION_CAP_MIN 8u
 #define VM_PERCEPCION_CAP_MAX 4096u
 #define VM_PERCEPCION_LISTA_ID 0x7EC3E701u
+#define VM_MAI_CONTEXTO_LISTA_ID 0x7EC3E710u
 
 #define VM_RASTRO_CAP_DEFAULT 128u
 #define VM_RASTRO_CAP_MIN 16u
@@ -1750,6 +1751,7 @@ void vm_destroy(VM* vm) {
     }
 #endif
     if (vm->mai_system) {
+        mai_set_jmn_base((MAISystem*)vm->mai_system, NULL);
         mai_destroy((MAISystem*)vm->mai_system);
         vm->mai_system = NULL;
     }
@@ -1871,6 +1873,26 @@ static uint32_t vm_hash_texto(const char* texto) {
     }
     return hash;
 }
+
+#ifdef JASBOOT_LANG_INTEGRATION
+/** Claves/argumentos por id literal: si existe nodo en `raw` solo ese; si no, todos los nodos con el mismo texto (p. ej. `recordar` vs `asociar_relacion` con distinto id runtime). */
+static int vm_jmn_ids_para_literal(VM* vm, uint32_t raw, uint32_t* out, int maxo) {
+    if (!vm || !vm->mem_neuronal || !out || maxo <= 0) return 0;
+    if (jmn_obtener_nodo(vm->mem_neuronal, raw)) {
+        out[0] = raw;
+        return 1;
+    }
+    char buf[256];
+    const char* lit = vm_text_cache_get(vm, raw);
+    if (!lit || !lit[0]) {
+        if (jmn_obtener_texto(vm->mem_neuronal, raw, buf, sizeof(buf)) >= 0 && buf[0])
+            lit = buf;
+    }
+    if (lit && lit[0])
+        return jmn_listar_nodos_por_texto_exacto(vm->mem_neuronal, lit, out, maxo);
+    return 0;
+}
+#endif
 
 #define VM_CLOSURE_TAG UINT64_C(0x8000000000000000)
 
@@ -3453,7 +3475,7 @@ int vm_step(VM* vm) {
                  }
 #endif
                  if (vm->mai_system) {
-                     mai_send_message((MAISystem*)vm->mai_system, 0, hash, 0.1f, MAI_MSG_ACTIVATION);
+                     (void)mai_send_message((MAISystem*)vm->mai_system, 0, hash, 0.1f, MAI_MSG_ACTIVATION);
                      vm_mai_note_context(vm, hash);
                  }
             }
@@ -5022,9 +5044,9 @@ int vm_step(VM* vm) {
                 uint64_t valor = (nodo ? (uint64_t)(nodo->peso.f * 100.0f) : 0);
                 vm_set_register(vm, inst.operand_b, valor);
                 if (vm->mai_system) {
-                    mai_send_message((MAISystem*)vm->mai_system, 0, concepto_id, 0.2f, MAI_MSG_ACTIVATION);
-                    vm_mai_note_context(vm, concepto_id);
+                    (void)mai_send_message((MAISystem*)vm->mai_system, 0, concepto_id, 0.2f, MAI_MSG_ACTIVATION);
                 }
+                vm_mai_note_context(vm, concepto_id);
             } else vm_set_register(vm, inst.operand_b, 0);
 #else
             vm_set_register(vm, inst.operand_b, 0);
@@ -5061,8 +5083,8 @@ int vm_step(VM* vm) {
                 JMNValor v_peso; v_peso.f = peso;
                 jmn_agregar_conexion(vm->mem_neuronal, id1, id2, v_peso, 1);
                 if (vm->mai_system) {
-                    mai_send_message((MAISystem*)vm->mai_system, id1, id2, peso, MAI_MSG_ACTIVATION);
-                    mai_send_message_ex((MAISystem*)vm->mai_system, id1, id2, peso, MAI_MSG_REFUERSO, 48);
+                    (void)mai_send_message((MAISystem*)vm->mai_system, id1, id2, peso, MAI_MSG_ACTIVATION);
+                    (void)mai_send_message_ex((MAISystem*)vm->mai_system, id1, id2, peso, MAI_MSG_REFUERSO, 48);
                     vm_mai_note_context(vm, id1);
                     vm_mai_note_context(vm, id2);
                 }
@@ -5341,7 +5363,7 @@ int vm_step(VM* vm) {
                     vm_text_cache_put(vm, out_id, buf);
             }
             if (vm->mai_system && id_in != 0) {
-                mai_send_message((MAISystem*)vm->mai_system, 0, id_in, 0.8f, MAI_MSG_ACTIVATION);
+                (void)mai_send_message((MAISystem*)vm->mai_system, 0, id_in, 0.8f, MAI_MSG_ACTIVATION);
                 vm_mai_note_context(vm, id_in);
             }
 #endif
@@ -5389,6 +5411,38 @@ int vm_step(VM* vm) {
 
         case OP_MEM_ASOCIAR: {
 #ifdef JASBOOT_LANG_INTEGRATION
+            /* mai_contexto_recientes: mismo opcode 0xE8; el compilador marca IR_INST_FLAG_SAFE. */
+            if ((inst.flags & IR_INST_FLAG_SAFE) && !(inst.flags & IR_INST_FLAG_A_IMMEDIATE)) {
+                ensure_jmn_col(vm);
+                uint32_t maxn = 10;
+                if (inst.flags & IR_INST_FLAG_B_IMMEDIATE) {
+                    maxn = (uint32_t)inst.operand_b;
+                } else if (inst.flags & IR_INST_FLAG_B_REGISTER) {
+                    maxn = (uint32_t)vm_get_register(vm, inst.operand_b);
+                }
+                if (maxn == 0 || maxn > 10u) maxn = 10u;
+                if (vm->mem_colecciones) {
+                    jmn_vector_limpiar(vm->mem_colecciones, VM_MAI_CONTEXTO_LISTA_ID);
+                    jmn_crear_lista(vm->mem_colecciones, VM_MAI_CONTEXTO_LISTA_ID);
+                    uint32_t added = 0;
+                    uint32_t max_k = vm->mai_ctx_write_idx;
+                    if (max_k > 10u) max_k = 10u;
+                    for (uint32_t k = 0; k < max_k && added < maxn; k++) {
+                        uint32_t idx = (vm->mai_ctx_write_idx - 1u - k) % 10u;
+                        uint32_t id = vm->mai_ctx_ring[idx];
+                        if (id == 0) continue;
+                        JMNValor v;
+                        v.u = id;
+                        jmn_lista_agregar(vm->mem_colecciones, VM_MAI_CONTEXTO_LISTA_ID, v);
+                        added++;
+                    }
+                    vm_set_register(vm, inst.operand_a, (uint64_t)VM_MAI_CONTEXTO_LISTA_ID);
+                } else {
+                    vm_set_register(vm, inst.operand_a, 0);
+                }
+                vm->pc += IR_INSTRUCTION_SIZE;
+                break;
+            }
             if (vm->mem_neuronal) {
                 if (inst.flags & IR_INST_FLAG_A_IMMEDIATE) {
                     // Modo Estático: offset de 24 bits
@@ -5723,6 +5777,8 @@ int vm_step(VM* vm) {
                 vm->mem_neuronal_owner_depth = 0;
                 vm->mem_neuronal_open_line = 0;
             }
+            if (vm->mai_system)
+                mai_set_jmn_base((MAISystem*)vm->mai_system, NULL);
 #endif
             vm->pc += IR_INSTRUCTION_SIZE;
             break;
@@ -6321,9 +6377,9 @@ int vm_step(VM* vm) {
                 vm_percepcion_push(vm, hash);
 
                 if (vm->mai_system) {
-                    mai_send_message((MAISystem*)vm->mai_system, 0, hash, 0.5f, MAI_MSG_ACTIVATION);
-                    vm_mai_note_context(vm, hash);
+                    (void)mai_send_message((MAISystem*)vm->mai_system, 0, hash, 0.5f, MAI_MSG_ACTIVATION);
                 }
+                vm_mai_note_context(vm, hash);
             }
 #endif
             vm->pc += IR_INSTRUCTION_SIZE;
@@ -7197,12 +7253,20 @@ int vm_step(VM* vm) {
         }
 
         case OP_MEM_OBTENER_FUERZA: {
-            uint32_t id1 = (uint32_t)vm_get_register(vm, inst.operand_b);
-            uint32_t id2 = (uint32_t)vm_get_register(vm, inst.operand_c);
             float fuerza = 0.0f;
 #ifdef JASBOOT_LANG_INTEGRATION
             if (vm->mem_neuronal) {
-                fuerza = jmn_obtener_fuerza_asociacion(vm->mem_neuronal, id1, id2);
+                uint32_t raw1 = (uint32_t)vm_get_register(vm, inst.operand_b);
+                uint32_t raw2 = (uint32_t)vm_get_register(vm, inst.operand_c);
+                uint32_t ids1[8], ids2[8];
+                int n1 = vm_jmn_ids_para_literal(vm, raw1, ids1, 8);
+                int n2 = vm_jmn_ids_para_literal(vm, raw2, ids2, 8);
+                for (int i = 0; i < n1; i++) {
+                    for (int j = 0; j < n2; j++) {
+                        float f = jmn_obtener_fuerza_asociacion(vm->mem_neuronal, ids1[i], ids2[j]);
+                        if (f > fuerza) fuerza = f;
+                    }
+                }
             }
 #endif
             // Convertir float a bits para registro (union cast)
@@ -7684,19 +7748,47 @@ int vm_step(VM* vm) {
              * (p. ej. id sin texto por aprendizaje viejo). Se elige el primer destino con cadena en cache o JMN. */
 #ifdef JASBOOT_LANG_INTEGRATION
             if (vm->mem_neuronal) {
-                uint32_t key_id = (uint32_t)vm_get_register(vm, inst.operand_b);
-                JMNBusquedaResultado res[32];
-                JMNNodo* key_node = jmn_obtener_nodo(vm->mem_neuronal, key_id);
-                if (!key_node) {
-                    char trymsg[512];
-                    const char* key_txt = vm_text_cache_get(vm, key_id);
-                    char buf_txt[256];
-                    if ((!key_txt || !key_txt[0]) &&
-                        jmn_obtener_texto(vm->mem_neuronal, key_id, buf_txt, sizeof(buf_txt)) >= 0 &&
-                        buf_txt[0]) {
-                        vm_text_cache_put(vm, key_id, buf_txt);
-                        key_txt = vm_text_cache_get(vm, key_id);
+                uint32_t raw_key = (uint32_t)vm_get_register(vm, inst.operand_b);
+                uint32_t key_ids[8];
+                int nk = vm_jmn_ids_para_literal(vm, raw_key, key_ids, 8);
+                char trymsg[512];
+                const char* key_txt = vm_text_cache_get(vm, raw_key);
+                char buf_txt[256];
+                if ((!key_txt || !key_txt[0]) &&
+                    jmn_obtener_texto(vm->mem_neuronal, raw_key, buf_txt, sizeof(buf_txt)) >= 0 &&
+                    buf_txt[0]) {
+                    vm_text_cache_put(vm, raw_key, buf_txt);
+                    key_txt = vm_text_cache_get(vm, raw_key);
+                }
+                uint32_t chosen = 5381;
+                int ok = 0;
+                for (int ki = 0; ki < nk; ki++) {
+                    uint32_t key_id = key_ids[ki];
+                    JMNNodo* key_node = jmn_obtener_nodo(vm->mem_neuronal, key_id);
+                    if (!key_node) continue;
+                    ok = 1;
+                    JMNBusquedaResultado res[32];
+                    int n = jmn_buscar_asociaciones(vm->mem_neuronal, key_id, 1, 0.01f, 1, res, 32);
+                    if (n > 0) {
+                        for (int i = 0; i < n; i++) {
+                            uint32_t cand = res[i].id;
+                            if (cand == 0 || cand == key_id) continue;
+                            const char* ct = vm_text_cache_get(vm, cand);
+                            if (ct && ct[0]) {
+                                chosen = cand;
+                                goto buscar_valor_done;
+                            }
+                            char buf_c[512];
+                            if (jmn_obtener_texto(vm->mem_neuronal, cand, buf_c, sizeof(buf_c)) >= 0 && buf_c[0]) {
+                                vm_text_cache_put(vm, cand, buf_c);
+                                chosen = cand;
+                                goto buscar_valor_done;
+                            }
+                        }
                     }
+                }
+            buscar_valor_done:
+                if (!ok) {
                     if (key_txt && key_txt[0]) {
                         snprintf(trymsg, sizeof trymsg,
                                  "buscar: clave inexistente `%s`.",
@@ -7704,7 +7796,7 @@ int vm_step(VM* vm) {
                     } else {
                         snprintf(trymsg, sizeof trymsg,
                                  "buscar: clave inexistente (id %u).",
-                                 (unsigned)key_id);
+                                 (unsigned)raw_key);
                     }
                     if (vm_try_catch_or_abort(vm, trymsg)) return 0;
                     if (vm->current_line > 0)
@@ -7715,26 +7807,9 @@ int vm_step(VM* vm) {
                     vm->exit_code = 1;
                     return 0;
                 }
-                int n = jmn_buscar_asociaciones(vm->mem_neuronal, key_id, 1, 0.01f, 1, res, 32);
-                uint32_t chosen = 5381; // Por defecto cadena vacía si no hay asociaciones
-                if (n > 0) {
-                    for (int i = 0; i < n; i++) {
-                        uint32_t cand = res[i].id;
-                        if (cand == 0 || cand == key_id) continue;
-                        const char* ct = vm_text_cache_get(vm, cand);
-                        if (ct && ct[0]) {
-                            chosen = cand;
-                            break;
-                        }
-                        char buf_txt[512];
-                        if (jmn_obtener_texto(vm->mem_neuronal, cand, buf_txt, sizeof(buf_txt)) >= 0 && buf_txt[0]) {
-                            vm_text_cache_put(vm, cand, buf_txt);
-                            chosen = cand;
-                            break;
-                        }
-                    }
-                }
                 vm_set_register(vm, inst.operand_a, (uint64_t)chosen);
+                vm_mai_note_context(vm, raw_key);
+                vm_mai_note_context(vm, chosen);
             } else {
                 vm_set_register(vm, inst.operand_a, 5381); // "" si no hay JMN
             }
@@ -8848,8 +8923,8 @@ int vm_step(VM* vm) {
                 }
                 jmn_agregar_conexion(vm->mem_neuronal, id1, id2, v_peso, tipo);
                 if (vm->mai_system) {
-                    mai_send_message((MAISystem*)vm->mai_system, id1, id2, peso, MAI_MSG_ACTIVATION);
-                    mai_send_message_ex((MAISystem*)vm->mai_system, id1, id2, peso, MAI_MSG_REFUERSO, 40);
+                    (void)mai_send_message((MAISystem*)vm->mai_system, id1, id2, peso, MAI_MSG_ACTIVATION);
+                    (void)mai_send_message_ex((MAISystem*)vm->mai_system, id1, id2, peso, MAI_MSG_REFUERSO, 40);
                     vm_mai_note_context(vm, id1);
                     vm_mai_note_context(vm, id2);
                 }

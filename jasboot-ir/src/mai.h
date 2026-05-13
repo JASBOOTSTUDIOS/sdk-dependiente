@@ -81,15 +81,21 @@ struct MAISystem {
     uint64_t global_tick;
     char lra_path[520];
     void* lra_fp;
+
+    /** Inc under mutex cuando `mai_priq_push` rechaza un mensaje (cola llena y prioridad baja). */
+    uint64_t enqueue_failures;
 };
 
 MAISystem* mai_init(uint32_t capacity, void* jmn_base);
 void mai_destroy(MAISystem* mai);
 void mai_set_jmn_base(MAISystem* mai, void* jmn);
 
-void mai_send_message(MAISystem* mai, uint32_t origin, uint32_t target, float value, MAIMessageType type);
-void mai_send_message_ex(MAISystem* mai, uint32_t origin, uint32_t target, float value,
-                         MAIMessageType type, uint8_t priority);
+/** 0 = encolado; -1 = cola llena (véase `enqueue_failures`). */
+int mai_send_message(MAISystem* mai, uint32_t origin, uint32_t target, float value, MAIMessageType type);
+int mai_send_message_ex(MAISystem* mai, uint32_t origin, uint32_t target, float value,
+                        MAIMessageType type, uint8_t priority);
+
+uint64_t mai_enqueue_failures(MAISystem* mai);
 
 void mai_process_cycle(MAISystem* mai, uint32_t delta_ms);
 void mai_scheduler_tick(MAISystem* mai);

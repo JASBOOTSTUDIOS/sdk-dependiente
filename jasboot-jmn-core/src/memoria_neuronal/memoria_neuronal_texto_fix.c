@@ -43,6 +43,7 @@ int jmn_guardar_texto(JMNMemoria* mem, uint32_t id, const char* texto) {
     strncpy(mem->textos[slot].texto, texto ? texto : "", 254);
     mem->textos[slot].texto[255] = '\0';
     if (!mem->es_ram) mem->dirty = 1;
+    if (!mem->es_ram) jmn_journal_op_texto(mem, id, mem->textos[slot].texto);
     return 0;
 }
 
@@ -54,6 +55,35 @@ int jmn_obtener_texto(JMNMemoria* mem, uint32_t id, char* buffer, size_t max_len
     strncpy(buffer, mem->textos[slot].texto, max_len - 1);
     buffer[max_len - 1] = '\0';
     return (int)strlen(buffer);
+}
+
+int jmn_listar_nodos_por_texto_exacto(JMNMemoria* mem, const char* literal, uint32_t* out, int max_out) {
+    if (!mem || !literal || !literal[0] || !out || max_out <= 0) return 0;
+    int n = 0;
+    for (uint32_t i = 0; i < mem->cap_textos && n < max_out; i++) {
+        if (!mem->textos[i].used) continue;
+        if (strcmp(mem->textos[i].texto, literal) != 0) continue;
+        if (!jmn_obtener_nodo(mem, mem->textos[i].id)) continue;
+        out[n++] = mem->textos[i].id;
+    }
+    return n;
+}
+
+uint32_t jmn_buscar_id_por_texto_exacto(JMNMemoria* mem, const char* literal) {
+    uint32_t buf[8];
+    int n = jmn_listar_nodos_por_texto_exacto(mem, literal, buf, 8);
+    if (n <= 0) return 0;
+    uint32_t best = buf[0];
+    for (int k = 1; k < n; k++) {
+        uint32_t id = buf[k];
+        int cand_rt = (id >= 0x80000000u);
+        int best_rt = (best >= 0x80000000u);
+        if (cand_rt && !best_rt)
+            best = id;
+        else if (cand_rt == best_rt && id < best)
+            best = id;
+    }
+    return best;
 }
 
 int jmn_contiene_texto(JMNMemoria* mem, uint32_t id_frase, uint32_t id_patron) {

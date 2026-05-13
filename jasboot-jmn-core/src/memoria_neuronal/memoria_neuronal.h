@@ -66,6 +66,7 @@ JMNMemoria* jmn_abrir_escritura_cap(const char* ruta, uint32_t cap_nodos, uint32
 JMNMemoria* jmn_abrir_lectura(const char* ruta);
 JMNMemoria* jmn_crear(const char* ruta);
 void jmn_finalizar_escritura(JMNMemoria* mem);
+/** Si `JASBOOT_JMN_NO_FINAL_SAVE` no empieza por `0`, `jmn_cerrar` no llama a `jmn_finalizar_escritura` (tests / evitar pisar .jmn corrupto). */
 void jmn_cerrar(JMNMemoria* mem);
 
 /* Memoria RAM (sin persistencia, para colecciones) */
@@ -98,6 +99,8 @@ void jmn_consolidar_memoria_sueno(JMNMemoria* mem, float factor_decay, int pasad
 /* Texto */
 int jmn_guardar_texto(JMNMemoria* mem, uint32_t id, const char* texto);
 int jmn_obtener_texto(JMNMemoria* mem, uint32_t id, char* buffer, size_t max_len);
+/** Lista ids de nodos con texto exactamente igual a `literal` (hasta `max_out`); devuelve cantidad escrita. */
+int jmn_listar_nodos_por_texto_exacto(JMNMemoria* mem, const char* literal, uint32_t* out, int max_out);
 int jmn_contiene_texto(JMNMemoria* mem, uint32_t id_frase, uint32_t id_patron);
 int jmn_termina_con(JMNMemoria* mem, uint32_t id_frase, uint32_t id_sufijo);
 void jmn_copiar_texto(JMNMemoria* mem, uint32_t id_origen, uint32_t id_destino);
@@ -118,9 +121,26 @@ void jmn_sincronizar_disco(JMNMemoria* mem);
 /** Journal append-only (.jwl) — paso hacia 2.2 del plan (integridad incremental). */
 void jmn_journal_op_nodo(JMNMemoria* mem, uint32_t id, uint32_t peso_u);
 void jmn_journal_op_conex(JMNMemoria* mem, uint32_t ori, uint32_t dest, uint32_t tipo, uint32_t fuerza_u);
+/** Op 3 en .jwl: texto asociado a id (payload acotado al mismo límite que slots JMN). */
+void jmn_journal_op_texto(JMNMemoria* mem, uint32_t id, const char* texto);
 void jmn_journal_commit(JMNMemoria* mem);
+/** Trunca `ruta.jwl` a vacío (tras guardar .jmn con `JASBOOT_JWL_CHECKPOINT` activo). */
+void jmn_journal_truncate_desde_checkpoint(JMNMemoria* mem);
 /** Si existe `JASBOOT_JWL_STAT`, imprime tamaño del .jwl (apertura / diagnóstico). */
 void jmn_journal_log_size_if_any(const JMNMemoria* mem);
+/**
+ * Reproduce `ruta.jwl` sobre mem (sin re-append al journal).
+ * Si `JASBOOT_JWL_REPLAY` está definido y el primer carácter no es '0', `jmn_abrir_escritura_cap`
+ * invoca esto cuando **no existe** el archivo .jmn principal (p. ej. borrado tras crash antes del guardado),
+ * o cuando el .jmn **existe pero no se puede cargar** (truncado, magic/version inválidos, checksum erróneo):
+ * en ese caso se vacía la memoria en RAM y se intenta reconstruir desde `.jwl`.
+ * Opcional: `JASBOOT_JWL_REPLAY_DBG` distinto de `0` imprime diagnóstico en stderr (fopen / fin / error).
+ * Tras un **guardado exitoso** del .jmn, si `JASBOOT_JWL_CHECKPOINT` está definido y no empieza por `0`,
+ * se trunca el `.jwl` (checkpoint: el snapshot .jmn es la fuente de verdad hasta la próxima sesión).
+ * Formato .jwl: op 1=nodo, 2=conexión, 3=texto (id + len + payload + t), 0xFF=commit.
+ * @return 0 éxito o sin .jwl; -1 formato truncado u operación desconocida.
+ */
+int jmn_journal_replay(JMNMemoria* mem);
 
 /* Listas y mapas (colecciones) */
 void jmn_crear_lista(JMNMemoria* mem, uint32_t id);

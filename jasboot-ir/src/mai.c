@@ -289,9 +289,14 @@ MAISystem* mai_init(uint32_t capacity, void* jmn_base) {
         pthread_create(&mai->workers[i], NULL, mai_worker_main, &mai->worker_ctx[i]);
     }
 
-    printf("[MAI] Córtex+Subconsciente (%d workers), colas prioridad %u, LRA límite ~%zu MiB.\n",
-           MAI_NUM_WORKERS, (unsigned)MAI_Q_CAP,
-           (size_t)(mai->lra_limit_bytes / (1024u * 1024u)));
+    {
+        const char* dbg = getenv("JASBOOT_DEBUG");
+        if (dbg && dbg[0] && strcmp(dbg, "0") != 0) {
+            fprintf(stderr, "[MAI] Córtex+Subconsciente (%d workers), colas prioridad %u, LRA límite ~%zu MiB.\n",
+                    MAI_NUM_WORKERS, (unsigned)MAI_Q_CAP,
+                    (size_t)(mai->lra_limit_bytes / (1024u * 1024u)));
+        }
+    }
     return mai;
 }
 
@@ -327,6 +332,49 @@ static int mai_reflect_env_on(void) {
     return e && e[0] && strcmp(e, "0") != 0;
 }
 
+/** Refuerzo mínimo en aristas JMN durante reflexión (IA humana: Sistema 2 → LTM). */
+static int mai_reflect_jmn_write_env(void) {
+    const char* e = getenv("MAI_JMN_REFLECT");
+    return e && e[0] && strcmp(e, "0") != 0;
+}
+
+/** Consolidación tipo “sueño” sobre la JMN en el hilo de la VM (sin tocar JMN desde workers). */
+static int mai_sueno_jmn_env(void) {
+    const char* e = getenv("MAI_SUEÑO_JMN");
+    return e && e[0] && strcmp(e, "0") != 0;
+}
+
+static float mai_env_float_clamp(const char* name, float def, float lo, float hi) {
+    const char* e = getenv(name);
+    if (!e || !e[0]) return def;
+    char* endp = NULL;
+    double v = strtod(e, &endp);
+    if (endp == e) return def;
+    if (v < (double)lo) return lo;
+    if (v > (double)hi) return hi;
+    return (float)v;
+}
+
+static unsigned mai_env_uint_clamp(const char* name, unsigned def, unsigned lo, unsigned hi) {
+    const char* e = getenv(name);
+    if (!e || !e[0]) return def;
+    char* endp = NULL;
+    unsigned long v = strtoul(e, &endp, 10);
+    if (endp == e) return def;
+    if (v < (unsigned long)lo) return lo;
+    if (v > (unsigned long)hi) return hi;
+    return (unsigned)v;
+}
+
+/** Parámetros de `jmn_consolidar_memoria_sueno` cuando `MAI_SUEÑO_JMN=1` (ver docs/LENGUAJE/jmn/JMN_JOURNAL_Y_CONSOLIDACION.md). */
+static void mai_sueno_jmn_apply(void* jb) {
+    if (!jb) return;
+    float factor = mai_env_float_clamp("MAI_SUEÑO_JMN_FACTOR", 0.45f, 0.0f, 1.0f);
+    float umbral = mai_env_float_clamp("MAI_SUEÑO_JMN_UMBRAL", 0.04f, 0.0f, 0.5f);
+    float boost = mai_env_float_clamp("MAI_SUEÑO_JMN_BOOST", 0.03f, 0.0f, 0.5f);
+    jmn_consolidar_memoria_sueno((JMNMemoria*)jb, factor, 1, umbral, boost);
+}
+
 static void mai_reflect_from_jmn(MAISystem* mai) {
     static uint32_t throttle;
     if (++throttle % 3u != 0u) return;
@@ -353,14 +401,22 @@ static void mai_reflect_from_jmn(MAISystem* mai) {
 
     JMNMemoria* mem = (JMNMemoria*)jmn_ptr;
     int budget = 28;
+    const int jmn_write = mai_reflect_jmn_write_env();
+    int jmn_budget = jmn_write ? 14 : 0;
+    const float jmn_delta = 0.0018f;
     for (int s = 0; s < ns && budget > 0; s++) {
         int nr = jmn_buscar_asociaciones(mem, seeds[s], 0u, 0.07f, 1u, buf, 32);
         for (int i = 0; i < nr && budget > 0; i++) {
             if (buf[i].id == 0 || buf[i].id == seeds[s]) continue;
             float amp = buf[i].fuerza * 0.055f;
             if (amp < 0.015f) amp = 0.015f;
-            mai_send_message_ex(mai, seeds[s], buf[i].id, amp, MAI_MSG_ACTIVATION, 58);
+            if (mai_reflect_env_on())
+                (void)mai_send_message_ex(mai, seeds[s], buf[i].id, amp, MAI_MSG_ACTIVATION, 58);
             budget--;
+            if (jmn_budget > 0) {
+                jmn_reforzar_concepto(mem, buf[i].id, jmn_delta);
+                jmn_budget--;
+            }
         }
     }
 }
@@ -399,7 +455,7 @@ void mai_process_cycle(MAISystem* mai, uint32_t delta_ms) {
     mai_maybe_lra(mai);
     pthread_mutex_unlock(&mai->mutex);
 
-    if (mai_reflect_env_on())
+    if (mai_reflect_env_on() || mai_reflect_jmn_write_env())
         mai_reflect_from_jmn(mai);
 }
 
@@ -408,12 +464,23 @@ void mai_scheduler_tick(MAISystem* mai) {
     static uint32_t tick;
     tick++;
     if ((tick % 250u) != 0u) return;
-    mai_send_message_ex(mai, 0, 0, 0.02f, MAI_MSG_SUEÑO, 4);
+    (void)mai_send_message_ex(mai, 0, 0, 0.02f, MAI_MSG_SUEÑO, 4);
+    /* Sueño sobre JMN: pocas veces, solo hilo VM, parámetros suaves (ver vision_ia_humana_mai.md). */
+    if (!mai_sueno_jmn_env()) return;
+    static uint32_t sueno_wave;
+    unsigned every = mai_env_uint_clamp("MAI_SUEÑO_JMN_WAVE_EVERY", 6u, 1u, 64u);
+    if ((++sueno_wave % every) != 0u) return;
+    void* jb = NULL;
+    pthread_mutex_lock(&mai->mutex);
+    jb = mai->jmn_base;
+    pthread_mutex_unlock(&mai->mutex);
+    if (!jb) return;
+    mai_sueno_jmn_apply(jb);
 }
 
-void mai_send_message_ex(MAISystem* mai, uint32_t origin, uint32_t target, float value,
-                         MAIMessageType type, uint8_t priority) {
-    if (!mai) return;
+int mai_send_message_ex(MAISystem* mai, uint32_t origin, uint32_t target, float value,
+                        MAIMessageType type, uint8_t priority) {
+    if (!mai) return -1;
 
     MAIMessage m;
     memset(&m, 0, sizeof(m));
@@ -428,13 +495,34 @@ void mai_send_message_ex(MAISystem* mai, uint32_t origin, uint32_t target, float
     pthread_cond_t* cond = route_sub ? &mai->cond_sub : &mai->cond_cortex;
 
     pthread_mutex_lock(&mai->mutex);
-    mai_priq_push(q, &m);
+    int pr = mai_priq_push(q, &m);
+    if (pr != 0) {
+        mai->enqueue_failures++;
+        const char* dbg = getenv("JASBOOT_DEBUG");
+        if (dbg && dbg[0] && strcmp(dbg, "0") != 0) {
+            fprintf(stderr,
+                    "[MAI] encolado rechazado (cola %s llena o prioridad baja): orig=%u tgt=%u tipo=%d prio=%u "
+                    "fallos_acum=%llu\n",
+                    route_sub ? "sub" : "cortex", (unsigned)origin, (unsigned)target, (int)type,
+                    (unsigned)priority, (unsigned long long)mai->enqueue_failures);
+            fflush(stderr);
+        }
+    }
     pthread_cond_signal(cond);
     pthread_mutex_unlock(&mai->mutex);
+    return pr;
 }
 
-void mai_send_message(MAISystem* mai, uint32_t origin, uint32_t target, float value, MAIMessageType type) {
+int mai_send_message(MAISystem* mai, uint32_t origin, uint32_t target, float value, MAIMessageType type) {
     uint8_t pri = 96;
     if (type == MAI_MSG_ACTIVATION) pri = 128;
-    mai_send_message_ex(mai, origin, target, value, type, pri);
+    return mai_send_message_ex(mai, origin, target, value, type, pri);
+}
+
+uint64_t mai_enqueue_failures(MAISystem* mai) {
+    if (!mai) return 0;
+    pthread_mutex_lock(&mai->mutex);
+    uint64_t v = mai->enqueue_failures;
+    pthread_mutex_unlock(&mai->mutex);
+    return v;
 }
