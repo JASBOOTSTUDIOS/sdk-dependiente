@@ -6,6 +6,11 @@
 
 ¡Bienvenido a Jasboot SDK v0.0.1! Este paquete contiene todo lo necesario para compilar y ejecutar aplicaciones Jasboot de forma global en tu sistema Windows.
 
+> **Alineación con el toolchain real**  
+> - El bytecode que genera **`jbc`** y ejecuta **`jasboot-ir-vm`** es **`.jbo`**, no `.jir` (las apariciones antiguas de `.jir` en esta guía eran incorrectas).  
+> - Esta carpeta es una **plantilla de distribución**: antes de `instalar_jasboot.bat`, rellena `bin\` y `runtime\` copiando los `.exe` construidos desde `sdk-dependiente\` (por ejemplo tras `scripts\build-all.bat` en el monorepo).  
+> - **`JasbootSetup-v0.0.1.exe`** no se versiona aquí de forma fija; se genera con los scripts NSIS (`build_installer.bat`, `jasboot_installer.nsi`) si necesitas un instalador gráfico.
+
 ## Contenido del Paquete
 
 ### Componentes Principales
@@ -106,19 +111,19 @@ echo %PATH% | findstr Jasboot
 jbc mi_programa.jasb -e
 
 # Solo compilar
-jbc mi_programa.jasb -o mi_programa.jir
+jbc mi_programa.jasb -o mi_programa.jbo
 
 # Ejecutar bytecode compilado
-jasboot-ir-vm mi_programa.jir
+jasboot-ir-vm mi_programa.jbo
 ```
 
 ### Modo Depuración
 ```bash
 # Compilar con información de depuración
-jbc mi_programa.jasb -d -o mi_programa_debug.jir
+jbc mi_programa.jasb -d -o mi_programa_debug.jbo
 
 # Ejecutar con modo traza
-jasboot-ir-vm-trace mi_programa_debug.jir
+jasboot-ir-vm-trace mi_programa_debug.jbo
 ```
 
 ### Proyectos de Ejemplo
@@ -141,7 +146,7 @@ dir "%JASBOOT_HOME%\examples\"
 
 ### Extensiones de Archivo Soportadas
 - `.jasb` - Archivos fuente de Jasboot
-- `.jir` - Bytecode Jasboot IR
+- `.jbo` - IR binario Jasboot (bytecode ejecutado por la VM)
 - `.jmn` - Archivos de memoria neuronal
 
 ## Variables de Entorno

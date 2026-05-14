@@ -2,128 +2,112 @@
   <img src="../assets/jasboot-icon.png" alt="Jasboot — logo del lenguaje" width="120" height="120">
 </p>
 
-# 🧠 jasboot IR Binario
+# jasboot IR (IR binario + VM)
 
-**IR (Intermediate Representation) binario propio para jasboot**
-
----
-
-## 🎯 Objetivo
-
-Crear un formato binario IR propio que:
-- ✅ Reemplaza assembly como formato intermedio
-- ✅ Instrucciones de tamaño fijo (5 bytes)
-- ✅ 256 registros virtuales
-- ✅ Validación de seguridad IA (JASB-SEC)
-- ✅ Metadata IA opcional
-- ✅ Formato `.jbo` (jasboot object)
+**Representación intermedia binaria (`.jbo`) y máquina virtual** que ejecuta el bytecode generado por el compilador **`jbc`** del monorepo Jasboot.
 
 ---
 
-## 🏗️ Arquitectura
+## Objetivo
+
+- Formato IR binario propio (instrucciones de tamaño fijo, registros virtuales).
+- Carga y validación del `.jbo` (`reader_ir.c`, `ir_vm.c`, `ir_format.c`).
+- **Ejecución** en `vm.c` (integración opcional con JMN cuando se compila con `JASBOOT_LANG_INTEGRATION`).
+
+Flujo real en el proyecto:
 
 ```
-.jasb (texto) → Lexer → Parser → AST → Codegen IR → .jbo (binario) → VM/Backend → ejecución
+.jasb (Jasboot)  →  jbc (jas-compiler-c)  →  .jbo  →  jasboot-ir-vm (este paquete)
 ```
 
-### Componentes
-
-1. **Formato Binario** (`src/ir_format.c`): Estructura del IR binario
-2. **Codegen IR** (`src/codegen_ir.c`): Genera IR desde AST
-3. **Reader IR** (`src/reader_ir.c`): Lee y valida IR binario
-4. **VM/Backend** (`src/vm.c`): Ejecuta IR (futuro)
+El compilador Jasboot **no** vive en este directorio: está en `sdk-dependiente/jas-compiler-c/`.
 
 ---
 
-## 📚 Documentación
+## Arquitectura (fuentes principales)
 
-- **[Especificación del Formato](docs/FORMATO_IR.md)**: Estructura completa del IR binario
-- **[Opcodes](docs/OPCODES.md)**: Tabla de opcodes y semántica
-- **[Guía de Implementación](docs/GUIA_IMPLEMENTACION.md)**: Cómo implementar cada componente
+| Área | Ficheros típicos |
+|------|------------------|
+| Formato IR | `src/ir_format.c`, `src/ir_format.h` |
+| Lectura / validación | `src/reader_ir.c`, `src/ir_vm.c` |
+| VM | `src/vm.c`, `src/vm.h`, `src/vm_main.c` |
+| Optimizador (piezas IR) | `src/optimizer_ir.c` |
+| MAI / analítica (VM) | `src/mai.c`, `src/vm_analitica_mlp.c` |
+| JMN (enlazado al compilar la VM) | `../jasboot-jmn-core/src/memoria_neuronal/*` |
 
----
-
-## 🚀 Uso
-
-### Compilar
-
-```bash
-cd jasboot-ir
-make
-```
-
-Esto generará los siguientes binarios en `bin/`:
-- `ir_test`: Test básico del formato IR
-- `jasboot-ir-compiler`: Compilador (genera IR desde código fuente)
-- `jasboot-ir-validator`: Validador de archivos IR
-- `jasboot-ir-vm`: Máquina virtual para ejecutar IR
-- `jasboot-ir-opt`: Optimizador de IR binario
-
-### Generar IR
-
-```bash
-# Generar IR desde código fuente (ejemplo básico)
-./bin/jasboot-ir-compiler archivo.jasb -o archivo.jbo --opt
-```
-
-### Validar IR
-
-```bash
-./bin/jasboot-ir-validator archivo.jbo
-```
-
-### Ejecutar IR en VM
-
-```bash
-./bin/jasboot-ir-vm archivo.jbo
-```
-
-### Optimizar IR
-
-```bash
-./bin/jasboot-ir-opt archivo.jbo -o archivo_opt.jbo --stats
-```
-
-### Ejecutar Tests
-
-```bash
-# Test básico
-make test
-
-# Tests completos
-./bin/ir_test
-```
+En el árbol también existen **herramientas y tests en C** (`ir_compiler.c`, `codegen_ir.c`, `ir_validator.c`, `ir_test.c`, …) que el **`Makefile`** puede enlazar como objetivos adicionales; el camino **Windows habitual del monorepo** usa `build_vm.bat` y solo construye la VM (ver siguiente sección).
 
 ---
 
-## 📊 Estado Actual
+## Documentación en este paquete
 
-| Componente | Estado |
-|------------|--------|
-| **Formato IR** | ✅ Implementado |
-| **Metadata IA** | ✅ Implementado |
-| **Codegen IR** | ✅ Implementado (básico) |
-| **Reader IR** | ✅ Implementado |
-| **Validador IR** | ✅ Implementado |
-| **VM** | ✅ Implementado (básico) |
-| **Herramientas CLI** | ✅ Implementado |
-| **JASB-SEC** | ✅ Implementado (mínimo) |
+- [`docs/FORMATO_IR.md`](docs/FORMATO_IR.md) — estructura del IR binario  
+- [`docs/OPCODES.md`](docs/OPCODES.md) — opcodes  
+- [`docs/BACKEND_DIRECTO.md`](docs/BACKEND_DIRECTO.md), [`docs/JASB_SEC.md`](docs/JASB_SEC.md), [`docs/METADATA_IA.md`](docs/METADATA_IA.md) — temas relacionados  
+
+Comportamiento de **JMN** desde el punto de vista del usuario del lenguaje: [`../docs/JMN_Y_MEMORIA_EN_JASBOOT.md`](../docs/JMN_Y_MEMORIA_EN_JASBOOT.md).
 
 ---
 
-## 🔗 Relación con otros repos (GitHub)
+## Compilar la VM (Windows, flujo recomendado)
 
-- **Compilador:** repo sugerido **jasboot-compiler** (en monorepo Jasboot: `sdk-dependiente/jas-compiler-c`) — genera `.jbo` con **`jbc`**.
-- **JMN:** repo **jasboot-jmn-core** — fuentes C enlazadas al compilar la VM.
+Desde esta carpeta:
+
+```bat
+build_vm.bat
+```
+
+Resultado típico en `bin/`:
+
+- **`jasboot-ir-vm-trace.exe`** — VM enlazada con trazas / depuración según flags de compilación del script.  
+- **`jasboot-ir-vm.exe`** — copia de la anterior (ver comentarios en `build_vm.bat`; ambos nombres suelen existir tras un build correcto).
+
+El script enlaza **todas** las unidades de compilación de `jasboot-jmn-core/src/memoria_neuronal/*.c` y `platform_compat.c`. Si no encuentra JMN, define **`JASBOOT_JMN_ROOT`** apuntando a la raíz de `jasboot-jmn-core`, o coloca `sdk-dependiente/jasboot-jmn-core` como carpeta hermana de `jasboot-ir`.
+
+---
+
+## Compilar con `Makefile` (alternativa)
+
+El `Makefile` puede generar, entre otros, `bin/jasboot-ir-vm.exe` y **`bin/jasboot-ir-compiler.exe`** (IR desde AST interno del paquete). Ese **compilador IR** no sustituye a **`jbc`** para programas `.jasb` del lenguaje Jasboot; el flujo oficial del lenguaje sigue siendo **`jbc` → `.jbo` → `jasboot-ir-vm`**.
+
+---
+
+## Ejecutar un programa
+
+Tras compilar un `.jasb` con `jbc`:
+
+```bat
+bin\jasboot-ir-vm.exe ruta\programa.jbo
+```
+
+En el monorepo Jasboot suele usarse el script de la raíz: `node .vscode/run-jasb.cjs ruta\al\archivo.jasb` (compila y ejecuta con los `.exe` del SDK).
+
+---
+
+## Estado resumido
+
+| Componente | Notas |
+|-------------|--------|
+| Formato `.jbo` + lector | En uso |
+| VM `jasboot-ir-vm` | En uso (build principal vía `build_vm.bat`) |
+| JMN en VM | En uso si el núcleo JMN está presente en el build |
+| `jasboot-ir-compiler` / validador / `ir_test` | Código presente; construcción **opcional** vía `Makefile` o invocación manual, no parte de `build_vm.bat` |
+
+---
+
+## Relación con otros directorios del SDK
+
+- **Compilador Jasboot (`jbc`):** `sdk-dependiente/jas-compiler-c/`.  
+- **JMN:** `sdk-dependiente/jasboot-jmn-core/`.  
 
 ### Clonar solo este repo
 
-1. Clona también **`jasboot-jmn-core`** (hermano o submódulo).
-2. Define **`JASBOOT_JMN_ROOT`** con la ruta absoluta al directorio raíz de `jasboot-jmn-core` (el que contiene `src/`).
-3. Ejecuta **`build_vm.bat`** (Windows) o **`make`** con `JMN_PKG` apuntando a ese clon.
+1. Clona también **`jasboot-jmn-core`**.  
+2. Define **`JASBOOT_JMN_ROOT`** con la ruta absoluta al directorio raíz de ese clon (el que contiene `src/`).  
+3. Ejecuta **`build_vm.bat`** (Windows) o **`make`** con `JMN_PKG` apuntando al clon.  
 
-En el monorepo, **`jasboot-jmn-core`** vive en **`sdk-dependiente/jasboot-jmn-core`** (hermano de este directorio); el build lo detecta. En otro layout usa `JASBOOT_JMN_ROOT` / `JMN_PKG`.
+En el monorepo, `jasboot-jmn-core` es hermano de `jasboot-ir` bajo `sdk-dependiente/` y el build lo detecta sin variables.
 
 ---
 
-**Última actualización**: 2026-03-27
+**Última actualización:** 2026-05-14

@@ -1,5 +1,7 @@
 # ✅ Implementación Completa del IR Binario
 
+> **Aviso (2026-05):** Resumen de diseño; el arranque operativo del SDK está en [`README.md`](README.md) y en la raíz [`../README.md`](../README.md). Las rutas `./bin/jasboot-ir-validator` u otras herramientas pueden requerir un **enlace manual** no cubierto por `build_vm.bat`.
+
 **Resumen de la implementación completa del sistema IR binario para jasboot**
 
 ---

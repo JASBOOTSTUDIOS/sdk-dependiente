@@ -1,5 +1,7 @@
 # 📊 Guía: Estado y Pruebas del IR Binario
 
+> **Aviso (2026-05):** Parte de este documento es **histórico**. Hoy el flujo real del lenguaje es **`jbc` (jas-compiler-c) → `.jbo` → `jasboot-ir-vm`**. `build_vm.bat` solo genera **`jasboot-ir-vm.exe` / `jasboot-ir-vm-trace.exe`** en `bin/`; referencias a `jasboot-ir-validator`, `jasboot-ir-opt` o `make test` solo aplican si compilas esos objetivos aparte (p. ej. `Makefile`). Ver el [`README.md`](README.md) actual de este paquete.
+
 **Cómo saber en qué estado está el IR binario y cómo probarlo**
 
 ---

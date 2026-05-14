@@ -1,5 +1,7 @@
 # 📊 Estado Actual del IR Binario
 
+> **Aviso (2026-05):** Texto de seguimiento interno; puede no coincidir con el build diario. Flujo actual del lenguaje: **`jbc` → `.jbo` → `jasboot-ir-vm`**. `make test` **no** está definido en el `Makefile` simplificado actual; para probar IR/VM use el monorepo (`node .vscode/run-jasb.cjs`, tests bajo `tests/`). Ver [`README.md`](README.md).
+
 **Resumen visual del estado de implementación**
 
 ---

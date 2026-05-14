@@ -1,6 +1,6 @@
 /* Test: escalado de aristas con distintos tipos JMN (asociar_relacion).
  * SDK canónico: sdk-dependiente/. Cuarto argumento: peso 0.0..1.0 (flotante), ver codegen/vm empaquetado.
- * Tipos 1..JMN_RELACION_MAX (10 en el núcleo actual). */
+ * Tipos 1..JMN_RELACION_MAX (30 en memoria_neuronal.h del núcleo JMN). */
 principal
     crear_memoria("build/test_escalado_tipos_jmn.jmn")
 

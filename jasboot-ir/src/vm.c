@@ -7785,8 +7785,9 @@ int vm_step(VM* vm) {
             /* A = valor almacenado en clave B (recordar key con valor X); tipo ASOCIACION (1).
              * Si la clave existe como concepto pero no tiene valor asociado, A = B.
              * Si la clave no existe en JMN, es error de ejecucion capturable.
-             * Varias aristas tipo 1 desde la misma clave: la primera en la lista puede ser basura
-             * (p. ej. id sin texto por aprendizaje viejo). Se elige el primer destino con cadena en cache o JMN. */
+             * Varias aristas tipo 1 desde la misma clave: se elige el destino con texto resoluble
+             * y mayor fuerza; a igual fuerza, el ultimo en el orden devuelto por jmn_buscar_asociaciones
+             * (suele ser el mas reciente al re-ejecutar recordar con el mismo peso). */
 #ifdef JASBOOT_LANG_INTEGRATION
             if (vm->mem_neuronal) {
                 uint32_t raw_key = (uint32_t)vm_get_register(vm, inst.operand_b);
@@ -7811,20 +7812,30 @@ int vm_step(VM* vm) {
                     JMNBusquedaResultado res[32];
                     int n = jmn_buscar_asociaciones(vm->mem_neuronal, key_id, 1, 0.01f, 1, res, 32);
                     if (n > 0) {
+                        uint32_t best_cand = 0;
+                        float best_f = -1.0f;
                         for (int i = 0; i < n; i++) {
                             uint32_t cand = res[i].id;
                             if (cand == 0 || cand == key_id) continue;
                             const char* ct = vm_text_cache_get(vm, cand);
-                            if (ct && ct[0]) {
-                                chosen = cand;
-                                goto buscar_valor_done;
-                            }
+                            int tiene_txt = (ct && ct[0]);
                             char buf_c[512];
-                            if (jmn_obtener_texto(vm->mem_neuronal, cand, buf_c, sizeof(buf_c)) >= 0 && buf_c[0]) {
+                            if (!tiene_txt &&
+                                jmn_obtener_texto(vm->mem_neuronal, cand, buf_c, sizeof(buf_c)) >= 0 && buf_c[0]) {
                                 vm_text_cache_put(vm, cand, buf_c);
-                                chosen = cand;
-                                goto buscar_valor_done;
+                                tiene_txt = 1;
                             }
+                            if (!tiene_txt) continue;
+                            /* Preferir mayor fuerza; a igual fuerza, el último en la lista (suele ser el más reciente). */
+                            if (res[i].fuerza > best_f ||
+                                (res[i].fuerza == best_f && best_cand != 0)) {
+                                best_f = res[i].fuerza;
+                                best_cand = cand;
+                            }
+                        }
+                        if (best_cand != 0) {
+                            chosen = best_cand;
+                            goto buscar_valor_done;
                         }
                     }
                 }

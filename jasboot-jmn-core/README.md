@@ -13,6 +13,10 @@ Forma parte del **SDK estable** del lenguaje bajo `sdk-dependiente/`.
 - `src/memoria_neuronal/` — implementación JMN (`memoria_neuronal.h` y fuentes).
 - `src/platform_compat.c` / `platform_compat.h` — p. ej. UTF-8 en consola Windows (`jasboot_init_console`).
 
+## Tipos de relación (`asociar_relacion`)
+
+La constante **`JMN_RELACION_MAX`** (número máximo de tipo de relación admitido por el núcleo) está definida en `src/memoria_neuronal/memoria_neuronal.h`. Semántica de uso desde Jasboot y casos límite (p. ej. varias aristas del mismo tipo): [`../docs/JMN_Y_MEMORIA_EN_JASBOOT.md`](../docs/JMN_Y_MEMORIA_EN_JASBOOT.md).
+
 ## Uso en el monorepo Jasboot
 
 La VM (`sdk-dependiente/jasboot-ir`) resuelve este paquete así:

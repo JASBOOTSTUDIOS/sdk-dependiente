@@ -48,7 +48,7 @@ El flujo es **dos pasos** en la práctica (tres si separas compilación y ejecuc
 | [`scripts/`](scripts/) | Scripts de construcción en Windows. | Orquestan compilación de VM + compilador y copian binarios a `bin/`. |
 | [`bin/`](bin/) | Accesos directos (`jbc.cmd`, `jasboot-ir-vm.cmd`). | Apuntan a `jas-compiler-c\bin\jbc.exe` y `jasboot-ir\bin\jasboot-ir-vm.exe` (o copias en `bin/` tras `build-all`). |
 
-Documentación técnica del IR dentro del SDK: [`jasboot-ir/docs/FORMATO_IR.md`](jasboot-ir/docs/FORMATO_IR.md), [`jasboot-ir/docs/OPCODES.md`](jasboot-ir/docs/OPCODES.md).
+Documentación técnica del IR dentro del SDK: [`jasboot-ir/docs/FORMATO_IR.md`](jasboot-ir/docs/FORMATO_IR.md), [`jasboot-ir/docs/OPCODES.md`](jasboot-ir/docs/OPCODES.md). Comportamiento verificado de JMN en runtime: [`docs/JMN_Y_MEMORIA_EN_JASBOOT.md`](docs/JMN_Y_MEMORIA_EN_JASBOOT.md).
 
 ---
 

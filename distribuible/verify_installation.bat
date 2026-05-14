@@ -135,21 +135,21 @@ echo [+] Probando compilacion y ejecucion...
 where jbc >nul 2>&1
 if !errorlevel! equ 0 (
     echo [+] Compilando archivo de prueba...
-    jbc "%test_file%" -o "%TEMP%\test_jasboot.jir" 2>nul
-    if exist "%TEMP%\test_jasboot.jir" (
+    jbc "%test_file%" -o "%TEMP%\test_jasboot.jbo" 2>nul
+    if exist "%TEMP%\test_jasboot.jbo" (
         echo [OK] Compilacion exitosa
         
         where jasboot-ir-vm >nul 2>&1
         if !errorlevel! equ 0 (
             echo [+] Ejecutando programa...
-            jasboot-ir-vm "%TEMP%\test_jasboot.jir" 2>nul
+            jasboot-ir-vm "%TEMP%\test_jasboot.jbo" 2>nul
             echo [OK] Ejecucion completada
         ) else (
             echo [ERROR] No se puede ejecutar (jasboot-ir-vm no encontrado)
         )
         
         :: Limpiar archivos temporales
-        del "%TEMP%\test_jasboot.jir" >nul 2>&1
+        del "%TEMP%\test_jasboot.jbo" >nul 2>&1
     ) else (
         echo [ERROR] Compilacion fallida
     )
