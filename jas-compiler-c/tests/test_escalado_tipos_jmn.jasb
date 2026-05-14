@@ -1,0 +1,45 @@
+/* Test: escalado de aristas con distintos tipos JMN (asociar_relacion).
+ * SDK canónico: sdk-dependiente/. Cuarto argumento: peso 0.0..1.0 (flotante), ver codegen/vm empaquetado.
+ * Tipos 1..JMN_RELACION_MAX (10 en el núcleo actual). */
+principal
+    crear_memoria("build/test_escalado_tipos_jmn.jmn")
+
+    flotante p1 = 0.35
+    flotante p2 = 0.70
+    flotante p3 = 0.85
+    flotante p4 = 0.60
+    flotante p5a = 0.92
+    flotante p5b = 0.88
+
+    imprimir("--- Fase 1: maria -> reunion tipo 1 ---\n")
+    asociar_relacion("maria", "reunion", 1, p1)
+
+    imprimir("--- Fase 2: maria -> reunion tipo 2 ---\n")
+    asociar_relacion("maria", "reunion", 2, p2)
+
+    imprimir("--- Fase 3: reunion -> compromiso_escrito tipo 3 ---\n")
+    asociar_relacion("reunion", "compromiso_escrito", 3, p3)
+
+    imprimir("--- Fase 4: reunion -> compromiso_escrito tipo 8 ---\n")
+    asociar_relacion("reunion", "compromiso_escrito", 8, p4)
+
+    imprimir("--- Fase 5: intención (tipo 9) ---\n")
+    asociar_relacion("maria", "alinear_expectativas", 9, p5a)
+    asociar_relacion("reunion", "alinear_expectativas", 9, p5b)
+
+    imprimir("buscar_asociados(maria, 1) id=")
+    imprimir(buscar_asociados("maria", 1))
+    imprimir("\nbuscar_asociados(maria, 2) id=")
+    imprimir(buscar_asociados("maria", 2))
+    imprimir("\nbuscar_asociados(reunion, 3) id=")
+    imprimir(buscar_asociados("reunion", 3))
+    imprimir("\nbuscar_asociados(reunion, 8) id=")
+    imprimir(buscar_asociados("reunion", 8))
+    imprimir("\nbuscar_asociados(maria, 9) id=")
+    imprimir(buscar_asociados("maria", 9))
+    imprimir("\nbuscar_asociados(reunion, 9) id=")
+    imprimir(buscar_asociados("reunion", 9))
+    imprimir("\n")
+
+    cerrar_memoria()
+fin_principal

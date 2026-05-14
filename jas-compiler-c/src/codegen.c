@@ -1859,7 +1859,7 @@ static const char *get_expression_type(CodeGen *cg, ASTNode *node) {
                 return "entero";
             if (strcmp(cn->name, "formatear_timestamp") == 0)
                 return "texto";
-            if (strcmp(cn->name, "pensar_siguiente") == 0 || strcmp(cn->name, "pensar_anterior") == 0)
+            if (strcmp(cn->name, "pensar_siguiente") == 0 || strcmp(cn->name, "pensar_siguiente_mai") == 0 || strcmp(cn->name, "pensar_anterior") == 0)
                 return "texto";
         }
         if (cn->name && !cn->callee) {
@@ -1916,7 +1916,7 @@ static const char *get_expression_type(CodeGen *cg, ASTNode *node) {
         if (cn->name && strcmp(cn->name, "entrada_flotante") == 0) return "flotante";
         if (cn->name && (strcmp(cn->name, "lista_mapear") == 0 || strcmp(cn->name, "mem_lista_mapear") == 0 ||
                          strcmp(cn->name, "lista_filtrar") == 0 || strcmp(cn->name, "mem_lista_filtrar") == 0 ||
-                         strcmp(cn->name, "buscar_asociados_lista") == 0 || strcmp(cn->name, "asociados_lista_de") == 0 ||
+                         strcmp(cn->name, "buscar_asociados_lista") == 0 || strcmp(cn->name, "buscar_asociados_lista_mai") == 0 || strcmp(cn->name, "asociados_lista_de") == 0 ||
                          strcmp(cn->name, "obtener_todos_conceptos") == 0 || strcmp(cn->name, "percepcion_recientes") == 0 ||
                          strcmp(cn->name, "mai_contexto_recientes") == 0 || strcmp(cn->name, "mai_contexto") == 0))
             return "lista";
@@ -3831,7 +3831,41 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
             }
         }
         emit(cg, OP_MEM_PROPAGAR_ACTIVACION, (uint8_t)r1, (uint8_t)r2, (uint8_t)r3,
-             IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+             IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
+        codegen_emit_write_resultado(cg, (uint8_t)r1);
+        emit(cg, OP_MOVER, (uint8_t)dest_reg, (uint8_t)r1, 0, IR_INST_FLAG_B_REGISTER);
+        return 1;
+    }
+    if (strcmp(name, "propagar_activacion_mai") == 0) {
+        if (!ARG0) {
+            sistema_error_sin_argumentos(cg, name, "identificador de concepto inicial", cn->base.line, cn->base.col);
+            return 1;
+        }
+        int r1 = dest_reg + 1;
+        int r2 = visit_expression(cg, ARG0, dest_reg + 2);
+        int r3 = dest_reg + 3;
+        int r4 = dest_reg + 4;
+        int r5 = dest_reg + 5;
+        int r6 = dest_reg + 6;
+        int r7 = dest_reg + 7;
+        if (cn->n_args >= 2 && ARG1)
+            visit_expression(cg, ARG1, r4);
+        else
+            emit(cg, OP_MOVER, (uint8_t)r4, 0, 0, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
+        emit(cg, OP_MOVER, (uint8_t)r5, 8, 0, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
+        emit(cg, OP_MOVER, (uint8_t)r6, 16, 0, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
+        emit(cg, OP_BIT_SHL, (uint8_t)r5, (uint8_t)r5, (uint8_t)r6,
+             IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
+        emit(cg, OP_MOVER, (uint8_t)r6, 3, 0, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
+        emit(cg, OP_MOVER, (uint8_t)r7, 24, 0, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
+        emit(cg, OP_BIT_SHL, (uint8_t)r6, (uint8_t)r6, (uint8_t)r7,
+             IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
+        emit(cg, OP_SUMAR, (uint8_t)r3, (uint8_t)r4, (uint8_t)r5,
+             IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
+        emit(cg, OP_SUMAR, (uint8_t)r3, (uint8_t)r3, (uint8_t)r6,
+             IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
+        emit(cg, OP_MEM_PROPAGAR_ACTIVACION, (uint8_t)r1, (uint8_t)r2, (uint8_t)r3,
+             IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER | IR_INST_FLAG_RELATIVE);
         codegen_emit_write_resultado(cg, (uint8_t)r1);
         emit(cg, OP_MOVER, (uint8_t)dest_reg, (uint8_t)r1, 0, IR_INST_FLAG_B_REGISTER);
         return 1;
@@ -3923,9 +3957,9 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
                 float f = (float)((LiteralNode*)ARG3)->value.f;
                 uint32_t p1000 = (uint32_t)(f * 1000.0f);
                 if (getenv("JASBOOT_DEBUG")) fprintf(stderr, "  Literal float: %.4f -> p1000=%u\n", f, p1000);
-                // Empaquetar en registro 4: (p1000 << 16) | tipo_reg
+                // Empaquetar en registro 4: (p1000 << 32) | tipo_reg (para soportar hashes de 32 bits)
                 emit(cg, OP_MOVER, 5, p1000 & 0xFF, (p1000 >> 8) & 0xFF, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
-                emit(cg, OP_MOVER, 6, 16, 0, IR_INST_FLAG_B_IMMEDIATE);
+                emit(cg, OP_MOVER, 6, 32, 0, IR_INST_FLAG_B_IMMEDIATE);
                 emit(cg, OP_BIT_SHL, 5, 5, 6, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
                 emit(cg, OP_SUMAR, 4, 5, 3, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
                 emit(cg, OP_MEM_ASOCIAR_RELACION, 1, 2, 4, 
@@ -3938,7 +3972,7 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
                 // Redondeo: peso * 1000 + 0.5
                 emit(cg, OP_MULTIPLICAR_FLT, 17, 4, 16, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
                 emit(cg, OP_CONV_F2I, 18, 17, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER); // 18 = (int)1000*peso
-                emit(cg, OP_MOVER, 19, 16, 0, IR_INST_FLAG_B_IMMEDIATE);
+                emit(cg, OP_MOVER, 19, 32, 0, IR_INST_FLAG_B_IMMEDIATE);
                 emit(cg, OP_BIT_SHL, 20, 18, 19, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
                 emit(cg, OP_SUMAR, 21, 20, 3, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
                 emit(cg, OP_MEM_ASOCIAR_RELACION, 1, 2, 21, 
@@ -3948,6 +3982,45 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
             visit_expression(cg, ARG2, 3);
             emit(cg, OP_MEM_ASOCIAR_RELACION, 1, 2, 3,
                  IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
+        }
+        return 1;
+    }
+    if (strcmp(name, "asociar_relacion_mai") == 0) {
+        if (cn->n_args < 3 || cn->n_args > 4) {
+            codegen_error_sistema_incorporada_arity(cg, cn, 3,
+                "origen, destino, tipo y peso (opcional)",
+                "asociar_relacion_mai(\"agua\", \"vida\", 1, 0.7)",
+                "(El cuarto argumento 'peso' es opcional y debe ser entre 0.0 y 1.0)");
+            return 1;
+        }
+        visit_expression(cg, ARG0, 1);
+        visit_expression(cg, ARG1, 2);
+        const uint8_t fl_mai = (uint8_t)(IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER
+            | IR_INST_FLAG_C_REGISTER | IR_INST_FLAG_RELATIVE);
+        if (cn->n_args == 4) {
+            visit_expression(cg, ARG2, 3);
+            if (is_node(ARG3, NODE_LITERAL) && ((LiteralNode*)ARG3)->is_float) {
+                float f = (float)((LiteralNode*)ARG3)->value.f;
+                uint32_t p1000 = (uint32_t)(f * 1000.0f);
+                emit(cg, OP_MOVER, 5, p1000 & 0xFF, (p1000 >> 8) & 0xFF, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
+                emit(cg, OP_MOVER, 6, 32, 0, IR_INST_FLAG_B_IMMEDIATE);
+                emit(cg, OP_BIT_SHL, 5, 5, 6, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
+                emit(cg, OP_SUMAR, 4, 5, 3, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
+                emit(cg, OP_MEM_ASOCIAR_RELACION, 1, 2, 4, fl_mai);
+            } else {
+                visit_expression(cg, ARG3, 4);
+                emit(cg, OP_MOVER, 15, 1000 & 0xFF, (1000 >> 8) & 0xFF, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
+                emit(cg, OP_CONV_I2F, 16, 15, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+                emit(cg, OP_MULTIPLICAR_FLT, 17, 4, 16, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
+                emit(cg, OP_CONV_F2I, 18, 17, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+                emit(cg, OP_MOVER, 19, 32, 0, IR_INST_FLAG_B_IMMEDIATE);
+                emit(cg, OP_BIT_SHL, 20, 18, 19, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
+                emit(cg, OP_SUMAR, 21, 20, 3, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
+                emit(cg, OP_MEM_ASOCIAR_RELACION, 1, 2, 21, fl_mai);
+            }
+        } else {
+            visit_expression(cg, ARG2, 3);
+            emit(cg, OP_MEM_ASOCIAR_RELACION, 1, 2, 3, fl_mai);
         }
         return 1;
     }
@@ -4249,6 +4322,26 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         emit(cg, OP_MOVER, (uint8_t)dest_reg, 1, 0, IR_INST_FLAG_B_REGISTER);
         return 1;
     }
+    if (strcmp(name, "pensar_siguiente_mai") == 0) {
+        if (!ARG0) {
+            sistema_error_sin_argumentos(cg, name, "identificador de concepto base", cn->base.line, cn->base.col);
+            return 1;
+        }
+        visit_expression(cg, ARG0, 10);
+        const uint8_t fl_mai = (uint8_t)(IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER
+            | IR_INST_FLAG_RELATIVE | IR_INST_FLAG_C_REGISTER);
+        if (ARG1) {
+            visit_expression(cg, ARG1, 11);
+            emit(cg, OP_MEM_PENSAR_SIGUIENTE, 1, 10, 11, fl_mai);
+        } else {
+            emit(cg, OP_MEM_PENSAR_SIGUIENTE, 1, 10, 0,
+                 (uint8_t)(IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_RELATIVE));
+        }
+        emit(cg, OP_ID_A_TEXTO, 1, 1, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+        codegen_emit_write_resultado(cg, 1);
+        emit(cg, OP_MOVER, (uint8_t)dest_reg, 1, 0, IR_INST_FLAG_B_REGISTER);
+        return 1;
+    }
     if (strcmp(name, "pensar_anterior") == 0) {
         if (!ARG0) {
             sistema_error_sin_argumentos(cg, name, "identificador de concepto base", cn->base.line, cn->base.col);
@@ -4281,7 +4374,8 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         emit(cg, OP_MOVER, (uint8_t)dest_reg, 1, 0, IR_INST_FLAG_B_REGISTER);
         return 1;
     }
-    if (strcmp(name, "buscar_asociados_lista") == 0 || strcmp(name, "asociados_lista_de") == 0) {
+    if (strcmp(name, "buscar_asociados_lista") == 0 || strcmp(name, "asociados_lista_de") == 0
+        || strcmp(name, "buscar_asociados_lista_mai") == 0) {
         if (cn->n_args < 2) {
             codegen_error_sistema_incorporada_arity(cg, cn, 2,
                 "identificador base y numero maximo de asociados (K)",
@@ -4298,9 +4392,12 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         emit(cg, OP_MOVER, 13, 16, 0, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
         emit(cg, OP_BIT_SHL, 14, 11, 13, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER); /* 14 = K << 16 */
         emit(cg, OP_SUMAR, 15, 14, 12, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);   /* 15 = (K << 16) | tipo */
-        
-        emit(cg, OP_MEM_BUSCAR_ASOCIADOS_LISTA, 1, 10, 15, 
-             IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
+        {
+            uint8_t fl = (uint8_t)(IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
+            if (strcmp(name, "buscar_asociados_lista_mai") == 0)
+                fl = (uint8_t)(fl | IR_INST_FLAG_RELATIVE);
+            emit(cg, OP_MEM_BUSCAR_ASOCIADOS_LISTA, 1, 10, 15, fl);
+        }
         codegen_emit_write_resultado(cg, 1);
         emit(cg, OP_MOVER, (uint8_t)dest_reg, 1, 0, IR_INST_FLAG_B_REGISTER);
         return 1;

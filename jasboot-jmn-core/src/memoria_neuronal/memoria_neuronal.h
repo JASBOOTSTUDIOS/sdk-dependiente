@@ -53,11 +53,37 @@ typedef struct JMNConflictoResultado {
     float confianza;
 } JMNConflictoResultado;
 
+#define JMN_RELACION_ASOCIACION 1
 #define JMN_RELACION_PATRON     2
 #define JMN_RELACION_SECUENCIA  3
 #define JMN_RELACION_SIMILITUD  4
 #define JMN_RELACION_OPOSICION  5
-#define JMN_RELACION_MAX        10
+#define JMN_RELACION_PERTENENCIA   6
+#define JMN_RELACION_CAUSALIDAD    7
+#define JMN_RELACION_TEMPORALIDAD  8
+#define JMN_RELACION_INTENCION     9
+#define JMN_RELACION_VALORATIVA    10
+#define JMN_RELACION_UBICACION     11
+#define JMN_RELACION_PROPIEDAD     12
+#define JMN_RELACION_PARTE_DE      13
+#define JMN_RELACION_CONSECUENCIA  14
+#define JMN_RELACION_CONDICION     15
+#define JMN_RELACION_INSTANCIA      16
+#define JMN_RELACION_POSESION       17
+#define JMN_RELACION_FUNCIONALIDAD  18
+#define JMN_RELACION_EVIDENCIA      19
+#define JMN_RELACION_CUANTIFICACION  20
+#define JMN_RELACION_MEDIDA          21
+#define JMN_RELACION_OPERADOR        22
+#define JMN_RELACION_MAGNITUD        23
+#define JMN_RELACION_FRECUENCIA     24
+#define JMN_RELACION_PARENTESCO     25
+#define JMN_RELACION_CALIFICACION    26
+#define JMN_RELACION_ACCION          27
+#define JMN_RELACION_COMPLEMENTO     28
+#define JMN_RELACION_SITUACION       29
+#define JMN_RELACION_REFERENCIA      30
+#define JMN_RELACION_MAX           30
 
 /* Apertura/cierre y persistencia */
 JMNMemoria* jmn_abrir_escritura(const char* ruta);

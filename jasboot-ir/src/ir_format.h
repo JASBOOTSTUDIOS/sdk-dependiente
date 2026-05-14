@@ -293,7 +293,7 @@ typedef enum {
     OP_MEM_BUSCAR_INTROSPECTIVA_CS = 0x0A, // A <- primer ID; B=termino_id, C=case_sensitive(0/1)
     OP_MEM_BUSCAR_INTROSPECTIVA_DETALLADA = 0x0B, // A <- lista_id con metadata; B=termino, C=max|(cs<<8)
     OP_MEM_DECAE_CONEXIONES = 0xCD,   // Decaimiento global; A=reg ok; B,C inm opcional factor%/1000‰ umbral
-    OP_MEM_PROPAGAR_ACTIVACION = 0xCE, // A <- mejor id por propagación; B=origen, C=tipo|(K<<8)|(prof<<16)
+    OP_MEM_PROPAGAR_ACTIVACION = 0xCE, // A <- mejor id; B=origen; C=tipo|(K<<8)|(prof<<16) o *_mai+RELATIVE: máscara|(K<<16)|(prof<<24)
     OP_STR_EXTRAER_ANTES_REG = 0xD8,   // Extraer (regs: A=frase, B=patron) -> C=dest_reg
     OP_STR_EXTRAER_DESPUES_REG = 0xD9, // Extraer (regs: A=frase, B=patron) -> C=dest_reg
     OP_STR_CONCATENAR = 0xD2,        // Concatenar A y B en destino

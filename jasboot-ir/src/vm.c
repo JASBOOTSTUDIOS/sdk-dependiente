@@ -1298,6 +1298,47 @@ static void vm_init_test_str_table(void) {
     init = 1;
 }
 
+/* Resuelve tipo de arista JMN desde literal texto (ID de cadena > 255) o deja el código numérico. */
+static uint32_t vm_jmn_tipo_desde_texto(VM* vm, uint32_t tipo) {
+    if (tipo <= 255u) return tipo;
+    const char* t_str = vm_text_cache_get(vm, tipo);
+    if (!t_str) return tipo;
+    if (strcmp(t_str, "secuencia") == 0) return JMN_RELACION_SECUENCIA;
+    /* Compatibilidad histórica del VM (no cambiar): */
+    if (strcmp(t_str, "similitud") == 0) return 1u;
+    if (strcmp(t_str, "oposicion") == 0) return 2u;
+    if (strcmp(t_str, "asociacion") == 0 || strcmp(t_str, "asociación") == 0) return JMN_RELACION_ASOCIACION;
+    if (strcmp(t_str, "patron") == 0 || strcmp(t_str, "patrón") == 0) return JMN_RELACION_PATRON;
+    if (strcmp(t_str, "pertenencia") == 0 || strcmp(t_str, "clase") == 0 || strcmp(t_str, "jerarquia") == 0 || strcmp(t_str, "jerarquía") == 0)
+        return JMN_RELACION_PERTENENCIA;
+    if (strcmp(t_str, "causal") == 0 || strcmp(t_str, "causalidad") == 0 || strcmp(t_str, "causa") == 0) return JMN_RELACION_CAUSALIDAD;
+    if (strcmp(t_str, "temporal") == 0 || strcmp(t_str, "temporalidad") == 0 || strcmp(t_str, "tiempo") == 0) return JMN_RELACION_TEMPORALIDAD;
+    if (strcmp(t_str, "intencion") == 0 || strcmp(t_str, "intención") == 0 || strcmp(t_str, "objetivo") == 0) return JMN_RELACION_INTENCION;
+    if (strcmp(t_str, "valorativa") == 0 || strcmp(t_str, "valoracion") == 0 || strcmp(t_str, "prioridad") == 0) return JMN_RELACION_VALORATIVA;
+    if (strcmp(t_str, "ubicacion") == 0 || strcmp(t_str, "ubicación") == 0 || strcmp(t_str, "lugar") == 0) return JMN_RELACION_UBICACION;
+    if (strcmp(t_str, "propiedad") == 0 || strcmp(t_str, "atributo") == 0) return JMN_RELACION_PROPIEDAD;
+    if (strcmp(t_str, "parte_de") == 0 || strcmp(t_str, "meronimia") == 0) return JMN_RELACION_PARTE_DE;
+    if (strcmp(t_str, "consecuencia") == 0 || strcmp(t_str, "efecto") == 0) return JMN_RELACION_CONSECUENCIA;
+    if (strcmp(t_str, "condicion") == 0 || strcmp(t_str, "condición") == 0) return JMN_RELACION_CONDICION;
+    if (strcmp(t_str, "instancia") == 0 || strcmp(t_str, "individuo") == 0) return JMN_RELACION_INSTANCIA;
+    if (strcmp(t_str, "posesion") == 0 || strcmp(t_str, "tenencia") == 0 || strcmp(t_str, "tiene") == 0) return JMN_RELACION_POSESION;
+    if (strcmp(t_str, "funcionalidad") == 0 || strcmp(t_str, "uso") == 0 || strcmp(t_str, "sirve") == 0) return JMN_RELACION_FUNCIONALIDAD;
+    if (strcmp(t_str, "evidencia") == 0 || strcmp(t_str, "fuente") == 0 || strcmp(t_str, "origen") == 0) return JMN_RELACION_EVIDENCIA;
+    if (strcmp(t_str, "magnitud") == 0 || strcmp(t_str, "comparacion") == 0 || strcmp(t_str, "escala") == 0) return JMN_RELACION_MAGNITUD;
+    if (strcmp(t_str, "frecuencia") == 0 || strcmp(t_str, "probabilidad") == 0 || strcmp(t_str, "habitual") == 0) return JMN_RELACION_FRECUENCIA;
+    if (strcmp(t_str, "parentesco") == 0 || strcmp(t_str, "social") == 0 || strcmp(t_str, "vinculo") == 0) return JMN_RELACION_PARENTESCO;
+    if (strcmp(t_str, "calificacion") == 0 || strcmp(t_str, "calificación") == 0 || strcmp(t_str, "adjetivo") == 0) return JMN_RELACION_CALIFICACION;
+    if (strcmp(t_str, "accion") == 0 || strcmp(t_str, "acción") == 0 || strcmp(t_str, "verbo") == 0) return JMN_RELACION_ACCION;
+    if (strcmp(t_str, "complemento") == 0 || strcmp(t_str, "objeto") == 0) return JMN_RELACION_COMPLEMENTO;
+    if (strcmp(t_str, "cuantificacion") == 0 || strcmp(t_str, "cuantificación") == 0 || strcmp(t_str, "cantidad") == 0 || strcmp(t_str, "valor") == 0) return JMN_RELACION_CUANTIFICACION;
+    if (strcmp(t_str, "medida") == 0 || strcmp(t_str, "unidad") == 0) return JMN_RELACION_MEDIDA;
+    if (strcmp(t_str, "operador") == 0 || strcmp(t_str, "calculo") == 0 || strcmp(t_str, "cálculo") == 0) return JMN_RELACION_OPERADOR;
+    if (strcmp(t_str, "magnitud") == 0 || strcmp(t_str, "escala") == 0) return JMN_RELACION_MAGNITUD;
+    if (strcmp(t_str, "situacion") == 0 || strcmp(t_str, "situación") == 0) return JMN_RELACION_SITUACION;
+    if (strcmp(t_str, "referencia") == 0 || strcmp(t_str, "logica") == 0 || strcmp(t_str, "lógica") == 0) return JMN_RELACION_REFERENCIA;
+    return tipo;
+}
+
 static void vm_mai_note_context(VM* vm, uint32_t concept_id) {
     if (!vm || concept_id == 0) return;
     vm->mai_ctx_ring[vm->mai_ctx_write_idx % 10u] = concept_id;
@@ -8088,7 +8129,7 @@ int vm_step(VM* vm) {
                 uint64_t b_val = vm_get_register(vm, inst.operand_b);
                 uint64_t c_val = vm_get_register(vm, inst.operand_c);
                 uint32_t origen_id = (uint32_t)b_val;
-                uint32_t tipo_relacion = (uint32_t)(c_val & 0xFFu);
+                uint32_t tipo_relacion = vm_jmn_tipo_desde_texto(vm, (uint32_t)(c_val & 0xFFu));
                 if (tipo_relacion > JMN_RELACION_MAX) tipo_relacion = 0;
                 JMNBusquedaResultado resultados[16];
                 float umbral = 0.1f;
@@ -8191,18 +8232,61 @@ int vm_step(VM* vm) {
                 uint64_t b_val = vm_get_register(vm, inst.operand_b);
                 uint64_t c_val = vm_get_register(vm, inst.operand_c);
                 uint32_t origen_id = (uint32_t)b_val;
-                uint32_t tipo_relacion = (uint32_t)(c_val & 0xFFu);
-                uint32_t K = (uint32_t)((c_val >> 8) & 0xFFu);
-                uint32_t prof = (uint32_t)((c_val >> 16) & 0xFFu);
-                if (tipo_relacion > JMN_RELACION_MAX) tipo_relacion = 0;
-                if (K == 0 || K > 32) K = 8;
-                if (prof == 0) prof = 3;
                 JMNActivacionResultado resultados[32];
                 vm_rastro_clear(vm);
-                int n = jmn_propagar_activacion(vm->mem_neuronal, origen_id, 1.0f, 0.8f, 0.1f,
-                    (uint16_t)prof, tipo_relacion, resultados, (uint16_t)K, vm_jmn_rastro_cb, 0, vm);
+                int n = 0;
+                if (inst.flags & IR_INST_FLAG_RELATIVE) {
+                    /* *_mai: C = máscara (16 b bajos) | (K << 16) | (prof << 24); evita solapar K con bits de la máscara */
+                    uint32_t mask = (uint32_t)(c_val & 0xFFFFu);
+                    uint32_t K = (uint32_t)((c_val >> 16) & 0xFFu);
+                    uint32_t prof = (uint32_t)((c_val >> 24) & 0xFFu);
+                    if (K == 0 || K > 32) K = 8;
+                    if (prof == 0) prof = 3;
+                    if (mask == 0u)
+                        mask = (1u << JMN_RELACION_ASOCIACION) | (1u << JMN_RELACION_SECUENCIA)
+                             | (1u << JMN_RELACION_PERTENENCIA) | (1u << JMN_RELACION_CAUSALIDAD)
+                             | (1u << JMN_RELACION_TEMPORALIDAD) | (1u << JMN_RELACION_INSTANCIA)
+                             | (1u << JMN_RELACION_POSESION) | (1u << JMN_RELACION_PARENTESCO);
+                    float best_act = -1.0f;
+                    uint32_t best_id = 0;
+                    for (uint32_t t = 1u; t <= JMN_RELACION_MAX; t++) {
+                        if (((mask >> t) & 1u) == 0u) continue;
+                        JMNActivacionResultado tmp[32];
+                        int nt = jmn_propagar_activacion(vm->mem_neuronal, origen_id, 1.0f, 0.8f, 0.1f,
+                            (uint16_t)prof, t, tmp, (uint16_t)K, vm_jmn_rastro_cb, 0, vm);
+                        if (nt > 0 && tmp[0].activacion > best_act) {
+                            best_act = tmp[0].activacion;
+                            best_id = tmp[0].id;
+                        }
+                    }
+                    n = best_id ? 1 : 0;
+                    if (n > 0) {
+                        resultados[0].id = best_id;
+                        resultados[0].activacion = best_act;
+                    }
+                } else {
+                    uint32_t tipo_relacion = vm_jmn_tipo_desde_texto(vm, (uint32_t)(c_val & 0xFFu));
+                    uint32_t K = (uint32_t)((c_val >> 8) & 0xFFu);
+                    uint32_t prof = (uint32_t)((c_val >> 16) & 0xFFu);
+                    if (K == 0 || K > 32) K = 8;
+                    if (prof == 0) prof = 3;
+                    if (tipo_relacion > JMN_RELACION_MAX) tipo_relacion = 0;
+                    n = jmn_propagar_activacion(vm->mem_neuronal, origen_id, 1.0f, 0.8f, 0.1f,
+                        (uint16_t)prof, tipo_relacion, resultados, (uint16_t)K, vm_jmn_rastro_cb, 0, vm);
+                }
                 if (n > 0) {
                     vm_set_register(vm, inst.operand_a, (uint64_t)resultados[0].id);
+                    if (vm->mai_system && resultados[0].id != 0) {
+                        float actv = resultados[0].activacion * 0.25f;
+                        if (inst.flags & IR_INST_FLAG_RELATIVE) {
+                            (void)mai_send_message_ex((MAISystem*)vm->mai_system, origen_id, resultados[0].id,
+                                actv, MAI_MSG_ACTIVATION, 58);
+                        } else {
+                            (void)mai_send_message((MAISystem*)vm->mai_system, origen_id, resultados[0].id,
+                                actv, MAI_MSG_ACTIVATION);
+                        }
+                        vm_mai_note_context(vm, resultados[0].id);
+                    }
                 } else {
                     vm_set_register(vm, inst.operand_a, 0);
                 }
@@ -8221,6 +8305,8 @@ int vm_step(VM* vm) {
         case OP_MEM_ELEGIR_POR_PESO_IDX:
         case OP_MEM_ELEGIR_POR_PESO_ID: {
 #ifdef JASBOOT_LANG_INTEGRATION
+            uint64_t b_val = vm_get_register(vm, inst.operand_b);
+            uint64_t c_val = vm_get_register(vm, inst.operand_c);
             uint32_t ctx = (uint32_t)b_val;
             uint32_t list_id = (uint32_t)c_val;
             uint32_t best_i = 0, best_id = 0;
@@ -8257,52 +8343,61 @@ int vm_step(VM* vm) {
                 uint64_t b_val = vm_get_register(vm, inst.operand_b);
                 uint64_t c_val = vm_get_register(vm, inst.operand_c);
                 uint32_t origen_id = (uint32_t)b_val;
-                uint32_t tipo_relacion = (uint32_t)(c_val & 0xFFFFu);
+                uint32_t tipo_relacion = vm_jmn_tipo_desde_texto(vm, (uint32_t)(c_val & 0xFFFFu));
                 uint32_t K = (uint32_t)((c_val >> 16) & 0xFFFFu);
-                if (tipo_relacion > JMN_RELACION_MAX) tipo_relacion = 0;
                 if (K == 0 || K > 64) K = 16;
-                JMNBusquedaResultado resultados[64];
-                int n = jmn_buscar_asociaciones(vm->mem_neuronal, origen_id, tipo_relacion, 0.01f, 1, resultados, (uint16_t)K);
-                
-                // Ordenar por fuerza descendente
+                JMNBusquedaResultado fusion[64];
+                int n = 0;
+                if (inst.flags & IR_INST_FLAG_RELATIVE) {
+                    uint32_t mask = tipo_relacion;
+                    if (mask == 0u)
+                        mask = (1u << JMN_RELACION_ASOCIACION) | (1u << JMN_RELACION_SECUENCIA)
+                             | (1u << JMN_RELACION_PERTENENCIA) | (1u << JMN_RELACION_CAUSALIDAD);
+                    for (uint32_t t = 1u; t <= JMN_RELACION_MAX && n < 64; t++) {
+                        if (((mask >> t) & 1u) == 0u) continue;
+                        JMNBusquedaResultado buf[32];
+                        int ni = jmn_buscar_asociaciones(vm->mem_neuronal, origen_id, t, 0.01f, 1, buf, 32);
+                        for (int i = 0; i < ni && n < 64; i++) {
+                            uint32_t id = buf[i].id;
+                            int found = -1;
+                            for (int j = 0; j < n; j++) {
+                                if (fusion[j].id == id) { found = j; break; }
+                            }
+                            if (found < 0) {
+                                fusion[n++] = buf[i];
+                            } else if (buf[i].fuerza > fusion[found].fuerza) {
+                                fusion[found] = buf[i];
+                            }
+                        }
+                    }
+                } else {
+                    if (tipo_relacion > JMN_RELACION_MAX) tipo_relacion = 0;
+                    n = jmn_buscar_asociaciones(vm->mem_neuronal, origen_id, tipo_relacion, 0.01f, 1, fusion, (uint16_t)K);
+                }
                 if (n > 1) {
                     for (int i = 0; i < n - 1; i++) {
                         for (int j = i + 1; j < n; j++) {
-                            if (resultados[j].fuerza > resultados[i].fuerza) {
-                                JMNBusquedaResultado temp = resultados[i];
-                                resultados[i] = resultados[j];
-                                resultados[j] = temp;
+                            if (fusion[j].fuerza > fusion[i].fuerza) {
+                                JMNBusquedaResultado temp = fusion[i];
+                                fusion[i] = fusion[j];
+                                fusion[j] = temp;
                             }
                         }
                     }
                 }
-
+                if (n > (int)K) n = (int)K;
                 if (getenv("JASBOOT_DEBUG")) {
-                    fprintf(stderr, "[VM OP_MEM_BUSCAR_ASOCIADOS_LISTA] origen=%u tipo=%u K=%u umbral=0.1 -> n=%d resultados\n",
-                            origen_id, tipo_relacion, K, n);
-                    for (int i = 0; i < n; i++) {
-                        fprintf(stderr, "  [%d] id=%u tipo=%u fuerza=%.3f\n", 
-                                i, resultados[i].id, resultados[i].tipo_relacion, resultados[i].fuerza);
-                    }
+                    fprintf(stderr, "[VM OP_MEM_BUSCAR_ASOCIADOS_LISTA] origen=%u tipo/mask=%u K=%u mai=%d -> n=%d\n",
+                            origen_id, tipo_relacion, K, (inst.flags & IR_INST_FLAG_RELATIVE) ? 1 : 0, n);
                 }
                 uint32_t list_id = (origen_id ^ 0xA5A5A5A5u) | 0x80000000u;
-                vm_list_size_cache_set(vm, list_id, (uint32_t)n); // Actualizar cache de tamaño
+                vm_list_size_cache_set(vm, list_id, (uint32_t)n);
                 ensure_jmn_col(vm);
                 if (vm->mem_colecciones) {
                     jmn_crear_lista(vm->mem_colecciones, list_id);
                     for (int i = 0; i < n; i++) {
-                        JMNValor v; v.u = resultados[i].id;
+                        JMNValor v; v.u = fusion[i].id;
                         jmn_lista_agregar(vm->mem_colecciones, list_id, v);
-                    }
-                    if (getenv("JASBOOT_DEBUG")) {
-                        uint32_t tam_final = jmn_lista_tamano(vm->mem_colecciones, list_id);
-                        int existe = jmn_lista_existe(vm->mem_colecciones, list_id);
-                        fprintf(stderr, "[VM OP_MEM_BUSCAR_ASOCIADOS_LISTA] list_id=%u agregados=%d tam_final=%u existe=%d\n",
-                                list_id, n, tam_final, existe);
-                    }
-                } else {
-                    if (getenv("JASBOOT_DEBUG")) {
-                        fprintf(stderr, "[VM OP_MEM_BUSCAR_ASOCIADOS_LISTA] ERROR: vm->mem_colecciones es NULL\n");
                     }
                 }
                 vm_set_register(vm, inst.operand_a, (uint64_t)list_id);
@@ -8788,43 +8883,84 @@ int vm_step(VM* vm) {
         if (vm->mem_neuronal) {
             JMNMemoria* mem = vm->mem_neuronal;
             JMNBusquedaResultado resultados[8];
-            uint32_t tipo = JMN_RELACION_SECUENCIA;
-            if (context_id != 0) tipo = jmn_relacion_con_contexto(tipo, context_id);
-
-            int n = jmn_buscar_asociaciones(mem, (uint32_t)b_val, tipo, 0.01f, 1, resultados, 8);
-            if (getenv("JASBOOT_DEBUG")) {
-                fprintf(stderr, "[VM] PENSAR_SIGUIENTE origen=%u ('%s') tipo=%u n=%d\n", 
-                        (uint32_t)b_val, vm_text_cache_get(vm, (uint32_t)b_val), tipo, n);
-                for (int k = 0; k < n; k++) {
-                    fprintf(stderr, "  [%d] dest=%u ('%s') fuerza=%.4f\n", 
-                            k, resultados[k].id, vm_text_cache_get(vm, resultados[k].id), resultados[k].fuerza);
+            int n = 0;
+            if (inst.flags & IR_INST_FLAG_RELATIVE) {
+                static const uint32_t k_mai_tipos[] = {
+                    JMN_RELACION_SECUENCIA,
+                    JMN_RELACION_ASOCIACION,
+                    JMN_RELACION_PERTENENCIA,
+                    JMN_RELACION_CAUSALIDAD,
+                    JMN_RELACION_TEMPORALIDAD,
+                    JMN_RELACION_INTENCION,
+                    JMN_RELACION_VALORATIVA
+                };
+                float best_w = -1.0f;
+                uint32_t best_id = 0;
+                for (size_t ti = 0; ti < sizeof(k_mai_tipos) / sizeof(k_mai_tipos[0]); ti++) {
+                    uint32_t tq = k_mai_tipos[ti];
+                    if (context_id != 0u && tq == JMN_RELACION_SECUENCIA)
+                        tq = jmn_relacion_con_contexto(JMN_RELACION_SECUENCIA, context_id);
+                    int ni = jmn_buscar_asociaciones(mem, (uint32_t)b_val, tq, 0.01f, 1, resultados, 8);
+                    if (ni > 0 && resultados[0].fuerza > best_w) {
+                        best_w = resultados[0].fuerza;
+                        best_id = resultados[0].id;
+                    }
                 }
-            }
-            if (n > 1) {
-                // Ordenar resultados por fuerza (descendente)
-                for (int i = 0; i < n - 1; i++) {
-                    for (int j = i + 1; j < n; j++) {
-                        if (resultados[j].fuerza > resultados[i].fuerza) {
-                            JMNBusquedaResultado temp = resultados[i];
-                            resultados[i] = resultados[j];
-                            resultados[j] = temp;
+                if (best_id != 0u) {
+                    vm_set_register(vm, inst.operand_a, (uint64_t)best_id);
+                    if (vm->mai_system) {
+                        (void)mai_send_message_ex((MAISystem*)vm->mai_system, (uint32_t)b_val, best_id, best_w,
+                            MAI_MSG_ACTIVATION, 52);
+                        vm_mai_note_context(vm, best_id);
+                    }
+                } else {
+                    uint32_t tipo = JMN_RELACION_SECUENCIA;
+                    if (context_id != 0) tipo = jmn_relacion_con_contexto(tipo, context_id);
+                    n = jmn_buscar_asociaciones(mem, (uint32_t)b_val, tipo, 0.01f, 1, resultados, 8);
+                    if (n <= 0 && vm->mem_colecciones)
+                        n = jmn_buscar_asociaciones(vm->mem_colecciones, (uint32_t)b_val, tipo, 0.01f, 1, resultados, 8);
+                    if (n > 0)
+                        vm_set_register(vm, inst.operand_a, (uint64_t)resultados[0].id);
+                    else
+                        vm_set_register(vm, inst.operand_a, 0);
+                }
+            } else {
+                uint32_t tipo = JMN_RELACION_SECUENCIA;
+                if (context_id != 0) tipo = jmn_relacion_con_contexto(tipo, context_id);
+
+                n = jmn_buscar_asociaciones(mem, (uint32_t)b_val, tipo, 0.01f, 1, resultados, 8);
+                if (getenv("JASBOOT_DEBUG")) {
+                    fprintf(stderr, "[VM] PENSAR_SIGUIENTE origen=%u ('%s') tipo=%u n=%d\n", 
+                            (uint32_t)b_val, vm_text_cache_get(vm, (uint32_t)b_val), tipo, n);
+                    for (int k = 0; k < n; k++) {
+                        fprintf(stderr, "  [%d] dest=%u ('%s') fuerza=%.4f\n", 
+                                k, resultados[k].id, vm_text_cache_get(vm, resultados[k].id), resultados[k].fuerza);
+                    }
+                }
+                if (n > 1) {
+                    for (int i = 0; i < n - 1; i++) {
+                        for (int j = i + 1; j < n; j++) {
+                            if (resultados[j].fuerza > resultados[i].fuerza) {
+                                JMNBusquedaResultado temp = resultados[i];
+                                resultados[i] = resultados[j];
+                                resultados[j] = temp;
+                            }
                         }
                     }
                 }
-            }
-            if (getenv("JASBOOT_DEBUG")) fprintf(stderr, "[VM] PENSAR_SIGUIENTE origen=%u tipo=%u n=%d\n", (uint32_t)b_val, tipo, n);
-            if (n <= 0) {
-                if (vm->mem_colecciones) {
-                    n = jmn_buscar_asociaciones(vm->mem_colecciones, (uint32_t)b_val, tipo, 0.01f, 1, resultados, 8);
-                }
-                
-                if (n > 0) {
-                     vm_set_register(vm, inst.operand_a, (uint64_t)resultados[0].id);
+                if (getenv("JASBOOT_DEBUG")) fprintf(stderr, "[VM] PENSAR_SIGUIENTE origen=%u tipo=%u n=%d\n", (uint32_t)b_val, tipo, n);
+                if (n <= 0) {
+                    if (vm->mem_colecciones) {
+                        n = jmn_buscar_asociaciones(vm->mem_colecciones, (uint32_t)b_val, tipo, 0.01f, 1, resultados, 8);
+                    }
+                    if (n > 0) {
+                         vm_set_register(vm, inst.operand_a, (uint64_t)resultados[0].id);
+                    } else {
+                        vm_set_register(vm, inst.operand_a, 0);
+                    }
                 } else {
-                    vm_set_register(vm, inst.operand_a, 0);
+                      vm_set_register(vm, inst.operand_a, (uint64_t)resultados[0].id);
                 }
-            } else {
-                  vm_set_register(vm, inst.operand_a, (uint64_t)resultados[0].id);
             }
         } else { vm_set_register(vm, inst.operand_a, 0); }
 #else
@@ -8886,7 +9022,7 @@ int vm_step(VM* vm) {
         break;
     }
 
-        case 0xC7: { // OP_MEM_ASOCIAR_RELACION
+        case 0xC7: { // OP_MEM_ASOCIAR_RELACION (y *_mai vía IR_INST_FLAG_RELATIVE)
             // A = id1, B = id2, C = tipo (low 16 bits) + peso*1000 (bits 16-31); si bits 16-31 == 0 → peso 1.0
 #ifdef JASBOOT_LANG_INTEGRATION
             if (vm->mem_neuronal) {
@@ -8895,8 +9031,8 @@ int vm_step(VM* vm) {
                 uint64_t c_val = vm_get_register(vm, inst.operand_c);
                 uint32_t id1 = (uint32_t)a_val;
                 uint32_t id2 = (uint32_t)b_val;
-                uint32_t tipo = (uint32_t)(c_val & 0xFFFFu);
-                uint32_t peso_x1000 = (uint32_t)((c_val >> 16) & 0xFFFFu);
+                uint32_t tipo = (uint32_t)c_val; // Sin truncar a 16 bits para soportar IDs de texto (hashes)
+                uint32_t peso_x1000 = (uint32_t)((c_val >> 32) & 0xFFFFu); // El peso ahora debe estar en los 16 bits altos de los 64 bits si tipo es u32
                 
                 // Si peso_x1000 es > 0, usarlo. Si es 1000, es 1.0.
                 // Usamos un pequeño margen para que 1000 sea 1.0 exactamente.
@@ -8904,32 +9040,38 @@ int vm_step(VM* vm) {
                 if (peso > 1.0f) peso = 1.0f;
 
             if (tipo == 0) tipo = 1; // Default a asociación si no se especifica
-            
-            // Si el tipo es un ID de cadena (p.ej. "secuencia"), resolverlo
-            if (tipo > 255) {
-                const char* t_str = vm_text_cache_get(vm, (uint32_t)tipo);
-                if (t_str) {
-                    if (strcmp(t_str, "secuencia") == 0) tipo = 3; 
-                    else if (strcmp(t_str, "similitud") == 0) tipo = 1; 
-                    else if (strcmp(t_str, "oposicion") == 0) tipo = 2; 
-                }
-            }
+            tipo = vm_jmn_tipo_desde_texto(vm, tipo);
 
             if (tipo > 0 && tipo <= JMN_RELACION_MAX) {
                 JMNValor v_peso = { .f = peso };
                 if (getenv("JASBOOT_DEBUG")) {
-                    fprintf(stderr, "[VM] AGREGANDO CONEXION id1=%u id2=%u tipo=%u peso=%.4f\n", 
-                            id1, id2, tipo, peso);
+                    fprintf(stderr, "[VM] AGREGANDO CONEXION id1=%u id2=%u tipo=%u peso=%.4f mai=%d\n", 
+                            id1, id2, tipo, peso, (inst.flags & IR_INST_FLAG_RELATIVE) ? 1 : 0);
                 }
                 jmn_agregar_conexion(vm->mem_neuronal, id1, id2, v_peso, tipo);
                 if (vm->mai_system) {
                     (void)mai_send_message((MAISystem*)vm->mai_system, id1, id2, peso, MAI_MSG_ACTIVATION);
-                    (void)mai_send_message_ex((MAISystem*)vm->mai_system, id1, id2, peso, MAI_MSG_REFUERSO, 40);
+                    uint8_t pri = 40;
+                    if (inst.flags & IR_INST_FLAG_RELATIVE) {
+                        if (tipo >= JMN_RELACION_PERTENENCIA) pri = 58;
+                        else pri = 48;
+                    }
+                    (void)mai_send_message_ex((MAISystem*)vm->mai_system, id1, id2, peso, MAI_MSG_REFUERSO, pri);
                     vm_mai_note_context(vm, id1);
                     vm_mai_note_context(vm, id2);
                 }
                 if (tipo == JMN_RELACION_SIMILITUD || tipo == JMN_RELACION_OPOSICION) {
                     jmn_agregar_conexion(vm->mem_neuronal, id2, id1, v_peso, tipo);
+                }
+                if (inst.flags & IR_INST_FLAG_RELATIVE &&
+                    (tipo == JMN_RELACION_PERTENENCIA || tipo == JMN_RELACION_PARTE_DE ||
+                     tipo == JMN_RELACION_INSTANCIA || tipo == JMN_RELACION_POSESION ||
+                     tipo == JMN_RELACION_PARENTESCO || tipo == JMN_RELACION_CALIFICACION)) {
+                    float rev = peso * 0.35f;
+                    if (rev > 0.45f) rev = 0.45f;
+                    if (rev < 0.02f) rev = 0.02f;
+                    JMNValor v_rev = { .f = rev };
+                    jmn_agregar_conexion(vm->mem_neuronal, id2, id1, v_rev, JMN_RELACION_ASOCIACION);
                 }
             }
         }
