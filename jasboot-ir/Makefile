@@ -8,11 +8,11 @@ LDFLAGS = -g
 # mingw32-make a veces no define OS=Windows_NT; detectar MinGW por el triplete del compilador.
 TARGET_MACHINE := $(shell $(CC) -dumpmachine 2>/dev/null)
 ifneq ($(findstring mingw,$(TARGET_MACHINE)),)
-LDFLAGS += -lws2_32
+LDFLAGS += -lws2_32 -pthread
 else ifeq ($(OS),Windows_NT)
-LDFLAGS += -lws2_32
+LDFLAGS += -lws2_32 -pthread
 else
-LDFLAGS += -lm
+LDFLAGS += -lm -pthread
 endif
 
 # Directorios
@@ -26,6 +26,7 @@ JMN_OBJS = $(BUILD_DIR)/jmn_nodos.o \
            $(BUILD_DIR)/jmn_conexiones.o \
            $(BUILD_DIR)/jmn_io.o \
            $(BUILD_DIR)/jmn_core.o \
+           $(BUILD_DIR)/jmn_journal.o \
            $(BUILD_DIR)/jmn_estructuras.o \
            $(BUILD_DIR)/jmn_utilidades.o \
            $(BUILD_DIR)/jmn_cognitivo.o \
@@ -42,7 +43,8 @@ VM_OBJS = $(BUILD_DIR)/vm.o \
           $(BUILD_DIR)/reader_ir.o \
           $(BUILD_DIR)/optimizer_ir.o \
           $(BUILD_DIR)/ir_vm.o \
-          $(BUILD_DIR)/cognitive_stubs.o
+          $(BUILD_DIR)/cognitive_stubs.o \
+          $(BUILD_DIR)/mai.o
 
 # Compiler Objects
 COMPILER_OBJS = $(BUILD_DIR)/ir_compiler.o \
@@ -54,7 +56,10 @@ COMPILER_OBJS = $(BUILD_DIR)/ir_compiler.o \
 TARGET_VM = $(BIN_DIR)/jasboot-ir-vm.exe
 TARGET_COMPILER = $(BIN_DIR)/jasboot-ir-compiler.exe
 
-all: $(BUILD_DIR) $(BIN_DIR) $(TARGET_VM) $(TARGET_COMPILER)
+# Por defecto solo la VM (el target del compilador IR requiere ast.h / árbol no incluido aquí).
+all: $(BUILD_DIR) $(BIN_DIR) $(TARGET_VM)
+
+all-with-compiler: $(BUILD_DIR) $(BIN_DIR) $(TARGET_VM) $(TARGET_COMPILER)
 
 $(BUILD_DIR):
 	@if not exist $(BUILD_DIR) mkdir $(BUILD_DIR)
@@ -91,6 +96,9 @@ $(BUILD_DIR)/jmn_io.o: $(JMN_DIR)/memoria_neuronal_io.c
 $(BUILD_DIR)/jmn_core.o: $(JMN_DIR)/memoria_neuronal_core.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
+$(BUILD_DIR)/jmn_journal.o: $(JMN_DIR)/memoria_neuronal_journal.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
 $(BUILD_DIR)/jmn_estructuras.o: $(JMN_DIR)/memoria_neuronal_estructuras.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
@@ -113,4 +121,4 @@ clean:
 	@if exist $(BUILD_DIR) rmdir /s /q $(BUILD_DIR)
 	@if exist $(BIN_DIR) rmdir /s /q $(BIN_DIR)
 
-.PHONY: all clean
+.PHONY: all all-with-compiler clean

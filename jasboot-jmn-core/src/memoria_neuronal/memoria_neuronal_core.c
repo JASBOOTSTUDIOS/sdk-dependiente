@@ -150,6 +150,7 @@ static JMNMemoria* jmn_alloc(uint32_t cap_nodos, uint32_t cap_conex, const char*
 
 static void jmn_free_data(JMNMemoria* m) {
     if (!m) return;
+    jmn_journal_release(m);
     jmn_huge_free(m->nodos, (size_t)m->cap_nodos * sizeof(JMNEntradaNodo));
     jmn_huge_free(m->hash_nodos, (size_t)JMN_HASH_SIZE * sizeof(uint32_t));
     jmn_huge_free(m->conexiones, (size_t)m->cap_conexiones * sizeof(JMNEntradaConexion));

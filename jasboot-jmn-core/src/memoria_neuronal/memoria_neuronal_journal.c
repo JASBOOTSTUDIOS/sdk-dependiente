@@ -21,12 +21,31 @@ static void jmn_journal_make_path(const JMNMemoria* mem, char* out, size_t outsz
     snprintf(out, outsz, "%s.jwl", mem->ruta_archivo);
 }
 
-void jmn_journal_op_nodo(JMNMemoria* mem, uint32_t id, uint32_t peso_u) {
-    if (jmn_journal_replay_depth) return;
-    if (!mem || mem->es_ram || !mem->ruta_archivo[0] || id == 0) return;
+void jmn_journal_release(JMNMemoria* mem) {
+    if (!mem || !mem->jwl_append_fp) return;
+    FILE* f = (FILE*)mem->jwl_append_fp;
+    fflush(f);
+    fclose(f);
+    mem->jwl_append_fp = NULL;
+}
+
+/** Abre (lazy) el .jwl en modo append con buffer grande; reutiliza el mismo FILE entre ops. */
+static FILE* jmn_journal_fp(JMNMemoria* mem) {
+    if (!mem || mem->es_ram || !mem->ruta_archivo[0]) return NULL;
+    if (mem->jwl_append_fp) return (FILE*)mem->jwl_append_fp;
     char p[512];
     jmn_journal_make_path(mem, p, sizeof p);
     FILE* f = fopen(p, "ab");
+    if (!f) return NULL;
+    (void)setvbuf(f, NULL, _IOFBF, 256u * 1024u);
+    mem->jwl_append_fp = f;
+    return f;
+}
+
+void jmn_journal_op_nodo(JMNMemoria* mem, uint32_t id, uint32_t peso_u) {
+    if (jmn_journal_replay_depth) return;
+    if (!mem || mem->es_ram || !mem->ruta_archivo[0] || id == 0) return;
+    FILE* f = jmn_journal_fp(mem);
     if (!f) return;
     unsigned char op = 1;
     uint32_t t = (uint32_t)time(NULL);
@@ -34,7 +53,6 @@ void jmn_journal_op_nodo(JMNMemoria* mem, uint32_t id, uint32_t peso_u) {
     fwrite(&id, 4, 1, f);
     fwrite(&peso_u, 4, 1, f);
     fwrite(&t, 4, 1, f);
-    fclose(f);
 }
 
 void jmn_journal_op_texto(JMNMemoria* mem, uint32_t id, const char* texto) {
@@ -44,9 +62,7 @@ void jmn_journal_op_texto(JMNMemoria* mem, uint32_t id, const char* texto) {
     size_t L = strlen(t);
     if (L > 255u) L = 255u;
     uint16_t len = (uint16_t)L;
-    char p[512];
-    jmn_journal_make_path(mem, p, sizeof p);
-    FILE* f = fopen(p, "ab");
+    FILE* f = jmn_journal_fp(mem);
     if (!f) return;
     unsigned char op = 3;
     uint32_t ts = (uint32_t)time(NULL);
@@ -55,15 +71,12 @@ void jmn_journal_op_texto(JMNMemoria* mem, uint32_t id, const char* texto) {
     fwrite(&len, 2, 1, f);
     if (len) fwrite(t, 1, len, f);
     fwrite(&ts, 4, 1, f);
-    fclose(f);
 }
 
 void jmn_journal_op_conex(JMNMemoria* mem, uint32_t ori, uint32_t dest, uint32_t tipo, uint32_t fuerza_u) {
     if (jmn_journal_replay_depth) return;
     if (!mem || mem->es_ram || !mem->ruta_archivo[0] || ori == 0 || dest == 0) return;
-    char p[512];
-    jmn_journal_make_path(mem, p, sizeof p);
-    FILE* f = fopen(p, "ab");
+    FILE* f = jmn_journal_fp(mem);
     if (!f) return;
     unsigned char op = 2;
     uint32_t t = (uint32_t)time(NULL);
@@ -73,15 +86,12 @@ void jmn_journal_op_conex(JMNMemoria* mem, uint32_t ori, uint32_t dest, uint32_t
     fwrite(&tipo, 4, 1, f);
     fwrite(&fuerza_u, 4, 1, f);
     fwrite(&t, 4, 1, f);
-    fclose(f);
 }
 
 void jmn_journal_commit(JMNMemoria* mem) {
     if (jmn_journal_replay_depth) return;
     if (!mem || mem->es_ram || !mem->ruta_archivo[0]) return;
-    char p[512];
-    jmn_journal_make_path(mem, p, sizeof p);
-    FILE* f = fopen(p, "ab");
+    FILE* f = jmn_journal_fp(mem);
     if (!f) return;
     unsigned char op = 0xFF;
     uint32_t mark = mem->num_nodos ^ (mem->num_conexiones * 1315423911u) ^ (mem->num_textos * 2654435761u);
@@ -89,12 +99,13 @@ void jmn_journal_commit(JMNMemoria* mem) {
     fwrite(&op, 1, 1, f);
     fwrite(&mark, 4, 1, f);
     fwrite(&t, 4, 1, f);
-    fclose(f);
+    fflush(f);
 }
 
 void jmn_journal_truncate_desde_checkpoint(JMNMemoria* mem) {
     if (jmn_journal_replay_depth) return;
     if (!mem || mem->es_ram || !mem->ruta_archivo[0]) return;
+    jmn_journal_release(mem);
     char p[512];
     jmn_journal_make_path(mem, p, sizeof p);
     FILE* f = fopen(p, "wb");
@@ -119,6 +130,7 @@ int jmn_journal_replay(JMNMemoria* mem) {
     if (!mem || mem->es_ram || !mem->ruta_archivo[0]) return -1;
     char p[512];
     jmn_journal_make_path(mem, p, sizeof p);
+    jmn_journal_release(mem);
     FILE* f = fopen(p, "rb");
     if (!f) {
         const char* dbg = getenv("JASBOOT_JWL_REPLAY_DBG");

@@ -57,6 +57,11 @@ int jmn_obtener_texto(JMNMemoria* mem, uint32_t id, char* buffer, size_t max_len
     return (int)strlen(buffer);
 }
 
+int jmn_existe_texto(JMNMemoria* mem, uint32_t id) {
+    if (!mem || id == 0) return 0;
+    return find_texto_slot(mem, id) != 0xFFFFFFFF;
+}
+
 int jmn_listar_nodos_por_texto_exacto(JMNMemoria* mem, const char* literal, uint32_t* out, int max_out) {
     if (!mem || !literal || !literal[0] || !out || max_out <= 0) return 0;
     int n = 0;

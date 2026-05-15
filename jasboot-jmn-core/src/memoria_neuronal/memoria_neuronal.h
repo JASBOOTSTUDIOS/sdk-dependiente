@@ -46,7 +46,7 @@ typedef struct JMNActivacionResultado {
     float activacion;
 } JMNActivacionResultado;
 
-typedef void (*JMNActivacionRastroFn)(void* ud, uint32_t id, float activacion);
+typedef void (*JMNActivacionRastroFn)(void* ud, uint32_t id, float activacion, uint16_t depth);
 
 typedef struct JMNConflictoResultado {
     uint32_t id_ganador;
@@ -84,6 +84,14 @@ typedef struct JMNConflictoResultado {
 #define JMN_RELACION_SITUACION       29
 #define JMN_RELACION_REFERENCIA      30
 #define JMN_RELACION_MAX           30
+
+/** Opciones extendidas de propagación (BFS/DFS, acumulación, g(τ)). Si se pasa NULL a
+ *  `jmn_propagar_activacion_semillas`, se usan solo variables de entorno (ver AGENTS.md). */
+typedef struct JMNPropagarExtra {
+    int queue_mode; /* 0 = BFS (cola), 1 = DFS (pila LIFO) */
+    int score_mode; /* 0 = mejor aportación por profundidad (legacy), 1 = suma de na en aristas exploradas */
+    float g_tau[JMN_RELACION_MAX + 1]; /* multiplicador por tipo de relación τ (índice 0 = defecto si τ fuera de rango) */
+} JMNPropagarExtra;
 
 /* Apertura/cierre y persistencia */
 JMNMemoria* jmn_abrir_escritura(const char* ruta);
@@ -125,6 +133,7 @@ void jmn_consolidar_memoria_sueno(JMNMemoria* mem, float factor_decay, int pasad
 /* Texto */
 int jmn_guardar_texto(JMNMemoria* mem, uint32_t id, const char* texto);
 int jmn_obtener_texto(JMNMemoria* mem, uint32_t id, char* buffer, size_t max_len);
+int jmn_existe_texto(JMNMemoria* mem, uint32_t id);
 /** Lista ids de nodos con texto exactamente igual a `literal` (hasta `max_out`); devuelve cantidad escrita. */
 int jmn_listar_nodos_por_texto_exacto(JMNMemoria* mem, const char* literal, uint32_t* out, int max_out);
 int jmn_contiene_texto(JMNMemoria* mem, uint32_t id_frase, uint32_t id_patron);
@@ -143,6 +152,9 @@ int jmn_escribir_archivo(JMNMemoria* mem, const char* ruta, uint32_t id_origen);
 
 /** Sincroniza los cambios en memoria mapeada al disco */
 void jmn_sincronizar_disco(JMNMemoria* mem);
+
+/** Cierra el stream append del .jwl si estaba abierto (llamar al liberar memoria). */
+void jmn_journal_release(JMNMemoria* mem);
 
 /** Journal append-only (.jwl) — paso hacia 2.2 del plan (integridad incremental). */
 void jmn_journal_op_nodo(JMNMemoria* mem, uint32_t id, uint32_t peso_u);
@@ -202,10 +214,12 @@ int jmn_propagar_activacion(JMNMemoria* mem, uint32_t origen, float activacion, 
     float umbral, uint16_t prof, uint32_t tipo_rel, JMNActivacionResultado* out, uint16_t max_out,
     JMNActivacionRastroFn rastro_fn, int reserved, void* rastro_ud);
 /** Varias semillas (misma activacion inicial cada una). Excluye semillas del ranking final.
- *  Ver `JASBOOT_PROPAGAR_H_*` en documentacion: atenuacion h(d) por distancia del destino. */
+ *  Ver `JASBOOT_PROPAGAR_H_*` en documentacion: atenuacion h(d) por distancia del destino.
+ *  `extra` puede ser NULL (entonces queue/score/g solo por entorno JASBOOT_PROPAGAR_*). */
 int jmn_propagar_activacion_semillas(JMNMemoria* mem, const uint32_t* semillas, int n_sem,
     float activacion, float factor, float umbral, uint16_t prof, uint32_t tipo_rel,
-    JMNActivacionResultado* out, uint16_t max_out, JMNActivacionRastroFn rastro_fn, void* rastro_ud);
+    JMNActivacionResultado* out, uint16_t max_out, JMNActivacionRastroFn rastro_fn, void* rastro_ud,
+    const JMNPropagarExtra* extra);
 void jmn_resolver_conflictos(JMNMemoria* mem, uint32_t origen, uint32_t tipo_rel, float umbral,
     uint16_t prof, JMNBusquedaResultado* resultados, uint16_t n, float w1, float w2, JMNConflictoResultado* out);
 

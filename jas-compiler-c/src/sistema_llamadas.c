@@ -34,7 +34,7 @@ const char *const SISTEMA_LLAMADAS[] = {
     "ventana_rastro_activacion", "rastro_activacion_ventana", "rastro_activacion_limpiar",
     "rastro_activacion_tamano", "rastro_activacion_obtener", "rastro_activacion_peso",
     "rastro_activacion_lista", "rastro_activacion_recientes",
-    "propagar_activacion", "propagar_activacion_de", "propagar_activacion_mai", "obtener_secuencia",
+    "propagar_activacion", "propagar_activacion_de", "propagar_activacion_semillas", "propagar_activacion_mai", "obtener_secuencia",
     "elegir_por_peso", "elegir_por_peso_segun", "elegir_por_peso_id", "elegir_por_peso_semilla", "elegir_por_peso_seed",
     "resolver_conflictos", "resolver_conflictos_de",
     "segmentar_palabras", "palabras_de", "dividir_texto", "tokenizar_L", "claves_L", "minusculas", "extraer_subtexto", "extraer_antes_de",

@@ -514,12 +514,16 @@ static void vm_propagar_audit_maybe(VM* vm, int is_mai, uint32_t origen_id, uint
 }
 
 #define VM_PROPAGAR_MAX_SEM 16
-/** Semilla del opcode + opcional JASBOOT_PROPAGAR_SEMILLAS (ids separados por coma o ';'). */
-static int vm_propagar_semillas_desde_env(uint32_t origen, uint32_t buf[VM_PROPAGAR_MAX_SEM]) {
-    buf[0] = origen;
-    int n = 1;
+/** Añade ids desde JASBOOT_PROPAGAR_SEMILLAS a buf[0..*pn-1] sin duplicar (cap VM_PROPAGAR_MAX_SEM). */
+static void vm_propagar_env_append(uint32_t buf[VM_PROPAGAR_MAX_SEM], int* pn) {
+    int n = *pn;
+    if (n < 0) n = 0;
+    if (n >= VM_PROPAGAR_MAX_SEM) return;
     const char* p = getenv("JASBOOT_PROPAGAR_SEMILLAS");
-    if (!p || !*p) return 1;
+    if (!p || !*p) {
+        *pn = n;
+        return;
+    }
     while (n < VM_PROPAGAR_MAX_SEM && *p) {
         while (*p == ' ' || *p == ',' || *p == ';') p++;
         if (*p == '\0') break;
@@ -538,7 +542,42 @@ static int vm_propagar_semillas_desde_env(uint32_t origen, uint32_t buf[VM_PROPA
         }
         if (!dup) buf[n++] = u;
     }
+    *pn = n;
+}
+
+/** Semilla principal + opcional JASBOOT_PROPAGAR_SEMILLAS. */
+static int vm_propagar_semillas_desde_env(uint32_t origen, uint32_t buf[VM_PROPAGAR_MAX_SEM]) {
+    buf[0] = origen;
+    int n = 1;
+    vm_propagar_env_append(buf, &n);
     return n;
+}
+
+/** Rellena buf con ids de una lista JMN (hasta 16, sin duplicados). */
+static int vm_propagar_seeds_from_list(VM* vm, uint32_t lista_id, uint32_t buf[VM_PROPAGAR_MAX_SEM]) {
+    if (!vm->mem_neuronal || lista_id == 0) return 0;
+    uint32_t n = jmn_lista_tamano(vm->mem_neuronal, lista_id);
+    int out = 0;
+    for (uint32_t i = 0; i < n && out < VM_PROPAGAR_MAX_SEM; i++) {
+        JMNValor v = jmn_lista_obtener(vm->mem_neuronal, lista_id, i);
+        if (v.u == 0) continue;
+        int dup = 0;
+        for (int j = 0; j < out; j++) {
+            if (buf[j] == v.u) {
+                dup = 1;
+                break;
+            }
+        }
+        if (!dup) buf[out++] = v.u;
+    }
+    return out;
+}
+
+static void vm_propagar_pack_extra(uint32_t ext_hi, JMNPropagarExtra* out) {
+    memset(out, 0, sizeof(*out));
+    for (int i = 0; i <= JMN_RELACION_MAX; i++) out->g_tau[i] = 1.f;
+    out->queue_mode = (ext_hi & 1u) ? 1 : 0;
+    out->score_mode = (ext_hi & 2u) ? 1 : 0;
 }
 
 /* ensure_jmn eliminado para soberanía de datos */
@@ -8324,12 +8363,20 @@ int vm_step(VM* vm) {
             if (vm->mem_neuronal) {
                 uint64_t b_val = vm_get_register(vm, inst.operand_b);
                 uint64_t c_val = vm_get_register(vm, inst.operand_c);
-                uint32_t origen_id = (uint32_t)b_val;
                 JMNActivacionResultado resultados[32];
                 vm_rastro_clear(vm);
                 int n = 0;
                 uint32_t seedb[VM_PROPAGAR_MAX_SEM];
-                int nseed = vm_propagar_semillas_desde_env(origen_id, seedb);
+                int nseed = 0;
+                uint32_t origen_id = 0;
+                if (inst.flags & IR_INST_FLAG_SAFE) {
+                    nseed = vm_propagar_seeds_from_list(vm, (uint32_t)b_val, seedb);
+                    vm_propagar_env_append(seedb, &nseed);
+                    origen_id = nseed > 0 ? seedb[0] : 0u;
+                } else {
+                    origen_id = (uint32_t)b_val;
+                    nseed = vm_propagar_semillas_desde_env(origen_id, seedb);
+                }
                 if (inst.flags & IR_INST_FLAG_RELATIVE) {
                     /* *_mai: C = máscara (16 b bajos) | (K << 16) | (prof << 24); evita solapar K con bits de la máscara */
                     uint32_t mask = (uint32_t)(c_val & 0xFFFFu);
@@ -8348,7 +8395,7 @@ int vm_step(VM* vm) {
                         if (((mask >> t) & 1u) == 0u) continue;
                         JMNActivacionResultado tmp[32];
                         int nt = jmn_propagar_activacion_semillas(vm->mem_neuronal, seedb, nseed, 1.0f, 0.8f, 0.1f,
-                            (uint16_t)prof, t, tmp, (uint16_t)K, vm_jmn_rastro_cb, vm);
+                            (uint16_t)prof, t, tmp, (uint16_t)K, vm_jmn_rastro_cb, vm, NULL);
                         if (nt > 0 && tmp[0].activacion > best_act) {
                             best_act = tmp[0].activacion;
                             best_id = tmp[0].id;
@@ -8368,8 +8415,14 @@ int vm_step(VM* vm) {
                     if (K == 0 || K > 32) K = 8;
                     if (prof > 32) prof = 32;
                     if (tipo_relacion > JMN_RELACION_MAX) tipo_relacion = 0;
-                    n = jmn_propagar_activacion_semillas(vm->mem_neuronal, seedb, nseed, 1.0f, 0.8f, 0.1f,
-                        (uint16_t)prof, tipo_relacion, resultados, (uint16_t)K, vm_jmn_rastro_cb, vm);
+                    JMNPropagarExtra pex;
+                    vm_propagar_pack_extra((uint32_t)((c_val >> 24) & 0xFFu), &pex);
+                    if (nseed < 1) {
+                        n = 0;
+                    } else {
+                        n = jmn_propagar_activacion_semillas(vm->mem_neuronal, seedb, nseed, 1.0f, 0.8f, 0.1f,
+                            (uint16_t)prof, tipo_relacion, resultados, (uint16_t)K, vm_jmn_rastro_cb, vm, &pex);
+                    }
                     vm_propagar_audit_maybe(vm, 0, origen_id, tipo_relacion, K, prof, c_val, n,
                         n > 0 ? resultados : NULL);
                 }
@@ -8711,6 +8764,8 @@ int vm_step(VM* vm) {
                 mode = (const char*)(vm->ir->data + (uint32_t)c_val);
             if (path && mode) {
                 FILE* file = fopen(path, mode);
+                if (file)
+                    (void)setvbuf(file, NULL, _IOFBF, 256u * 1024u);
                 vm_set_register(vm, inst.operand_a, (uint64_t)(uintptr_t)file);
                 vm->current_file = file;
                 if (!file) perror("[FS_ABRIR] fopen");
@@ -8762,11 +8817,6 @@ int vm_step(VM* vm) {
                     
                     uint32_t hash = vm_hash_texto(buffer);
                     vm_text_cache_put(vm, hash, buffer);
-#ifdef JASBOOT_LANG_INTEGRATION
-                    if (vm->mem_neuronal) {
-                        jmn_guardar_texto(vm->mem_neuronal, hash, buffer);
-                    }
-#endif
                     vm_set_register(vm, inst.operand_a, (uint64_t)hash);
                 } else {
                     vm_set_register(vm, inst.operand_a, 5381); // Normalizado a "Nada/Fin/Error"

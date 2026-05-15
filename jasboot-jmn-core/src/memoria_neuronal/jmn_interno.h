@@ -86,6 +86,8 @@ struct JMNMemoria {
 #else
     int fd;
 #endif
+    /** Stream append del journal .jwl (FILE*); evita fopen/fclose por cada op de journal. */
+    void* jwl_append_fp;
 };
 
 uint32_t jmn_hash_u32(uint32_t x);

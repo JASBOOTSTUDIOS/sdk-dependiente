@@ -52,6 +52,18 @@
  */
 #define VM_TL_MOD_SEGMENT_GRAPHEME 8388608u
 
+/** Capa 3: Lematización activa (requiere tabla en registro 243). */
+#define VM_TL_MOD_LEMMA 16777216u
+
+/** Capa 5: Mapear solo a claves existentes en JMN (política "ignorante"). */
+#define VM_TL_MOD_MAP_EXISTING_ONLY 33554432u
+
+/** Capa 3: n-gramas avanzados (cuatrigramas). */
+#define VM_TL_MOD_4GRAM 67108864u
+
+/** Capa 3: n-gramas avanzados (pentagramas). */
+#define VM_TL_MOD_5GRAM 134217728u
+
 #define VM_TL_UNICODE_NORM_FORM_MASK \
     (VM_TL_MOD_UNICODE_NFKC | VM_TL_MOD_UNICODE_NFC | VM_TL_MOD_UNICODE_NFD | VM_TL_MOD_UNICODE_NFKD)
 
