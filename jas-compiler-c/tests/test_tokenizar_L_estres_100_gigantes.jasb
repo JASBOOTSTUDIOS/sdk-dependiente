@@ -1,0 +1,125 @@
+/* test_tokenizar_L_estres_100_gigantes.jasb
+   >=100 casos con textos muy largos (hasta ~3900 caracteres por cadena) para tokenizar_L / claves_L.
+   Buffer interno del pipeline L en la VM: ~4096 caracteres; se prueba el borde y patrones repetidos.
+   Ejecutar: node .vscode/run-jasb.cjs sdk-dependiente/jas-compiler-c/tests/test_tokenizar_L_estres_100_gigantes.jasb
+   Exito: linea final "CASOS=100 FALLIOS=0" */
+principal
+    entero fallos = 0
+    entero n_casos = 0
+
+    /* Caso 0: un solo token gigante (cerca del limite de trabajo 4096 en vm_run_tokenizar_L). */
+    texto mega = ""
+    entero jm = 0
+    mientras jm < 3900 hacer
+        mega = concatenar(mega, "z")
+        jm = jm + 1
+    fin_mientras
+    lista Lmega = tokenizar_L(mega, " ")
+    si lista_tamano(Lmega) != 1 entonces
+        fallos = fallos + 1
+    fin_si
+    n_casos = n_casos + 1
+
+    /* Casos 1..99: cinco familias rotando (r = k % 5). */
+    entero k = 0
+    mientras k < 99 hacer
+        entero r = k % 5
+
+        si r == 0 entonces
+            /* Comas: N tokens "tok" separados por comas. */
+            entero N = 30 + (k % 40) * 3
+            texto s = ""
+            entero i = 0
+            mientras i < N - 1 hacer
+                s = concatenar(s, "tok")
+                s = concatenar(s, ",")
+                i = i + 1
+            fin_mientras
+            s = concatenar(s, "tok")
+            lista L = claves_L(s, ",")
+            si lista_tamano(L) != N entonces
+                fallos = fallos + 1
+            fin_si
+        sino si r == 1 entonces
+            /* Espacios colapsables: M palabras "w" con huecos grandes. */
+            entero M = 25 + (k % 35) * 2
+            texto s2 = ""
+            entero i2 = 0
+            mientras i2 < M - 1 hacer
+                s2 = concatenar(s2, "w")
+                s2 = concatenar(s2, "       ")
+                i2 = i2 + 1
+            fin_mientras
+            s2 = concatenar(s2, "w")
+            lista L2 = tokenizar_L(s2, " ")
+            si lista_tamano(L2) != M entonces
+                fallos = fallos + 1
+            fin_si
+        sino si r == 2 entonces
+            /* modo 7: unigramas + bigramas => 2*P - 1 para P palabras iguales "uno". */
+            entero P = 5 + (k % 12)
+            texto s3 = ""
+            entero i3 = 0
+            mientras i3 < P - 1 hacer
+                s3 = concatenar(s3, "uno")
+                s3 = concatenar(s3, " ")
+                i3 = i3 + 1
+            fin_mientras
+            s3 = concatenar(s3, "uno")
+            lista L3 = tokenizar_L(s3, "", 7)
+            entero esp_big = P + P - 1
+            si lista_tamano(L3) != esp_big entonces
+                fallos = fallos + 1
+            fin_si
+        sino si r == 3 entonces
+            /* Bloque uniforme sin espacios: un token; longitud crece con k (hasta ~3200). */
+            entero T = 400 + (k % 8) * 400
+            texto s4 = ""
+            entero i4 = 0
+            mientras i4 < T hacer
+                s4 = concatenar(s4, "q")
+                i4 = i4 + 1
+            fin_mientras
+            lista L4 = tokenizar_L(s4, " ")
+            si lista_tamano(L4) != 1 entonces
+                fallos = fallos + 1
+            fin_si
+        sino
+            /* Comas con segmentos largos (40 x 'h' por token). */
+            entero U = 8 + (k % 10)
+            texto s5 = ""
+            entero i5 = 0
+            mientras i5 < U - 1 hacer
+                texto bloque = ""
+                entero zb = 0
+                mientras zb < 40 hacer
+                    bloque = concatenar(bloque, "h")
+                    zb = zb + 1
+                fin_mientras
+                s5 = concatenar(s5, bloque)
+                s5 = concatenar(s5, ",")
+                i5 = i5 + 1
+            fin_mientras
+            texto ult = ""
+            entero zu = 0
+            mientras zu < 40 hacer
+                ult = concatenar(ult, "h")
+                zu = zu + 1
+            fin_mientras
+            s5 = concatenar(s5, ult)
+            lista L5 = claves_L(s5, ",")
+            si lista_tamano(L5) != U entonces
+                fallos = fallos + 1
+            fin_si
+        fin_si
+
+        n_casos = n_casos + 1
+        k = k + 1
+    fin_mientras
+
+    imprimir("CASOS=")
+    imprimir(n_casos)
+    imprimir(" FALLIOS=")
+    imprimir(fallos)
+    imprimir("\n")
+fin_principal

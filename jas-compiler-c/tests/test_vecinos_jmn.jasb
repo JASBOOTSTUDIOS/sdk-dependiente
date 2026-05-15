@@ -1,0 +1,19 @@
+/* Regresión: vecinos_jmn es alias nativo de buscar_asociados_lista (Fase 0 grafo, 1 salto). */
+principal
+    crear_memoria("build/test_vecinos_jmn.jmn")
+
+    asociar_relacion("nucleo", "vecino_b", 1, 0.9)
+    asociar_relacion("nucleo", "vecino_c", 1, 0.4)
+
+    lista L = vecinos_jmn("nucleo", 10, 1)
+    imprimir("vecinos_jmn tam=")
+    imprimir(lista_tamano(L))
+    imprimir("\n")
+
+    lista L2 = conexiones_salientes_de("nucleo", 10, 1)
+    imprimir("conexiones_salientes_de tam=")
+    imprimir(lista_tamano(L2))
+    imprimir("\n")
+
+    cerrar_memoria()
+fin_principal

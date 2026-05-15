@@ -1917,6 +1917,8 @@ static const char *get_expression_type(CodeGen *cg, ASTNode *node) {
         if (cn->name && (strcmp(cn->name, "lista_mapear") == 0 || strcmp(cn->name, "mem_lista_mapear") == 0 ||
                          strcmp(cn->name, "lista_filtrar") == 0 || strcmp(cn->name, "mem_lista_filtrar") == 0 ||
                          strcmp(cn->name, "buscar_asociados_lista") == 0 || strcmp(cn->name, "buscar_asociados_lista_mai") == 0 || strcmp(cn->name, "asociados_lista_de") == 0 ||
+                         strcmp(cn->name, "vecinos_jmn") == 0 || strcmp(cn->name, "vecinos_jmn_mai") == 0 || strcmp(cn->name, "conexiones_salientes_de") == 0 ||
+                         strcmp(cn->name, "tokenizar_L") == 0 || strcmp(cn->name, "claves_L") == 0 ||
                          strcmp(cn->name, "obtener_todos_conceptos") == 0 || strcmp(cn->name, "percepcion_recientes") == 0 ||
                          strcmp(cn->name, "mai_contexto_recientes") == 0 || strcmp(cn->name, "mai_contexto") == 0))
             return "lista";
@@ -2936,6 +2938,40 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         visit_expression(cg, ARG0, dest_reg);
         visit_expression(cg, ARG1, dest_reg + 1);
         emit(cg, OP_STR_DIVIDIR_TEXTO, dest_reg, dest_reg, dest_reg + 1, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+        return 1;
+    }
+    if (strcmp(name, "tokenizar_L") == 0 || strcmp(name, "claves_L") == 0) {
+        if (cn->n_args < 1) {
+            sistema_error_sin_argumentos(cg, name, "texto a tokenizar", cn->base.line, cn->base.col);
+            return 1;
+        }
+        if (cn->n_args > 3) {
+            snprintf(cg->last_error, CODEGEN_ERROR_MAX,
+                     "'%s' admite 1..3 argumentos (texto [, separador [, modo]]); aqui hay %zu.",
+                     name, cn->n_args);
+            cg->has_error = 1;
+            cg->err_line = cn->base.line > 0 ? cn->base.line : 1;
+            cg->err_col = cn->base.col > 0 ? cn->base.col : 1;
+            return 1;
+        }
+        /* Evaluar en 20/21 y copiar siempre a 10/11 (visit puede devolver un reg distinto del hint). */
+        (void)visit_expression(cg, ARG0, 20);
+        emit(cg, OP_MOVER, 10, 20, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+        if (cn->n_args >= 2 && ARG1) {
+            (void)visit_expression(cg, ARG1, 21);
+            emit(cg, OP_MOVER, 11, 21, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+        } else {
+            size_t sep0 = add_string(cg, " ");
+            emit_load_str_hash_in_reg(cg, sep0, 11);
+        }
+        if (cn->n_args >= 3 && ARG2) {
+            visit_expression(cg, ARG2, 12);
+            emit(cg, OP_MOVER, 240, 12, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+        } else {
+            emit(cg, OP_MOVER, 240, 3, 0, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
+        }
+        emit(cg, OP_STR_DIVIDIR_TEXTO, (uint8_t)dest_reg, 10, 11,
+             (uint8_t)(IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_SAFE));
         return 1;
     }
     if (strcmp(name, "buscar_en_texto") == 0 || strcmp(name, "contiene_texto") == 0) {
@@ -4375,7 +4411,9 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         return 1;
     }
     if (strcmp(name, "buscar_asociados_lista") == 0 || strcmp(name, "asociados_lista_de") == 0
-        || strcmp(name, "buscar_asociados_lista_mai") == 0) {
+        || strcmp(name, "buscar_asociados_lista_mai") == 0
+        || strcmp(name, "vecinos_jmn") == 0 || strcmp(name, "vecinos_jmn_mai") == 0
+        || strcmp(name, "conexiones_salientes_de") == 0) {
         if (cn->n_args < 2) {
             codegen_error_sistema_incorporada_arity(cg, cn, 2,
                 "identificador base y numero maximo de asociados (K)",
@@ -4394,7 +4432,7 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         emit(cg, OP_SUMAR, 15, 14, 12, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);   /* 15 = (K << 16) | tipo */
         {
             uint8_t fl = (uint8_t)(IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
-            if (strcmp(name, "buscar_asociados_lista_mai") == 0)
+            if (strcmp(name, "buscar_asociados_lista_mai") == 0 || strcmp(name, "vecinos_jmn_mai") == 0)
                 fl = (uint8_t)(fl | IR_INST_FLAG_RELATIVE);
             emit(cg, OP_MEM_BUSCAR_ASOCIADOS_LISTA, 1, 10, 15, fl);
         }

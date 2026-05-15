@@ -1,0 +1,18 @@
+/* Regresión: tokenizar_L / claves_L — pipeline L (OP_STR_DIVIDIR_TEXTO + IR_INST_FLAG_SAFE; reg 240=modo). */
+principal
+    lista L = tokenizar_L("  Hola   MUNDO  ")
+    imprimir("tokenizar_L tam=")
+    imprimir(lista_tamano(L))
+    imprimir("\n")
+
+    lista L2 = claves_L("a,b,c", ",")
+    imprimir("claves_L tam=")
+    imprimir(lista_tamano(L2))
+    imprimir("\n")
+
+    /* modo 7 = minúsculas(1) + colapsar(2) + bigramas(4); unigramas 3 + bigramas 2 = 5 */
+    lista L3 = tokenizar_L("uno dos tres", "", 7)
+    imprimir("tokenizar_L bigram tam=")
+    imprimir(lista_tamano(L3))
+    imprimir("\n")
+fin_principal

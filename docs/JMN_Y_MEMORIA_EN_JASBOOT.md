@@ -20,8 +20,12 @@ Documento de **operación verificada** respecto al código bajo `sdk-dependiente
 
 - Cuando hay **varios destinos** con texto asociado y la VM debe elegir uno para lecturas tipo “memoria / valor asociado”, en **`OP_MEM_OBTENER_VALOR`** (`jasboot-ir/src/vm.c`) se prefiere la **mayor fuerza**; si hay **empate**, se toma el **último** candidato en el orden devuelto por `jmn_buscar_asociaciones` (comentario en fuente: suele corresponder al más reciente).
 
+## Vecinos de un salto (Fase 0 nativa)
+
+- **`vecinos_jmn(origen, K, tipo)`** — alias del compilador para **`buscar_asociados_lista`** (mismo opcode `OP_MEM_BUSCAR_ASOCIADOS_LISTA`): devuelve una **lista** de hasta `K` ids de concepto destino en el **primer salto** desde `origen` con aristas que cumplen `tipo` (1..30; ver semántica en `memoria_neuronal.h`). Variantes: **`vecinos_jmn_mai`** (misma semántica que `buscar_asociados_lista_mai`), **`conexiones_salientes_de`** (alias de **`asociados_lista_de`**). Regresión: `jas-compiler-c/tests/test_vecinos_jmn.jasb`.
+
 ## Variables de entorno útiles (JMN)
 
 - **`JASBOOT_JMN_ROOT`**: raíz del paquete `jasboot-jmn-core` (directorio que contiene `src/`) si la VM no está junto al layout estándar `sdk-dependiente/jasboot-jmn-core`.
 
-**Última revisión:** alineado con fuentes del SDK en 2026-05-14 (comprobación de `JMN_RELACION_MAX`, ejecución de `test_escalado_tipos_jmn.jasb`, revisión de `vm.c` y `main.c` del compilador).
+**Última revisión:** alineado con fuentes del SDK en 2026-05-14 (comprobación de `JMN_RELACION_MAX`, ejecución de `test_escalado_tipos_jmn.jasb` y `test_vecinos_jmn.jasb`, revisión de `vm.c` y `main.c` del compilador).
