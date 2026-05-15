@@ -1,8 +1,9 @@
 /* test_tokenizar_L_estres_100_gigantes.jasb
-   >=100 casos con textos muy largos (hasta ~3900 caracteres por cadena) para tokenizar_L / claves_L.
+   120 casos con textos muy largos (hasta ~3900 caracteres por cadena) para tokenizar_L / claves_L.
    Buffer interno del pipeline L en la VM: ~4096 caracteres; se prueba el borde y patrones repetidos.
+   Nota: en bucles usar `entero lim = N - 1` y `mientras i < lim` — `mientras i < N - 1` puede parsearse mal.
    Ejecutar: node .vscode/run-jasb.cjs sdk-dependiente/jas-compiler-c/tests/test_tokenizar_L_estres_100_gigantes.jasb
-   Exito: linea final "CASOS=100 FALLIOS=0" */
+   Exito: linea final "CASOS=120 FALLIOS=0" */
 principal
     entero fallos = 0
     entero n_casos = 0
@@ -28,9 +29,10 @@ principal
         si r == 0 entonces
             /* Comas: N tokens "tok" separados por comas. */
             entero N = 30 + (k % 40) * 3
+            entero lim_r0 = N - 1
             texto s = ""
             entero i = 0
-            mientras i < N - 1 hacer
+            mientras i < lim_r0 hacer
                 s = concatenar(s, "tok")
                 s = concatenar(s, ",")
                 i = i + 1
@@ -43,9 +45,10 @@ principal
         sino si r == 1 entonces
             /* Espacios colapsables: M palabras "w" con huecos grandes. */
             entero M = 25 + (k % 35) * 2
+            entero lim_r1 = M - 1
             texto s2 = ""
             entero i2 = 0
-            mientras i2 < M - 1 hacer
+            mientras i2 < lim_r1 hacer
                 s2 = concatenar(s2, "w")
                 s2 = concatenar(s2, "       ")
                 i2 = i2 + 1
@@ -58,9 +61,10 @@ principal
         sino si r == 2 entonces
             /* modo 7: unigramas + bigramas => 2*P - 1 para P palabras iguales "uno". */
             entero P = 5 + (k % 12)
+            entero lim_r2 = P - 1
             texto s3 = ""
             entero i3 = 0
-            mientras i3 < P - 1 hacer
+            mientras i3 < lim_r2 hacer
                 s3 = concatenar(s3, "uno")
                 s3 = concatenar(s3, " ")
                 i3 = i3 + 1
@@ -87,9 +91,10 @@ principal
         sino
             /* Comas con segmentos largos (40 x 'h' por token). */
             entero U = 8 + (k % 10)
+            entero lim_r4 = U - 1
             texto s5 = ""
             entero i5 = 0
-            mientras i5 < U - 1 hacer
+            mientras i5 < lim_r4 hacer
                 texto bloque = ""
                 entero zb = 0
                 mientras zb < 40 hacer
@@ -115,6 +120,27 @@ principal
 
         n_casos = n_casos + 1
         k = k + 1
+    fin_mientras
+
+    /* Casos 100..119: comas cortas con nx creciente (2..21 tokens). */
+    entero jx = 0
+    mientras jx < 20 hacer
+        entero nx = 2 + jx
+        entero limx = nx - 1
+        texto sx = ""
+        entero ix = 0
+        mientras ix < limx hacer
+            sx = concatenar(sx, "v")
+            sx = concatenar(sx, ",")
+            ix = ix + 1
+        fin_mientras
+        sx = concatenar(sx, "v")
+        lista Lx = claves_L(sx, ",")
+        si lista_tamano(Lx) != nx entonces
+            fallos = fallos + 1
+        fin_si
+        n_casos = n_casos + 1
+        jx = jx + 1
     fin_mientras
 
     imprimir("CASOS=")

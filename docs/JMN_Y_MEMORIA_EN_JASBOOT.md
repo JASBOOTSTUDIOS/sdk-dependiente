@@ -28,4 +28,8 @@ Documento de **operación verificada** respecto al código bajo `sdk-dependiente
 
 - **`JASBOOT_JMN_ROOT`**: raíz del paquete `jasboot-jmn-core` (directorio que contiene `src/`) si la VM no está junto al layout estándar `sdk-dependiente/jasboot-jmn-core`.
 
-**Última revisión:** alineado con fuentes del SDK en 2026-05-14 (comprobación de `JMN_RELACION_MAX`, ejecución de `test_escalado_tipos_jmn.jasb` y `test_vecinos_jmn.jasb`, revisión de `vm.c` y `main.c` del compilador).
+## Pipeline L nativo (`tokenizar_L` / `claves_L`)
+
+- Normalización y segmentación de texto a **lista** de ids (opcode **`OP_STR_DIVIDIR_TEXTO`** con **`IR_INST_FLAG_SAFE`**, modo en registro **240**). Firma, bits de `modo`, límites (4096 / 512 / bigramas) y casos de uso: **`docs/TOKENIZAR_L_PIPELINE_NATIVE.md`**.
+
+**Última revisión:** alineado con fuentes del SDK en 2026-05-14 (comprobación de `JMN_RELACION_MAX`, ejecución de `test_escalado_tipos_jmn.jasb` y `test_vecinos_jmn.jasb`, revisión de `vm.c` y `main.c` del compilador; añadido enlace a documentación del pipeline L nativo).
