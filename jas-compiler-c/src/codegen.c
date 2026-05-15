@@ -3857,28 +3857,110 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
             sistema_error_sin_argumentos(cg, name, "identificador de concepto inicial", cn->base.line, cn->base.col);
             return 1;
         }
+        const int is_de = (strcmp(name, "propagar_activacion_de") == 0);
+        if (!is_de && cn->n_args > 3) {
+            codegen_error_sistema_incorporada_arity(cg, cn, 3,
+                "concepto, d_max (opcional), K vecinos (opcional; 0 en VM = 8)",
+                "propagar_activacion(\"c\") / propagar_activacion(\"c\", 2, 16)", NULL);
+            return 1;
+        }
+        if (is_de && cn->n_args > 4) {
+            codegen_error_sistema_incorporada_arity(cg, cn, 4,
+                "concepto, tipo_rel literal, d_max (opcional), K (opcional)",
+                "propagar_activacion_de(\"c\", 1, 3, 16)", NULL);
+            return 1;
+        }
+
         int r1 = dest_reg + 1;
         int r2 = visit_expression(cg, ARG0, dest_reg + 2);
+
         uint32_t tipo = 0, K = 8, prof = 3;
-        if (strcmp(name, "propagar_activacion_de") == 0 && cn->n_args >= 2 && ARG1 &&
-            is_node(ARG1, NODE_LITERAL) && ((LiteralNode*)ARG1)->type_name &&
-            strcmp(((LiteralNode*)ARG1)->type_name, "entero") == 0) {
-            int64_t v = ((LiteralNode*)ARG1)->value.i;
-            if (v >= 0 && v <= 10) tipo = (uint32_t)v;
+        int arg_d = -1, arg_k = -1;
+        if (is_de) {
+            if (cn->n_args >= 2 && ARG1 &&
+                is_node(ARG1, NODE_LITERAL) && ((LiteralNode*)ARG1)->type_name &&
+                strcmp(((LiteralNode*)ARG1)->type_name, "entero") == 0) {
+                int64_t v = ((LiteralNode*)ARG1)->value.i;
+                if (v >= 0 && v <= 10) tipo = (uint32_t)v;
+            }
+            if (cn->n_args >= 3) arg_d = 2;
+            if (cn->n_args >= 4) arg_k = 3;
+        } else {
+            if (cn->n_args >= 2) arg_d = 1;
+            if (cn->n_args >= 3) arg_k = 2;
         }
-        uint32_t pack = tipo | (K << 8) | (prof << 16);
-        int r3 = dest_reg + 3;
-        emit(cg, OP_MOVER, (uint8_t)r3, (uint8_t)(pack & 0xFFu), (uint8_t)((pack >> 8) & 0xFFu),
-             IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
-        {
-            uint8_t hi = (uint8_t)((pack >> 16) & 0xFFu);
-            if (hi != 0) {
-                int r4 = dest_reg + 4;
-                emit(cg, OP_MOVER, (uint8_t)r4, hi, 0, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
-                emit(cg, OP_BIT_SHL, (uint8_t)r4, (uint8_t)r4, 16, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE);
-                emit(cg, OP_SUMAR, (uint8_t)r3, (uint8_t)r3, (uint8_t)r4, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+
+        int lit_d = 0, lit_k = 1;
+        if (arg_d >= 0) {
+            ASTNode *nd = cn->args[arg_d];
+            if (is_node(nd, NODE_LITERAL) && ((LiteralNode*)nd)->type_name &&
+                strcmp(((LiteralNode*)nd)->type_name, "entero") == 0) {
+                int64_t v = ((LiteralNode*)nd)->value.i;
+                prof = (uint32_t)(v < 0 ? 0 : (v > 255 ? 255 : v));
+                if (prof > 32) prof = 32;
+                lit_d = 1;
+            } else {
+                lit_d = 0;
             }
         }
+        if (arg_k >= 0) {
+            ASTNode *nk = cn->args[arg_k];
+            if (is_node(nk, NODE_LITERAL) && ((LiteralNode*)nk)->type_name &&
+                strcmp(((LiteralNode*)nk)->type_name, "entero") == 0) {
+                int64_t v = ((LiteralNode*)nk)->value.i;
+                K = (uint32_t)(v < 0 ? 0 : (v > 255 ? 255 : v));
+                lit_k = 1;
+            } else {
+                lit_k = 0;
+            }
+        }
+
+        int const_pack_ok = (arg_d < 0 || lit_d) && (arg_k < 0 || lit_k);
+        int r3 = dest_reg + 3;
+
+        if (const_pack_ok) {
+            uint32_t pack = tipo | (K << 8) | (prof << 16);
+            emit(cg, OP_MOVER, (uint8_t)r3, (uint8_t)(pack & 0xFFu), (uint8_t)((pack >> 8) & 0xFFu),
+                 IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
+            {
+                uint8_t hi = (uint8_t)((pack >> 16) & 0xFFu);
+                if (hi != 0) {
+                    int r4 = dest_reg + 4;
+                    emit(cg, OP_MOVER, (uint8_t)r4, hi, 0, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
+                    emit(cg, OP_BIT_SHL, (uint8_t)r4, (uint8_t)r4, 16, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE);
+                    emit(cg, OP_SUMAR, (uint8_t)r3, (uint8_t)r3, (uint8_t)r4,
+                         IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
+                }
+            }
+        } else {
+            emit(cg, OP_MOVER, (uint8_t)r3, (uint8_t)(tipo & 0xFFu), (uint8_t)((tipo >> 8) & 0xFFu),
+                 IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
+            int r4 = dest_reg + 4;
+            if (arg_k >= 0 && !lit_k) {
+                visit_expression(cg, cn->args[arg_k], r4);
+                emit(cg, OP_BIT_SHL, (uint8_t)r4, (uint8_t)r4, 8,
+                     IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE);
+            } else {
+                uint32_t kshift = K << 8;
+                emit(cg, OP_MOVER, (uint8_t)r4, (uint8_t)(kshift & 0xFFu), (uint8_t)((kshift >> 8) & 0xFFu),
+                     IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
+            }
+            emit(cg, OP_SUMAR, (uint8_t)r3, (uint8_t)r3, (uint8_t)r4,
+                 IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
+
+            int r5 = dest_reg + 5;
+            if (arg_d >= 0 && !lit_d) {
+                visit_expression(cg, cn->args[arg_d], r5);
+                emit(cg, OP_BIT_SHL, (uint8_t)r5, (uint8_t)r5, 16,
+                     IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE);
+            } else {
+                emit(cg, OP_MOVER, (uint8_t)r5, (uint8_t)(prof & 0xFFu), 0, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
+                emit(cg, OP_BIT_SHL, (uint8_t)r5, (uint8_t)r5, 16, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE);
+            }
+            emit(cg, OP_SUMAR, (uint8_t)r3, (uint8_t)r3, (uint8_t)r5,
+                 IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
+        }
+
         emit(cg, OP_MEM_PROPAGAR_ACTIVACION, (uint8_t)r1, (uint8_t)r2, (uint8_t)r3,
              IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
         codegen_emit_write_resultado(cg, (uint8_t)r1);

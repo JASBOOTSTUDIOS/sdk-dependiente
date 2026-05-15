@@ -487,6 +487,60 @@ static void vm_jmn_rastro_cb(void* ud, uint32_t id, float act) {
     vm_rastro_push(vm, id, act);
 }
 
+/* Auditoria opcional de propagacion (stderr). Niveles: 0=off, 1=resumen, 2=+muestra rastro, 3=+pack IR */
+static void vm_propagar_audit_maybe(VM* vm, int is_mai, uint32_t origen_id, uint32_t tipo_or_mask,
+    uint32_t K, uint32_t d_max, uint64_t c_pack, int n_out, const JMNActivacionResultado* res) {
+    const char* ev = getenv("JASBOOT_PROPAGAR_AUDIT");
+    if (!ev || !ev[0] || ev[0] == '0') return;
+    int level = atoi(ev);
+    if (level < 1) return;
+    fprintf(stderr, "[PROPAGAR_AUDIT L1] mai=%d origen=%u d_max=%u K=%u tipo_mask=0x%x n_out=%d",
+        is_mai, (unsigned)origen_id, (unsigned)d_max, (unsigned)K, (unsigned)tipo_or_mask, n_out);
+    if (n_out > 0 && res && res[0].id != 0u)
+        fprintf(stderr, " best=%u act=%.6f", (unsigned)res[0].id, (double)res[0].activacion);
+    else
+        fprintf(stderr, " best=0");
+    if (level >= 3)
+        fprintf(stderr, " c_pack=%llu", (unsigned long long)c_pack);
+    fprintf(stderr, "\n");
+    if (level >= 2 && vm) {
+        uint32_t rc = vm->rastro_count;
+        uint32_t limit = rc < 64u ? rc : 64u;
+        fprintf(stderr, "[PROPAGAR_AUDIT L2] rastro_count=%u muestra=%u\n", (unsigned)rc, (unsigned)limit);
+        for (uint32_t i = 0; i < limit; i++)
+            fprintf(stderr, "  r[%u] id=%u act=%.6f\n", (unsigned)i,
+                (unsigned)vm_rastro_id_at(vm, i), (double)vm_rastro_peso_at(vm, i));
+    }
+}
+
+#define VM_PROPAGAR_MAX_SEM 16
+/** Semilla del opcode + opcional JASBOOT_PROPAGAR_SEMILLAS (ids separados por coma o ';'). */
+static int vm_propagar_semillas_desde_env(uint32_t origen, uint32_t buf[VM_PROPAGAR_MAX_SEM]) {
+    buf[0] = origen;
+    int n = 1;
+    const char* p = getenv("JASBOOT_PROPAGAR_SEMILLAS");
+    if (!p || !*p) return 1;
+    while (n < VM_PROPAGAR_MAX_SEM && *p) {
+        while (*p == ' ' || *p == ',' || *p == ';') p++;
+        if (*p == '\0') break;
+        char* end = NULL;
+        unsigned long v = strtoul(p, &end, 0);
+        if (end == p) break;
+        p = end;
+        if (v == 0ul) continue;
+        uint32_t u = (uint32_t)v;
+        int dup = 0;
+        for (int i = 0; i < n; i++) {
+            if (buf[i] == u) {
+                dup = 1;
+                break;
+            }
+        }
+        if (!dup) buf[n++] = u;
+    }
+    return n;
+}
+
 /* ensure_jmn eliminado para soberanía de datos */
 
 static void ensure_jmn_col(VM* vm) {
@@ -8274,13 +8328,15 @@ int vm_step(VM* vm) {
                 JMNActivacionResultado resultados[32];
                 vm_rastro_clear(vm);
                 int n = 0;
+                uint32_t seedb[VM_PROPAGAR_MAX_SEM];
+                int nseed = vm_propagar_semillas_desde_env(origen_id, seedb);
                 if (inst.flags & IR_INST_FLAG_RELATIVE) {
                     /* *_mai: C = máscara (16 b bajos) | (K << 16) | (prof << 24); evita solapar K con bits de la máscara */
                     uint32_t mask = (uint32_t)(c_val & 0xFFFFu);
                     uint32_t K = (uint32_t)((c_val >> 16) & 0xFFu);
                     uint32_t prof = (uint32_t)((c_val >> 24) & 0xFFu);
                     if (K == 0 || K > 32) K = 8;
-                    if (prof == 0) prof = 3;
+                    if (prof > 32) prof = 32;
                     if (mask == 0u)
                         mask = (1u << JMN_RELACION_ASOCIACION) | (1u << JMN_RELACION_SECUENCIA)
                              | (1u << JMN_RELACION_PERTENENCIA) | (1u << JMN_RELACION_CAUSALIDAD)
@@ -8291,8 +8347,8 @@ int vm_step(VM* vm) {
                     for (uint32_t t = 1u; t <= JMN_RELACION_MAX; t++) {
                         if (((mask >> t) & 1u) == 0u) continue;
                         JMNActivacionResultado tmp[32];
-                        int nt = jmn_propagar_activacion(vm->mem_neuronal, origen_id, 1.0f, 0.8f, 0.1f,
-                            (uint16_t)prof, t, tmp, (uint16_t)K, vm_jmn_rastro_cb, 0, vm);
+                        int nt = jmn_propagar_activacion_semillas(vm->mem_neuronal, seedb, nseed, 1.0f, 0.8f, 0.1f,
+                            (uint16_t)prof, t, tmp, (uint16_t)K, vm_jmn_rastro_cb, vm);
                         if (nt > 0 && tmp[0].activacion > best_act) {
                             best_act = tmp[0].activacion;
                             best_id = tmp[0].id;
@@ -8303,15 +8359,19 @@ int vm_step(VM* vm) {
                         resultados[0].id = best_id;
                         resultados[0].activacion = best_act;
                     }
+                    vm_propagar_audit_maybe(vm, 1, origen_id, mask, K, prof, c_val, n,
+                        n > 0 ? resultados : NULL);
                 } else {
                     uint32_t tipo_relacion = vm_jmn_tipo_desde_texto(vm, (uint32_t)(c_val & 0xFFu));
                     uint32_t K = (uint32_t)((c_val >> 8) & 0xFFu);
                     uint32_t prof = (uint32_t)((c_val >> 16) & 0xFFu);
                     if (K == 0 || K > 32) K = 8;
-                    if (prof == 0) prof = 3;
+                    if (prof > 32) prof = 32;
                     if (tipo_relacion > JMN_RELACION_MAX) tipo_relacion = 0;
-                    n = jmn_propagar_activacion(vm->mem_neuronal, origen_id, 1.0f, 0.8f, 0.1f,
-                        (uint16_t)prof, tipo_relacion, resultados, (uint16_t)K, vm_jmn_rastro_cb, 0, vm);
+                    n = jmn_propagar_activacion_semillas(vm->mem_neuronal, seedb, nseed, 1.0f, 0.8f, 0.1f,
+                        (uint16_t)prof, tipo_relacion, resultados, (uint16_t)K, vm_jmn_rastro_cb, vm);
+                    vm_propagar_audit_maybe(vm, 0, origen_id, tipo_relacion, K, prof, c_val, n,
+                        n > 0 ? resultados : NULL);
                 }
                 if (n > 0) {
                     vm_set_register(vm, inst.operand_a, (uint64_t)resultados[0].id);

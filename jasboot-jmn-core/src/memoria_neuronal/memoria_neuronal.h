@@ -201,6 +201,11 @@ int jmn_buscar_asociaciones(JMNMemoria* mem, uint32_t origen, uint32_t tipo_rel,
 int jmn_propagar_activacion(JMNMemoria* mem, uint32_t origen, float activacion, float factor,
     float umbral, uint16_t prof, uint32_t tipo_rel, JMNActivacionResultado* out, uint16_t max_out,
     JMNActivacionRastroFn rastro_fn, int reserved, void* rastro_ud);
+/** Varias semillas (misma activacion inicial cada una). Excluye semillas del ranking final.
+ *  Ver `JASBOOT_PROPAGAR_H_*` en documentacion: atenuacion h(d) por distancia del destino. */
+int jmn_propagar_activacion_semillas(JMNMemoria* mem, const uint32_t* semillas, int n_sem,
+    float activacion, float factor, float umbral, uint16_t prof, uint32_t tipo_rel,
+    JMNActivacionResultado* out, uint16_t max_out, JMNActivacionRastroFn rastro_fn, void* rastro_ud);
 void jmn_resolver_conflictos(JMNMemoria* mem, uint32_t origen, uint32_t tipo_rel, float umbral,
     uint16_t prof, JMNBusquedaResultado* resultados, uint16_t n, float w1, float w2, JMNConflictoResultado* out);
 
