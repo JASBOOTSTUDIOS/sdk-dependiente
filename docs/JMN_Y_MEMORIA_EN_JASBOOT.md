@@ -30,6 +30,6 @@ Documento de **operación verificada** respecto al código bajo `sdk-dependiente
 
 ## Pipeline L nativo (`tokenizar_L` / `claves_L`)
 
-- Normalización y segmentación de texto a **lista** de ids (opcode **`OP_STR_DIVIDIR_TEXTO`** con **`IR_INST_FLAG_SAFE`**, modo en registro **240**). Firma, bits de `modo`, límites (4096 / 512 / bigramas) y casos de uso: **`docs/TOKENIZAR_L_PIPELINE_NATIVE.md`**.
+- Normalización y segmentación de texto a **lista** de ids (opcode **`OP_STR_DIVIDIR_TEXTO`** con **`IR_INST_FLAG_SAFE`**; registros **240** = `modo`, **241** = `min_len`, **242** = id texto CSV de stopwords extra). Incluye **Unicode** (NFC/NFD/NFKC/NFKD, BOM, strip marcas/CC, colapso WS Unicode; **utf8proc**), segmentación por espacio Unicode si `separador` vacío, n-gramas, stem lite, stopwords: **`TOKENIZAR_L_PIPELINE_NATIVE.md`**. Pruebas: **`test_tokenizar_L_estres_200.jasb`**, **`test_tokenizar_L_seg_ws_unicode_300.jasb`**, **`test_tokenizar_L_unicode_nfkc.jasb`**.
 
-**Última revisión:** alineado con fuentes del SDK en 2026-05-14 (comprobación de `JMN_RELACION_MAX`, ejecución de `test_escalado_tipos_jmn.jasb` y `test_vecinos_jmn.jasb`, revisión de `vm.c` y `main.c` del compilador; añadido enlace a documentación del pipeline L nativo).
+**Última revisión:** 2026-05-14 — pipeline L (regs 240–242, `test_tokenizar_L_estres_200.jasb`); además `JMN_RELACION_MAX`, `test_escalado_tipos_jmn.jasb`, `test_vecinos_jmn.jasb`.

@@ -3,7 +3,7 @@
 CC = gcc
 # Raíz del paquete JMN (directorio que contiene src/). Por defecto: hermano de jasboot-ir en sdk-dependiente.
 JMN_PKG ?= ../jasboot-jmn-core
-CFLAGS = -Wall -Wextra -std=c11 -g -Isrc -I$(JMN_PKG)/src -I$(JMN_PKG)/src/memoria_neuronal -DJASBOOT_LANG_INTEGRATION
+CFLAGS = -Wall -Wextra -std=c11 -g -Isrc -Ithird_party/utf8proc -I$(JMN_PKG)/src -I$(JMN_PKG)/src/memoria_neuronal -DJASBOOT_LANG_INTEGRATION
 LDFLAGS = -g
 # mingw32-make a veces no define OS=Windows_NT; detectar MinGW por el triplete del compilador.
 TARGET_MACHINE := $(shell $(CC) -dumpmachine 2>/dev/null)
@@ -36,6 +36,8 @@ JMN_OBJS = $(BUILD_DIR)/jmn_nodos.o \
 # VM Objects
 VM_OBJS = $(BUILD_DIR)/vm.o \
           $(BUILD_DIR)/vm_analitica_mlp.o \
+          $(BUILD_DIR)/vm_unicode_norm.o \
+          $(BUILD_DIR)/utf8proc.o \
           $(BUILD_DIR)/ir_format.o \
           $(BUILD_DIR)/reader_ir.o \
           $(BUILD_DIR)/optimizer_ir.o \
@@ -67,6 +69,10 @@ $(TARGET_VM): $(VM_OBJS) $(JMN_OBJS)
 # Link Compiler
 $(TARGET_COMPILER): $(COMPILER_OBJS)
 	$(CC) $(COMPILER_OBJS) -o $@ $(LDFLAGS)
+
+# utf8proc (third_party; utf8proc.c incluye utf8proc_data.c)
+$(BUILD_DIR)/utf8proc.o: third_party/utf8proc/utf8proc.c
+	$(CC) $(CFLAGS) -DUTF8PROC_STATIC -c $< -o $@
 
 # Compile src/*.c -> build/*.o
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c

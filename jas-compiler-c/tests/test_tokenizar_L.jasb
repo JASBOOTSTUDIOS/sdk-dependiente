@@ -15,4 +15,10 @@ principal
     imprimir("tokenizar_L bigram tam=")
     imprimir(lista_tamano(L3))
     imprimir("\n")
+
+    /* modo 23 = 3 + bigramas(4) + trigramas(16): 4 palabras -> 4 + 3 + 2 = 9 */
+    lista L4 = tokenizar_L("un dos tres cuatro", "", 23)
+    imprimir("tokenizar_L bi+tri tam=")
+    imprimir(lista_tamano(L4))
+    imprimir("\n")
 fin_principal

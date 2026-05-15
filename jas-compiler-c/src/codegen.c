@@ -2945,9 +2945,9 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
             sistema_error_sin_argumentos(cg, name, "texto a tokenizar", cn->base.line, cn->base.col);
             return 1;
         }
-        if (cn->n_args > 3) {
+        if (cn->n_args > 5) {
             snprintf(cg->last_error, CODEGEN_ERROR_MAX,
-                     "'%s' admite 1..3 argumentos (texto [, separador [, modo]]); aqui hay %zu.",
+                     "'%s' admite 1..5 argumentos (texto [, separador [, modo [, stopwords_csv [, min_len]]]]); aqui hay %zu.",
                      name, cn->n_args);
             cg->has_error = 1;
             cg->err_line = cn->base.line > 0 ? cn->base.line : 1;
@@ -2969,6 +2969,19 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
             emit(cg, OP_MOVER, 240, 12, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
         } else {
             emit(cg, OP_MOVER, 240, 3, 0, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
+        }
+        /* Reg 242 = id texto CSV stopwords extra; 241 = min_len (0 = usar solo modo/TL_MOD_MIN2). */
+        if (cn->n_args >= 4 && ARG3) {
+            (void)visit_expression(cg, ARG3, 22);
+            emit(cg, OP_MOVER, 242, 22, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+        } else {
+            emit(cg, OP_MOVER, 242, 0, 0, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
+        }
+        if (cn->n_args >= 5 && ARG4) {
+            (void)visit_expression(cg, ARG4, 23);
+            emit(cg, OP_MOVER, 241, 23, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+        } else {
+            emit(cg, OP_MOVER, 241, 0, 0, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
         }
         emit(cg, OP_STR_DIVIDIR_TEXTO, (uint8_t)dest_reg, 10, 11,
              (uint8_t)(IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_SAFE));

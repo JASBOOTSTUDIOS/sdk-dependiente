@@ -1,9 +1,9 @@
-/* test_tokenizar_L_estres_100_gigantes.jasb
-   120 casos con textos muy largos (hasta ~3900 caracteres por cadena) para tokenizar_L / claves_L.
-   Buffer interno del pipeline L en la VM: ~4096 caracteres; se prueba el borde y patrones repetidos.
+/* test_tokenizar_L_estres_200.jasb
+   200 casos: textos largos (hasta ~3900 caracteres), modos 7/11/23/67/259 y bordes del buffer (~4096).
+   Buffer interno del pipeline L: ver `vm_tokenizar_l_pipeline.inc`.
    Nota: en bucles usar `entero lim = N - 1` y `mientras i < lim` — `mientras i < N - 1` puede parsearse mal.
-   Ejecutar: node .vscode/run-jasb.cjs sdk-dependiente/jas-compiler-c/tests/test_tokenizar_L_estres_100_gigantes.jasb
-   Exito: linea final "CASOS=120 FALLIOS=0" */
+   Ejecutar: node .vscode/run-jasb.cjs sdk-dependiente/jas-compiler-c/tests/test_tokenizar_L_estres_200.jasb
+   Exito: linea final "CASOS=200 FALLIOS=0" */
 principal
     entero fallos = 0
     entero n_casos = 0
@@ -27,7 +27,6 @@ principal
         entero r = k % 5
 
         si r == 0 entonces
-            /* Comas: N tokens "tok" separados por comas. */
             entero N = 30 + (k % 40) * 3
             entero lim_r0 = N - 1
             texto s = ""
@@ -43,7 +42,6 @@ principal
                 fallos = fallos + 1
             fin_si
         sino si r == 1 entonces
-            /* Espacios colapsables: M palabras "w" con huecos grandes. */
             entero M = 25 + (k % 35) * 2
             entero lim_r1 = M - 1
             texto s2 = ""
@@ -59,7 +57,6 @@ principal
                 fallos = fallos + 1
             fin_si
         sino si r == 2 entonces
-            /* modo 7: unigramas + bigramas => 2*P - 1 para P palabras iguales "uno". */
             entero P = 5 + (k % 12)
             entero lim_r2 = P - 1
             texto s3 = ""
@@ -76,7 +73,6 @@ principal
                 fallos = fallos + 1
             fin_si
         sino si r == 3 entonces
-            /* Bloque uniforme sin espacios: un token; longitud crece con k (hasta ~3200). */
             entero T = 400 + (k % 8) * 400
             texto s4 = ""
             entero i4 = 0
@@ -89,7 +85,6 @@ principal
                 fallos = fallos + 1
             fin_si
         sino
-            /* Comas con segmentos largos (40 x 'h' por token). */
             entero U = 8 + (k % 10)
             entero lim_r4 = U - 1
             texto s5 = ""
@@ -141,6 +136,95 @@ principal
         fin_si
         n_casos = n_casos + 1
         jx = jx + 1
+    fin_mientras
+
+    /* Casos 120..139: modo 23 (unigramas + bigramas + trigramas), P palabras "tok" (P = 3..8). */
+    entero j120 = 0
+    mientras j120 < 20 hacer
+        entero Pm = 3 + (j120 % 6)
+        entero lim_p = Pm - 1
+        texto s_tri = ""
+        entero ip = 0
+        mientras ip < lim_p hacer
+            s_tri = concatenar(s_tri, "tok")
+            s_tri = concatenar(s_tri, " ")
+            ip = ip + 1
+        fin_mientras
+        s_tri = concatenar(s_tri, "tok")
+        lista Lt = tokenizar_L(s_tri, "", 23)
+        entero esp_tri = Pm + (Pm - 1) + (Pm - 2)
+        si lista_tamano(Lt) != esp_tri entonces
+            fallos = fallos + 1
+        fin_si
+        n_casos = n_casos + 1
+        j120 = j120 + 1
+    fin_mientras
+
+    /* Casos 140..159: modo 11 (minusculas + colapsar + MIN2): M palabras "wx" (longitud 2). */
+    entero j140 = 0
+    mientras j140 < 20 hacer
+        entero Mw = 5 + (j140 % 15)
+        entero lim_w = Mw - 1
+        texto s_wx = ""
+        entero iw = 0
+        mientras iw < lim_w hacer
+            s_wx = concatenar(s_wx, "wx")
+            s_wx = concatenar(s_wx, " ")
+            iw = iw + 1
+        fin_mientras
+        s_wx = concatenar(s_wx, "wx")
+        lista Lwx = tokenizar_L(s_wx, "", 11)
+        si lista_tamano(Lwx) != Mw entonces
+            fallos = fallos + 1
+        fin_si
+        n_casos = n_casos + 1
+        j140 = j140 + 1
+    fin_mientras
+
+    /* Casos 160..179: modo 67 (strip puntuacion + colapsar + minusculas): un token tras normalizar. */
+    entero j160 = 0
+    mientras j160 < 20 hacer
+        entero Lcore = 8 + (j160 % 8)
+        texto s_pu = "   "
+        entero ic = 0
+        mientras ic < Lcore hacer
+            s_pu = concatenar(s_pu, "m")
+            ic = ic + 1
+        fin_mientras
+        s_pu = concatenar(s_pu, ",,!!  ")
+        lista Lpu = tokenizar_L(s_pu, "", 67)
+        si lista_tamano(Lpu) != 1 entonces
+            fallos = fallos + 1
+        fin_si
+        n_casos = n_casos + 1
+        j160 = j160 + 1
+    fin_mientras
+
+    /* Casos 180..199: modo 259 (minusculas + colapsar + stopwords builtin), tamanos esperados fijos. */
+    entero j180 = 0
+    mientras j180 < 20 hacer
+        entero rsw = j180 % 4
+        texto s_sw = ""
+        entero ex_sw = 0
+        si rsw == 0 entonces
+            s_sw = "el perro"
+            ex_sw = 1
+        sino si rsw == 1 entonces
+            s_sw = "sol y luna"
+            ex_sw = 2
+        sino si rsw == 2 entonces
+            s_sw = "el sol brilla"
+            ex_sw = 2
+        sino
+            s_sw = "el la los"
+            ex_sw = 0
+        fin_si
+        lista Lsw = tokenizar_L(s_sw, "", 259)
+        si lista_tamano(Lsw) != ex_sw entonces
+            fallos = fallos + 1
+        fin_si
+        n_casos = n_casos + 1
+        j180 = j180 + 1
     fin_mientras
 
     imprimir("CASOS=")

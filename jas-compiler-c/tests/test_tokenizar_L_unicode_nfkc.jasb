@@ -1,0 +1,52 @@
+/* Regresión: paso 1 Unicode + pipeline L (utf8proc).
+   Ver sdk-dependiente/docs/TOKENIZAR_L_PIPELINE_NATIVE.md para bits y orden.
+   Archivo en UTF-8 (Straße, CAFÉ, café, ligadura ﬁ, NBSP U+00A0). */
+principal
+    entero fallos = 0
+
+    /* Straße -> strasse (ß compat), un token */
+    lista L1 = tokenizar_L("Straße", "", 1027)
+    si lista_tamano(L1) != 1 entonces
+        fallos = fallos + 1
+    fin_si
+
+    /* CAFÉ -> café (un token) */
+    lista L2 = tokenizar_L("CAFÉ", "", 2051)
+    si lista_tamano(L2) != 1 entonces
+        fallos = fallos + 1
+    fin_si
+
+    /* Sin Unicode full: sigue funcionando ASCII */
+    lista L3 = tokenizar_L("  HOLA  ", "", 3)
+    si lista_tamano(L3) != 1 entonces
+        fallos = fallos + 1
+    fin_si
+
+    /* NFKD + colapsar + lower: ligadura U+FB01 (UTF-8 EF AC 81) -> "film" un token */
+    lista L4 = tokenizar_L("ﬁlm", "", 8195)
+    si lista_tamano(L4) != 1 entonces
+        fallos = fallos + 1
+    fin_si
+
+    /* NFKC + strip marcas + colapsar + lower: "café" -> cafe */
+    lista L5 = tokenizar_L("café", "", 17411)
+    si lista_tamano(L5) != 1 entonces
+        fallos = fallos + 1
+    fin_si
+
+    /* NBSP (U+00A0): colapso Unicode (131072) + colapsar (2) + lower (1) = 131075 */
+    lista L6 = tokenizar_L("hola mundo", "", 131075)
+    si lista_tamano(L6) != 2 entonces
+        fallos = fallos + 1
+    fin_si
+
+    /* Mismo texto: con modo 3 el separador vacio parte por espacio Unicode (NBSP), sin bit 131072 */
+    lista L7 = tokenizar_L("hola mundo", "", 3)
+    si lista_tamano(L7) != 2 entonces
+        fallos = fallos + 1
+    fin_si
+
+    imprimir("UNICODE_NFKC_FALLIOS=")
+    imprimir(fallos)
+    imprimir("\n")
+fin_principal

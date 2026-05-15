@@ -1,0 +1,1595 @@
+# Regresion: segmentacion con separador vacio = cortes Unicode (Zs/Zl/Zp + ASCII ws + FEFF).
+# Generado por _gen_tokenizar_L_seg_ws_unicode_300.py
+# Exito: CASOS=300 FALLIOS=0
+# Ejecutar: node .vscode/run-jasb.cjs sdk-dependiente/jas-compiler-c/tests/test_tokenizar_L_seg_ws_unicode_300.jasb
+principal
+ entero fallos = 0
+ entero n_casos = 0
+ lista Lseg0 = tokenizar_L(`tok0 tok1`, "", 3)
+ si lista_tamano(Lseg0) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg1 = tokenizar_L(`alpha beta gamma`, "", 3)
+ si lista_tamano(Lseg1) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg2 = tokenizar_L(`x	
+
+y z`, "", 3)
+ si lista_tamano(Lseg2) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg3 = tokenizar_L(`﻿uno dos`, "", 3)
+ si lista_tamano(Lseg3) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg4 = tokenizar_L(`a b c`, "", 3)
+ si lista_tamano(Lseg4) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg5 = tokenizar_L(`w x y`, "", 1027)
+ si lista_tamano(Lseg5) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg6 = tokenizar_L(`palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra`, "", 3)
+ si lista_tamano(Lseg6) != 10 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg7 = tokenizar_L(`tok0  tok1  tok2  tok3  tok4  tok5  tok6  tok7  tok8`, "", 3)
+ si lista_tamano(Lseg7) != 9 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg8 = tokenizar_L(`alpha beta gamma`, "", 3)
+ si lista_tamano(Lseg8) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg9 = tokenizar_L(`x	
+
+y z`, "", 3)
+ si lista_tamano(Lseg9) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg10 = tokenizar_L(`﻿uno dos`, "", 3)
+ si lista_tamano(Lseg10) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg11 = tokenizar_L(`a b c`, "", 3)
+ si lista_tamano(Lseg11) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg12 = tokenizar_L(`w x y`, "", 1027)
+ si lista_tamano(Lseg12) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg13 = tokenizar_L(`palabra palabra palabra palabra palabra`, "", 3)
+ si lista_tamano(Lseg13) != 5 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg14 = tokenizar_L(`tok0   tok1   tok2   tok3   tok4   tok5   tok6   tok7`, "", 3)
+ si lista_tamano(Lseg14) != 8 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg15 = tokenizar_L(`alpha beta gamma`, "", 3)
+ si lista_tamano(Lseg15) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg16 = tokenizar_L(`x	
+
+y z`, "", 3)
+ si lista_tamano(Lseg16) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg17 = tokenizar_L(`﻿uno dos`, "", 3)
+ si lista_tamano(Lseg17) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg18 = tokenizar_L(`a b c`, "", 3)
+ si lista_tamano(Lseg18) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg19 = tokenizar_L(`w x y`, "", 1027)
+ si lista_tamano(Lseg19) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg20 = tokenizar_L(`palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra`, "", 3)
+ si lista_tamano(Lseg20) != 12 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg21 = tokenizar_L(`tok0 tok1 tok2 tok3 tok4 tok5 tok6`, "", 3)
+ si lista_tamano(Lseg21) != 7 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg22 = tokenizar_L(`alpha beta gamma`, "", 3)
+ si lista_tamano(Lseg22) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg23 = tokenizar_L(`x	
+
+y z`, "", 3)
+ si lista_tamano(Lseg23) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg24 = tokenizar_L(`﻿uno dos`, "", 3)
+ si lista_tamano(Lseg24) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg25 = tokenizar_L(`a b c`, "", 3)
+ si lista_tamano(Lseg25) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg26 = tokenizar_L(`w x y`, "", 1027)
+ si lista_tamano(Lseg26) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg27 = tokenizar_L(`palabra palabra palabra palabra palabra palabra palabra`, "", 3)
+ si lista_tamano(Lseg27) != 7 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg28 = tokenizar_L(`tok0  tok1  tok2  tok3  tok4  tok5`, "", 3)
+ si lista_tamano(Lseg28) != 6 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg29 = tokenizar_L(`alpha beta gamma`, "", 3)
+ si lista_tamano(Lseg29) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg30 = tokenizar_L(`x	
+
+y z`, "", 3)
+ si lista_tamano(Lseg30) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg31 = tokenizar_L(`﻿uno dos`, "", 3)
+ si lista_tamano(Lseg31) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg32 = tokenizar_L(`a b c`, "", 3)
+ si lista_tamano(Lseg32) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg33 = tokenizar_L(`w x y`, "", 1027)
+ si lista_tamano(Lseg33) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg34 = tokenizar_L(`palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra`, "", 3)
+ si lista_tamano(Lseg34) != 14 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg35 = tokenizar_L(`tok0   tok1   tok2   tok3   tok4`, "", 3)
+ si lista_tamano(Lseg35) != 5 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg36 = tokenizar_L(`alpha beta gamma`, "", 3)
+ si lista_tamano(Lseg36) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg37 = tokenizar_L(`x	
+
+y z`, "", 3)
+ si lista_tamano(Lseg37) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg38 = tokenizar_L(`﻿uno dos`, "", 3)
+ si lista_tamano(Lseg38) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg39 = tokenizar_L(`a b c`, "", 3)
+ si lista_tamano(Lseg39) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg40 = tokenizar_L(`w x y`, "", 1027)
+ si lista_tamano(Lseg40) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg41 = tokenizar_L(`palabra palabra palabra palabra palabra palabra palabra palabra palabra`, "", 3)
+ si lista_tamano(Lseg41) != 9 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg42 = tokenizar_L(`tok0 tok1 tok2 tok3`, "", 3)
+ si lista_tamano(Lseg42) != 4 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg43 = tokenizar_L(`alpha beta gamma`, "", 3)
+ si lista_tamano(Lseg43) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg44 = tokenizar_L(`x	
+
+y z`, "", 3)
+ si lista_tamano(Lseg44) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg45 = tokenizar_L(`﻿uno dos`, "", 3)
+ si lista_tamano(Lseg45) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg46 = tokenizar_L(`a b c`, "", 3)
+ si lista_tamano(Lseg46) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg47 = tokenizar_L(`w x y`, "", 1027)
+ si lista_tamano(Lseg47) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg48 = tokenizar_L(`palabra palabra palabra palabra`, "", 3)
+ si lista_tamano(Lseg48) != 4 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg49 = tokenizar_L(`tok0  tok1  tok2`, "", 3)
+ si lista_tamano(Lseg49) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg50 = tokenizar_L(`alpha beta gamma`, "", 3)
+ si lista_tamano(Lseg50) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg51 = tokenizar_L(`x	
+
+y z`, "", 3)
+ si lista_tamano(Lseg51) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg52 = tokenizar_L(`﻿uno dos`, "", 3)
+ si lista_tamano(Lseg52) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg53 = tokenizar_L(`a b c`, "", 3)
+ si lista_tamano(Lseg53) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg54 = tokenizar_L(`w x y`, "", 1027)
+ si lista_tamano(Lseg54) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg55 = tokenizar_L(`palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra`, "", 3)
+ si lista_tamano(Lseg55) != 11 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg56 = tokenizar_L(`tok0   tok1`, "", 3)
+ si lista_tamano(Lseg56) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg57 = tokenizar_L(`alpha beta gamma`, "", 3)
+ si lista_tamano(Lseg57) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg58 = tokenizar_L(`x	
+
+y z`, "", 3)
+ si lista_tamano(Lseg58) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg59 = tokenizar_L(`﻿uno dos`, "", 3)
+ si lista_tamano(Lseg59) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg60 = tokenizar_L(`a b c`, "", 3)
+ si lista_tamano(Lseg60) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg61 = tokenizar_L(`w x y`, "", 1027)
+ si lista_tamano(Lseg61) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg62 = tokenizar_L(`palabra palabra palabra palabra palabra palabra`, "", 3)
+ si lista_tamano(Lseg62) != 6 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg63 = tokenizar_L(`tok0 tok1 tok2 tok3 tok4 tok5 tok6 tok7 tok8`, "", 3)
+ si lista_tamano(Lseg63) != 9 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg64 = tokenizar_L(`alpha beta gamma`, "", 3)
+ si lista_tamano(Lseg64) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg65 = tokenizar_L(`x	
+
+y z`, "", 3)
+ si lista_tamano(Lseg65) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg66 = tokenizar_L(`﻿uno dos`, "", 3)
+ si lista_tamano(Lseg66) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg67 = tokenizar_L(`a b c`, "", 3)
+ si lista_tamano(Lseg67) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg68 = tokenizar_L(`w x y`, "", 1027)
+ si lista_tamano(Lseg68) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg69 = tokenizar_L(`palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra`, "", 3)
+ si lista_tamano(Lseg69) != 13 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg70 = tokenizar_L(`tok0  tok1  tok2  tok3  tok4  tok5  tok6  tok7`, "", 3)
+ si lista_tamano(Lseg70) != 8 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg71 = tokenizar_L(`alpha beta gamma`, "", 3)
+ si lista_tamano(Lseg71) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg72 = tokenizar_L(`x	
+
+y z`, "", 3)
+ si lista_tamano(Lseg72) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg73 = tokenizar_L(`﻿uno dos`, "", 3)
+ si lista_tamano(Lseg73) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg74 = tokenizar_L(`a b c`, "", 3)
+ si lista_tamano(Lseg74) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg75 = tokenizar_L(`w x y`, "", 1027)
+ si lista_tamano(Lseg75) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg76 = tokenizar_L(`palabra palabra palabra palabra palabra palabra palabra palabra`, "", 3)
+ si lista_tamano(Lseg76) != 8 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg77 = tokenizar_L(`tok0   tok1   tok2   tok3   tok4   tok5   tok6`, "", 3)
+ si lista_tamano(Lseg77) != 7 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg78 = tokenizar_L(`alpha beta gamma`, "", 3)
+ si lista_tamano(Lseg78) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg79 = tokenizar_L(`x	
+
+y z`, "", 3)
+ si lista_tamano(Lseg79) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg80 = tokenizar_L(`﻿uno dos`, "", 3)
+ si lista_tamano(Lseg80) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg81 = tokenizar_L(`a b c`, "", 3)
+ si lista_tamano(Lseg81) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg82 = tokenizar_L(`w x y`, "", 1027)
+ si lista_tamano(Lseg82) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg83 = tokenizar_L(`palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra`, "", 3)
+ si lista_tamano(Lseg83) != 15 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg84 = tokenizar_L(`tok0 tok1 tok2 tok3 tok4 tok5`, "", 3)
+ si lista_tamano(Lseg84) != 6 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg85 = tokenizar_L(`alpha beta gamma`, "", 3)
+ si lista_tamano(Lseg85) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg86 = tokenizar_L(`x	
+
+y z`, "", 3)
+ si lista_tamano(Lseg86) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg87 = tokenizar_L(`﻿uno dos`, "", 3)
+ si lista_tamano(Lseg87) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg88 = tokenizar_L(`a b c`, "", 3)
+ si lista_tamano(Lseg88) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg89 = tokenizar_L(`w x y`, "", 1027)
+ si lista_tamano(Lseg89) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg90 = tokenizar_L(`palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra`, "", 3)
+ si lista_tamano(Lseg90) != 10 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg91 = tokenizar_L(`tok0  tok1  tok2  tok3  tok4`, "", 3)
+ si lista_tamano(Lseg91) != 5 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg92 = tokenizar_L(`alpha beta gamma`, "", 3)
+ si lista_tamano(Lseg92) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg93 = tokenizar_L(`x	
+
+y z`, "", 3)
+ si lista_tamano(Lseg93) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg94 = tokenizar_L(`﻿uno dos`, "", 3)
+ si lista_tamano(Lseg94) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg95 = tokenizar_L(`a b c`, "", 3)
+ si lista_tamano(Lseg95) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg96 = tokenizar_L(`w x y`, "", 1027)
+ si lista_tamano(Lseg96) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg97 = tokenizar_L(`palabra palabra palabra palabra palabra`, "", 3)
+ si lista_tamano(Lseg97) != 5 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg98 = tokenizar_L(`tok0   tok1   tok2   tok3`, "", 3)
+ si lista_tamano(Lseg98) != 4 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg99 = tokenizar_L(`alpha beta gamma`, "", 3)
+ si lista_tamano(Lseg99) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg100 = tokenizar_L(`x	
+
+y z`, "", 3)
+ si lista_tamano(Lseg100) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg101 = tokenizar_L(`﻿uno dos`, "", 3)
+ si lista_tamano(Lseg101) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg102 = tokenizar_L(`a b c`, "", 3)
+ si lista_tamano(Lseg102) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg103 = tokenizar_L(`w x y`, "", 1027)
+ si lista_tamano(Lseg103) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg104 = tokenizar_L(`palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra`, "", 3)
+ si lista_tamano(Lseg104) != 12 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg105 = tokenizar_L(`tok0 tok1 tok2`, "", 3)
+ si lista_tamano(Lseg105) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg106 = tokenizar_L(`alpha beta gamma`, "", 3)
+ si lista_tamano(Lseg106) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg107 = tokenizar_L(`x	
+
+y z`, "", 3)
+ si lista_tamano(Lseg107) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg108 = tokenizar_L(`﻿uno dos`, "", 3)
+ si lista_tamano(Lseg108) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg109 = tokenizar_L(`a b c`, "", 3)
+ si lista_tamano(Lseg109) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg110 = tokenizar_L(`w x y`, "", 1027)
+ si lista_tamano(Lseg110) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg111 = tokenizar_L(`palabra palabra palabra palabra palabra palabra palabra`, "", 3)
+ si lista_tamano(Lseg111) != 7 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg112 = tokenizar_L(`tok0  tok1`, "", 3)
+ si lista_tamano(Lseg112) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg113 = tokenizar_L(`alpha beta gamma`, "", 3)
+ si lista_tamano(Lseg113) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg114 = tokenizar_L(`x	
+
+y z`, "", 3)
+ si lista_tamano(Lseg114) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg115 = tokenizar_L(`﻿uno dos`, "", 3)
+ si lista_tamano(Lseg115) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg116 = tokenizar_L(`a b c`, "", 3)
+ si lista_tamano(Lseg116) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg117 = tokenizar_L(`w x y`, "", 1027)
+ si lista_tamano(Lseg117) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg118 = tokenizar_L(`palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra`, "", 3)
+ si lista_tamano(Lseg118) != 14 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg119 = tokenizar_L(`tok0   tok1   tok2   tok3   tok4   tok5   tok6   tok7   tok8`, "", 3)
+ si lista_tamano(Lseg119) != 9 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg120 = tokenizar_L(`alpha beta gamma`, "", 3)
+ si lista_tamano(Lseg120) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg121 = tokenizar_L(`x	
+
+y z`, "", 3)
+ si lista_tamano(Lseg121) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg122 = tokenizar_L(`﻿uno dos`, "", 3)
+ si lista_tamano(Lseg122) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg123 = tokenizar_L(`a b c`, "", 3)
+ si lista_tamano(Lseg123) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg124 = tokenizar_L(`w x y`, "", 1027)
+ si lista_tamano(Lseg124) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg125 = tokenizar_L(`palabra palabra palabra palabra palabra palabra palabra palabra palabra`, "", 3)
+ si lista_tamano(Lseg125) != 9 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg126 = tokenizar_L(`tok0 tok1 tok2 tok3 tok4 tok5 tok6 tok7`, "", 3)
+ si lista_tamano(Lseg126) != 8 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg127 = tokenizar_L(`alpha beta gamma`, "", 3)
+ si lista_tamano(Lseg127) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg128 = tokenizar_L(`x	
+
+y z`, "", 3)
+ si lista_tamano(Lseg128) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg129 = tokenizar_L(`﻿uno dos`, "", 3)
+ si lista_tamano(Lseg129) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg130 = tokenizar_L(`a b c`, "", 3)
+ si lista_tamano(Lseg130) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg131 = tokenizar_L(`w x y`, "", 1027)
+ si lista_tamano(Lseg131) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg132 = tokenizar_L(`palabra palabra palabra palabra`, "", 3)
+ si lista_tamano(Lseg132) != 4 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg133 = tokenizar_L(`tok0  tok1  tok2  tok3  tok4  tok5  tok6`, "", 3)
+ si lista_tamano(Lseg133) != 7 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg134 = tokenizar_L(`alpha beta gamma`, "", 3)
+ si lista_tamano(Lseg134) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg135 = tokenizar_L(`x	
+
+y z`, "", 3)
+ si lista_tamano(Lseg135) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg136 = tokenizar_L(`﻿uno dos`, "", 3)
+ si lista_tamano(Lseg136) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg137 = tokenizar_L(`a b c`, "", 3)
+ si lista_tamano(Lseg137) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg138 = tokenizar_L(`w x y`, "", 1027)
+ si lista_tamano(Lseg138) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg139 = tokenizar_L(`palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra`, "", 3)
+ si lista_tamano(Lseg139) != 11 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg140 = tokenizar_L(`tok0   tok1   tok2   tok3   tok4   tok5`, "", 3)
+ si lista_tamano(Lseg140) != 6 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg141 = tokenizar_L(`alpha beta gamma`, "", 3)
+ si lista_tamano(Lseg141) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg142 = tokenizar_L(`x	
+
+y z`, "", 3)
+ si lista_tamano(Lseg142) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg143 = tokenizar_L(`﻿uno dos`, "", 3)
+ si lista_tamano(Lseg143) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg144 = tokenizar_L(`a b c`, "", 3)
+ si lista_tamano(Lseg144) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg145 = tokenizar_L(`w x y`, "", 1027)
+ si lista_tamano(Lseg145) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg146 = tokenizar_L(`palabra palabra palabra palabra palabra palabra`, "", 3)
+ si lista_tamano(Lseg146) != 6 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg147 = tokenizar_L(`tok0 tok1 tok2 tok3 tok4`, "", 3)
+ si lista_tamano(Lseg147) != 5 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg148 = tokenizar_L(`alpha beta gamma`, "", 3)
+ si lista_tamano(Lseg148) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg149 = tokenizar_L(`x	
+
+y z`, "", 3)
+ si lista_tamano(Lseg149) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg150 = tokenizar_L(`﻿uno dos`, "", 3)
+ si lista_tamano(Lseg150) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg151 = tokenizar_L(`a b c`, "", 3)
+ si lista_tamano(Lseg151) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg152 = tokenizar_L(`w x y`, "", 1027)
+ si lista_tamano(Lseg152) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg153 = tokenizar_L(`palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra`, "", 3)
+ si lista_tamano(Lseg153) != 13 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg154 = tokenizar_L(`tok0  tok1  tok2  tok3`, "", 3)
+ si lista_tamano(Lseg154) != 4 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg155 = tokenizar_L(`alpha beta gamma`, "", 3)
+ si lista_tamano(Lseg155) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg156 = tokenizar_L(`x	
+
+y z`, "", 3)
+ si lista_tamano(Lseg156) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg157 = tokenizar_L(`﻿uno dos`, "", 3)
+ si lista_tamano(Lseg157) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg158 = tokenizar_L(`a b c`, "", 3)
+ si lista_tamano(Lseg158) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg159 = tokenizar_L(`w x y`, "", 1027)
+ si lista_tamano(Lseg159) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg160 = tokenizar_L(`palabra palabra palabra palabra palabra palabra palabra palabra`, "", 3)
+ si lista_tamano(Lseg160) != 8 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg161 = tokenizar_L(`tok0   tok1   tok2`, "", 3)
+ si lista_tamano(Lseg161) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg162 = tokenizar_L(`alpha beta gamma`, "", 3)
+ si lista_tamano(Lseg162) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg163 = tokenizar_L(`x	
+
+y z`, "", 3)
+ si lista_tamano(Lseg163) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg164 = tokenizar_L(`﻿uno dos`, "", 3)
+ si lista_tamano(Lseg164) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg165 = tokenizar_L(`a b c`, "", 3)
+ si lista_tamano(Lseg165) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg166 = tokenizar_L(`w x y`, "", 1027)
+ si lista_tamano(Lseg166) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg167 = tokenizar_L(`palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra`, "", 3)
+ si lista_tamano(Lseg167) != 15 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg168 = tokenizar_L(`tok0 tok1`, "", 3)
+ si lista_tamano(Lseg168) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg169 = tokenizar_L(`alpha beta gamma`, "", 3)
+ si lista_tamano(Lseg169) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg170 = tokenizar_L(`x	
+
+y z`, "", 3)
+ si lista_tamano(Lseg170) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg171 = tokenizar_L(`﻿uno dos`, "", 3)
+ si lista_tamano(Lseg171) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg172 = tokenizar_L(`a b c`, "", 3)
+ si lista_tamano(Lseg172) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg173 = tokenizar_L(`w x y`, "", 1027)
+ si lista_tamano(Lseg173) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg174 = tokenizar_L(`palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra`, "", 3)
+ si lista_tamano(Lseg174) != 10 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg175 = tokenizar_L(`tok0  tok1  tok2  tok3  tok4  tok5  tok6  tok7  tok8`, "", 3)
+ si lista_tamano(Lseg175) != 9 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg176 = tokenizar_L(`alpha beta gamma`, "", 3)
+ si lista_tamano(Lseg176) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg177 = tokenizar_L(`x	
+
+y z`, "", 3)
+ si lista_tamano(Lseg177) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg178 = tokenizar_L(`﻿uno dos`, "", 3)
+ si lista_tamano(Lseg178) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg179 = tokenizar_L(`a b c`, "", 3)
+ si lista_tamano(Lseg179) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg180 = tokenizar_L(`w x y`, "", 1027)
+ si lista_tamano(Lseg180) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg181 = tokenizar_L(`palabra palabra palabra palabra palabra`, "", 3)
+ si lista_tamano(Lseg181) != 5 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg182 = tokenizar_L(`tok0   tok1   tok2   tok3   tok4   tok5   tok6   tok7`, "", 3)
+ si lista_tamano(Lseg182) != 8 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg183 = tokenizar_L(`alpha beta gamma`, "", 3)
+ si lista_tamano(Lseg183) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg184 = tokenizar_L(`x	
+
+y z`, "", 3)
+ si lista_tamano(Lseg184) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg185 = tokenizar_L(`﻿uno dos`, "", 3)
+ si lista_tamano(Lseg185) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg186 = tokenizar_L(`a b c`, "", 3)
+ si lista_tamano(Lseg186) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg187 = tokenizar_L(`w x y`, "", 1027)
+ si lista_tamano(Lseg187) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg188 = tokenizar_L(`palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra`, "", 3)
+ si lista_tamano(Lseg188) != 12 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg189 = tokenizar_L(`tok0 tok1 tok2 tok3 tok4 tok5 tok6`, "", 3)
+ si lista_tamano(Lseg189) != 7 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg190 = tokenizar_L(`alpha beta gamma`, "", 3)
+ si lista_tamano(Lseg190) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg191 = tokenizar_L(`x	
+
+y z`, "", 3)
+ si lista_tamano(Lseg191) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg192 = tokenizar_L(`﻿uno dos`, "", 3)
+ si lista_tamano(Lseg192) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg193 = tokenizar_L(`a b c`, "", 3)
+ si lista_tamano(Lseg193) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg194 = tokenizar_L(`w x y`, "", 1027)
+ si lista_tamano(Lseg194) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg195 = tokenizar_L(`palabra palabra palabra palabra palabra palabra palabra`, "", 3)
+ si lista_tamano(Lseg195) != 7 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg196 = tokenizar_L(`tok0  tok1  tok2  tok3  tok4  tok5`, "", 3)
+ si lista_tamano(Lseg196) != 6 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg197 = tokenizar_L(`alpha beta gamma`, "", 3)
+ si lista_tamano(Lseg197) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg198 = tokenizar_L(`x	
+
+y z`, "", 3)
+ si lista_tamano(Lseg198) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg199 = tokenizar_L(`﻿uno dos`, "", 3)
+ si lista_tamano(Lseg199) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg200 = tokenizar_L(`a b c`, "", 3)
+ si lista_tamano(Lseg200) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg201 = tokenizar_L(`w x y`, "", 1027)
+ si lista_tamano(Lseg201) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg202 = tokenizar_L(`palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra`, "", 3)
+ si lista_tamano(Lseg202) != 14 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg203 = tokenizar_L(`tok0   tok1   tok2   tok3   tok4`, "", 3)
+ si lista_tamano(Lseg203) != 5 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg204 = tokenizar_L(`alpha beta gamma`, "", 3)
+ si lista_tamano(Lseg204) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg205 = tokenizar_L(`x	
+
+y z`, "", 3)
+ si lista_tamano(Lseg205) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg206 = tokenizar_L(`﻿uno dos`, "", 3)
+ si lista_tamano(Lseg206) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg207 = tokenizar_L(`a b c`, "", 3)
+ si lista_tamano(Lseg207) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg208 = tokenizar_L(`w x y`, "", 1027)
+ si lista_tamano(Lseg208) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg209 = tokenizar_L(`palabra palabra palabra palabra palabra palabra palabra palabra palabra`, "", 3)
+ si lista_tamano(Lseg209) != 9 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg210 = tokenizar_L(`tok0 tok1 tok2 tok3`, "", 3)
+ si lista_tamano(Lseg210) != 4 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg211 = tokenizar_L(`alpha beta gamma`, "", 3)
+ si lista_tamano(Lseg211) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg212 = tokenizar_L(`x	
+
+y z`, "", 3)
+ si lista_tamano(Lseg212) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg213 = tokenizar_L(`﻿uno dos`, "", 3)
+ si lista_tamano(Lseg213) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg214 = tokenizar_L(`a b c`, "", 3)
+ si lista_tamano(Lseg214) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg215 = tokenizar_L(`w x y`, "", 1027)
+ si lista_tamano(Lseg215) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg216 = tokenizar_L(`palabra palabra palabra palabra`, "", 3)
+ si lista_tamano(Lseg216) != 4 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg217 = tokenizar_L(`tok0  tok1  tok2`, "", 3)
+ si lista_tamano(Lseg217) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg218 = tokenizar_L(`alpha beta gamma`, "", 3)
+ si lista_tamano(Lseg218) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg219 = tokenizar_L(`x	
+
+y z`, "", 3)
+ si lista_tamano(Lseg219) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg220 = tokenizar_L(`﻿uno dos`, "", 3)
+ si lista_tamano(Lseg220) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg221 = tokenizar_L(`a b c`, "", 3)
+ si lista_tamano(Lseg221) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg222 = tokenizar_L(`w x y`, "", 1027)
+ si lista_tamano(Lseg222) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg223 = tokenizar_L(`palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra`, "", 3)
+ si lista_tamano(Lseg223) != 11 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg224 = tokenizar_L(`tok0   tok1`, "", 3)
+ si lista_tamano(Lseg224) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg225 = tokenizar_L(`alpha beta gamma`, "", 3)
+ si lista_tamano(Lseg225) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg226 = tokenizar_L(`x	
+
+y z`, "", 3)
+ si lista_tamano(Lseg226) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg227 = tokenizar_L(`﻿uno dos`, "", 3)
+ si lista_tamano(Lseg227) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg228 = tokenizar_L(`a b c`, "", 3)
+ si lista_tamano(Lseg228) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg229 = tokenizar_L(`w x y`, "", 1027)
+ si lista_tamano(Lseg229) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg230 = tokenizar_L(`palabra palabra palabra palabra palabra palabra`, "", 3)
+ si lista_tamano(Lseg230) != 6 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg231 = tokenizar_L(`tok0 tok1 tok2 tok3 tok4 tok5 tok6 tok7 tok8`, "", 3)
+ si lista_tamano(Lseg231) != 9 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg232 = tokenizar_L(`alpha beta gamma`, "", 3)
+ si lista_tamano(Lseg232) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg233 = tokenizar_L(`x	
+
+y z`, "", 3)
+ si lista_tamano(Lseg233) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg234 = tokenizar_L(`﻿uno dos`, "", 3)
+ si lista_tamano(Lseg234) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg235 = tokenizar_L(`a b c`, "", 3)
+ si lista_tamano(Lseg235) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg236 = tokenizar_L(`w x y`, "", 1027)
+ si lista_tamano(Lseg236) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg237 = tokenizar_L(`palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra`, "", 3)
+ si lista_tamano(Lseg237) != 13 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg238 = tokenizar_L(`tok0  tok1  tok2  tok3  tok4  tok5  tok6  tok7`, "", 3)
+ si lista_tamano(Lseg238) != 8 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg239 = tokenizar_L(`alpha beta gamma`, "", 3)
+ si lista_tamano(Lseg239) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg240 = tokenizar_L(`x	
+
+y z`, "", 3)
+ si lista_tamano(Lseg240) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg241 = tokenizar_L(`﻿uno dos`, "", 3)
+ si lista_tamano(Lseg241) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg242 = tokenizar_L(`a b c`, "", 3)
+ si lista_tamano(Lseg242) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg243 = tokenizar_L(`w x y`, "", 1027)
+ si lista_tamano(Lseg243) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg244 = tokenizar_L(`palabra palabra palabra palabra palabra palabra palabra palabra`, "", 3)
+ si lista_tamano(Lseg244) != 8 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg245 = tokenizar_L(`tok0   tok1   tok2   tok3   tok4   tok5   tok6`, "", 3)
+ si lista_tamano(Lseg245) != 7 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg246 = tokenizar_L(`alpha beta gamma`, "", 3)
+ si lista_tamano(Lseg246) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg247 = tokenizar_L(`x	
+
+y z`, "", 3)
+ si lista_tamano(Lseg247) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg248 = tokenizar_L(`﻿uno dos`, "", 3)
+ si lista_tamano(Lseg248) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg249 = tokenizar_L(`a b c`, "", 3)
+ si lista_tamano(Lseg249) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg250 = tokenizar_L(`w x y`, "", 1027)
+ si lista_tamano(Lseg250) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg251 = tokenizar_L(`palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra`, "", 3)
+ si lista_tamano(Lseg251) != 15 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg252 = tokenizar_L(`tok0 tok1 tok2 tok3 tok4 tok5`, "", 3)
+ si lista_tamano(Lseg252) != 6 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg253 = tokenizar_L(`alpha beta gamma`, "", 3)
+ si lista_tamano(Lseg253) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg254 = tokenizar_L(`x	
+
+y z`, "", 3)
+ si lista_tamano(Lseg254) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg255 = tokenizar_L(`﻿uno dos`, "", 3)
+ si lista_tamano(Lseg255) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg256 = tokenizar_L(`a b c`, "", 3)
+ si lista_tamano(Lseg256) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg257 = tokenizar_L(`w x y`, "", 1027)
+ si lista_tamano(Lseg257) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg258 = tokenizar_L(`palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra`, "", 3)
+ si lista_tamano(Lseg258) != 10 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg259 = tokenizar_L(`tok0  tok1  tok2  tok3  tok4`, "", 3)
+ si lista_tamano(Lseg259) != 5 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg260 = tokenizar_L(`alpha beta gamma`, "", 3)
+ si lista_tamano(Lseg260) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg261 = tokenizar_L(`x	
+
+y z`, "", 3)
+ si lista_tamano(Lseg261) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg262 = tokenizar_L(`﻿uno dos`, "", 3)
+ si lista_tamano(Lseg262) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg263 = tokenizar_L(`a b c`, "", 3)
+ si lista_tamano(Lseg263) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg264 = tokenizar_L(`w x y`, "", 1027)
+ si lista_tamano(Lseg264) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg265 = tokenizar_L(`palabra palabra palabra palabra palabra`, "", 3)
+ si lista_tamano(Lseg265) != 5 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg266 = tokenizar_L(`tok0   tok1   tok2   tok3`, "", 3)
+ si lista_tamano(Lseg266) != 4 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg267 = tokenizar_L(`alpha beta gamma`, "", 3)
+ si lista_tamano(Lseg267) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg268 = tokenizar_L(`x	
+
+y z`, "", 3)
+ si lista_tamano(Lseg268) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg269 = tokenizar_L(`﻿uno dos`, "", 3)
+ si lista_tamano(Lseg269) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg270 = tokenizar_L(`a b c`, "", 3)
+ si lista_tamano(Lseg270) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg271 = tokenizar_L(`w x y`, "", 1027)
+ si lista_tamano(Lseg271) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg272 = tokenizar_L(`palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra`, "", 3)
+ si lista_tamano(Lseg272) != 12 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg273 = tokenizar_L(`tok0 tok1 tok2`, "", 3)
+ si lista_tamano(Lseg273) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg274 = tokenizar_L(`alpha beta gamma`, "", 3)
+ si lista_tamano(Lseg274) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg275 = tokenizar_L(`x	
+
+y z`, "", 3)
+ si lista_tamano(Lseg275) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg276 = tokenizar_L(`﻿uno dos`, "", 3)
+ si lista_tamano(Lseg276) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg277 = tokenizar_L(`a b c`, "", 3)
+ si lista_tamano(Lseg277) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg278 = tokenizar_L(`w x y`, "", 1027)
+ si lista_tamano(Lseg278) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg279 = tokenizar_L(`palabra palabra palabra palabra palabra palabra palabra`, "", 3)
+ si lista_tamano(Lseg279) != 7 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg280 = tokenizar_L(`tok0  tok1`, "", 3)
+ si lista_tamano(Lseg280) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg281 = tokenizar_L(`alpha beta gamma`, "", 3)
+ si lista_tamano(Lseg281) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg282 = tokenizar_L(`x	
+
+y z`, "", 3)
+ si lista_tamano(Lseg282) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg283 = tokenizar_L(`﻿uno dos`, "", 3)
+ si lista_tamano(Lseg283) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg284 = tokenizar_L(`a b c`, "", 3)
+ si lista_tamano(Lseg284) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg285 = tokenizar_L(`w x y`, "", 1027)
+ si lista_tamano(Lseg285) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg286 = tokenizar_L(`palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra palabra`, "", 3)
+ si lista_tamano(Lseg286) != 14 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg287 = tokenizar_L(`tok0   tok1   tok2   tok3   tok4   tok5   tok6   tok7   tok8`, "", 3)
+ si lista_tamano(Lseg287) != 9 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg288 = tokenizar_L(`alpha beta gamma`, "", 3)
+ si lista_tamano(Lseg288) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg289 = tokenizar_L(`x	
+
+y z`, "", 3)
+ si lista_tamano(Lseg289) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg290 = tokenizar_L(`﻿uno dos`, "", 3)
+ si lista_tamano(Lseg290) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg291 = tokenizar_L(`a b c`, "", 3)
+ si lista_tamano(Lseg291) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg292 = tokenizar_L(`w x y`, "", 1027)
+ si lista_tamano(Lseg292) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg293 = tokenizar_L(`palabra palabra palabra palabra palabra palabra palabra palabra palabra`, "", 3)
+ si lista_tamano(Lseg293) != 9 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg294 = tokenizar_L(`tok0 tok1 tok2 tok3 tok4 tok5 tok6 tok7`, "", 3)
+ si lista_tamano(Lseg294) != 8 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg295 = tokenizar_L(`alpha beta gamma`, "", 3)
+ si lista_tamano(Lseg295) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg296 = tokenizar_L(`x	
+
+y z`, "", 3)
+ si lista_tamano(Lseg296) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg297 = tokenizar_L(`﻿uno dos`, "", 3)
+ si lista_tamano(Lseg297) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg298 = tokenizar_L(`a b c`, "", 3)
+ si lista_tamano(Lseg298) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lseg299 = tokenizar_L(`w x y`, "", 1027)
+ si lista_tamano(Lseg299) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ imprimir "CASOS = " + str_desde_numero(n_casos) + "\nFALLIOS = " + str_desde_numero(fallos)
+fin_principal

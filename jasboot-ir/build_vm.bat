@@ -30,7 +30,7 @@ set SRC_DIR=src
 set JMN_DIR=%JMN_PKG%\src\memoria_neuronal
 set COMPAT_SRC=%JMN_PKG%\src\platform_compat.c
 set BIN_DIR=bin
-set CFLAGS=-Wall -Wextra -std=c11 -O3 -march=native -I%SRC_DIR% -I%JMN_PKG%\src -I%JMN_PKG%\src\memoria_neuronal -DJASBOOT_LANG_INTEGRATION
+set CFLAGS=-Wall -Wextra -std=c11 -O3 -march=native -I%SRC_DIR% -I%JMN_PKG%\src -I%JMN_PKG%\src\memoria_neuronal -I"%IR_DIR%third_party\utf8proc" -DJASBOOT_LANG_INTEGRATION
 set LDLIBS=
 if /I "%OS%"=="Windows_NT" set LDLIBS=-lws2_32
 
@@ -45,6 +45,8 @@ echo JMN package: %JMN_PKG%
 echo Compiling VM Core...
 gcc %CFLAGS% -c %SRC_DIR%/mai.c -o %BUILD_DIR%/mai.o || exit /b 1
 gcc %CFLAGS% -c %SRC_DIR%/vm.c -o %BUILD_DIR%/vm.o || exit /b 1
+gcc %CFLAGS% -DUTF8PROC_STATIC -c "%IR_DIR%third_party\utf8proc\utf8proc.c" -o %BUILD_DIR%/utf8proc.o || exit /b 1
+gcc %CFLAGS% -c %SRC_DIR%/vm_unicode_norm.c -o %BUILD_DIR%/vm_unicode_norm.o || exit /b 1
 gcc %CFLAGS% -c %SRC_DIR%/vm_analitica_mlp.c -o %BUILD_DIR%/vm_analitica_mlp.o || exit /b 1
 gcc %CFLAGS% -c %SRC_DIR%/ir_vm.c -o %BUILD_DIR%/ir_vm.o || exit /b 1
 gcc %CFLAGS% -c %SRC_DIR%/ir_format.c -o %BUILD_DIR%/ir_format.o || exit /b 1

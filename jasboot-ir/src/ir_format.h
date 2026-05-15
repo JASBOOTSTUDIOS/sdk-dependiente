@@ -222,7 +222,7 @@ typedef enum {
     OP_MEM_IMPRIMIR_ID = 0xDA,       // Imprime texto de un concepto desde ID en registro
     OP_MEM_RECORDAR_TEXTO = 0x5A,    // Guardar texto en memoria neuronal
     OP_IMPRIMIR_TEXTO = 0x5B,        // Imprime texto desde sección de datos
-    OP_STR_DIVIDIR_TEXTO = 0x5C,     // Dividir texto (B=id_frase, C=id_sep) -> A=id_lista; IR_INST_FLAG_SAFE o A≠B: pipeline L (reg 240=modo, vm.c)
+    OP_STR_DIVIDIR_TEXTO = 0x5C,     // Dividir texto (B=id_frase, C=id_sep) -> A=id_lista; IR_INST_FLAG_SAFE y A≠B: pipeline L (reg 240=modo, 241=min_len, 242=id stopwords CSV; vm_tokenizar_l_pipeline.inc)
     OP_BIT_SHL = 0x5D,               // A <- B << C
     OP_BIT_SHR = 0x5E,               // A <- B >> C
     OP_SYS_EXEC = 0x5F,              // A <- system(B:cmd_id)
