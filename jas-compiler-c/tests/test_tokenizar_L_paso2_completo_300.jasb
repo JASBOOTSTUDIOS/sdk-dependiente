@@ -1,0 +1,1509 @@
+# Regresion: paso 2 (P*, So, Sm, opcional Sk; coma lista ASCII; grafema) + S3 contracciones.
+# Generado por _gen_tokenizar_L_paso2_300.py
+# Exito: CASOS=300 FALLIOS=0
+# Ejecutar: node .vscode/run-jasb.cjs sdk-dependiente/jas-compiler-c/tests/test_tokenizar_L_paso2_completo_300.jasb
+principal
+ entero fallos = 0
+ entero n_casos = 0
+ lista Lp2_0 = tokenizar_L(`tok0,tok1,tok2`, "", 394243)
+ si lista_tamano(Lp2_0) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_1 = tokenizar_L(`3.14`, "", 394243)
+ si lista_tamano(Lp2_1) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_2 = tokenizar_L(`12,34`, "", 394243)
+ si lista_tamano(Lp2_2) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_3 = tokenizar_L(`a😀b`, "", 918531)
+ si lista_tamano(Lp2_3) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_4 = tokenizar_L(`a😀b`, "", 394243)
+ si lista_tamano(Lp2_4) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_5 = tokenizar_L(`hello😀world`, "", 918531)
+ si lista_tamano(Lp2_5) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_6 = tokenizar_L(`w ,x0`, "", 394243)
+ si lista_tamano(Lp2_6) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_7 = tokenizar_L(`a@mail`, "", 394243)
+ si lista_tamano(Lp2_7) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_8 = tokenizar_L(`a@1`, "", 394243)
+ si lista_tamano(Lp2_8) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_9 = tokenizar_L(`x,y`, "", 657923)
+ si lista_tamano(Lp2_9) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_10 = tokenizar_L(`hola!!mundo0`, "", 394243)
+ si lista_tamano(Lp2_10) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_11 = tokenizar_L(`1,2`, "", 4588547)
+ si lista_tamano(Lp2_11) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_12 = tokenizar_L(`3,14`, "", 4588547)
+ si lista_tamano(Lp2_12) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_13 = tokenizar_L(`a+b`, "", 1442819)
+ si lista_tamano(Lp2_13) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_14 = tokenizar_L(`hola mundo`, "", 8520707)
+ si lista_tamano(Lp2_14) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_15 = tokenizar_L(`de	el`, "", 515)
+ si lista_tamano(Lp2_15) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_16 = tokenizar_L(`1,2`, "", 394243)
+ si lista_tamano(Lp2_16) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_17 = tokenizar_L(`tok1,tok2,tok3,tok4`, "", 394243)
+ si lista_tamano(Lp2_17) != 4 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_18 = tokenizar_L(`3.14`, "", 394243)
+ si lista_tamano(Lp2_18) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_19 = tokenizar_L(`12,34`, "", 394243)
+ si lista_tamano(Lp2_19) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_20 = tokenizar_L(`a😀b`, "", 918531)
+ si lista_tamano(Lp2_20) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_21 = tokenizar_L(`a😀b`, "", 394243)
+ si lista_tamano(Lp2_21) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_22 = tokenizar_L(`hello😀world`, "", 918531)
+ si lista_tamano(Lp2_22) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_23 = tokenizar_L(`w ,x1`, "", 394243)
+ si lista_tamano(Lp2_23) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_24 = tokenizar_L(`a@mail`, "", 394243)
+ si lista_tamano(Lp2_24) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_25 = tokenizar_L(`a@1`, "", 394243)
+ si lista_tamano(Lp2_25) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_26 = tokenizar_L(`x,y`, "", 657923)
+ si lista_tamano(Lp2_26) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_27 = tokenizar_L(`hola!!mundo1`, "", 394243)
+ si lista_tamano(Lp2_27) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_28 = tokenizar_L(`1,2`, "", 4588547)
+ si lista_tamano(Lp2_28) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_29 = tokenizar_L(`3,14`, "", 4588547)
+ si lista_tamano(Lp2_29) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_30 = tokenizar_L(`a+b`, "", 1442819)
+ si lista_tamano(Lp2_30) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_31 = tokenizar_L(`hola mundo`, "", 8520707)
+ si lista_tamano(Lp2_31) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_32 = tokenizar_L(`de	el`, "", 515)
+ si lista_tamano(Lp2_32) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_33 = tokenizar_L(`1,2`, "", 394243)
+ si lista_tamano(Lp2_33) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_34 = tokenizar_L(`tok2,tok3,tok4,tok5,tok6`, "", 394243)
+ si lista_tamano(Lp2_34) != 5 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_35 = tokenizar_L(`3.14`, "", 394243)
+ si lista_tamano(Lp2_35) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_36 = tokenizar_L(`12,34`, "", 394243)
+ si lista_tamano(Lp2_36) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_37 = tokenizar_L(`a😀b`, "", 918531)
+ si lista_tamano(Lp2_37) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_38 = tokenizar_L(`a😀b`, "", 394243)
+ si lista_tamano(Lp2_38) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_39 = tokenizar_L(`hello😀world`, "", 918531)
+ si lista_tamano(Lp2_39) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_40 = tokenizar_L(`w ,x2`, "", 394243)
+ si lista_tamano(Lp2_40) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_41 = tokenizar_L(`a@mail`, "", 394243)
+ si lista_tamano(Lp2_41) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_42 = tokenizar_L(`a@1`, "", 394243)
+ si lista_tamano(Lp2_42) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_43 = tokenizar_L(`x,y`, "", 657923)
+ si lista_tamano(Lp2_43) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_44 = tokenizar_L(`hola!!mundo2`, "", 394243)
+ si lista_tamano(Lp2_44) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_45 = tokenizar_L(`1,2`, "", 4588547)
+ si lista_tamano(Lp2_45) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_46 = tokenizar_L(`3,14`, "", 4588547)
+ si lista_tamano(Lp2_46) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_47 = tokenizar_L(`a+b`, "", 1442819)
+ si lista_tamano(Lp2_47) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_48 = tokenizar_L(`hola mundo`, "", 8520707)
+ si lista_tamano(Lp2_48) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_49 = tokenizar_L(`de	el`, "", 515)
+ si lista_tamano(Lp2_49) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_50 = tokenizar_L(`1,2`, "", 394243)
+ si lista_tamano(Lp2_50) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_51 = tokenizar_L(`tok3,tok4,tok5,tok6,tok7,tok8`, "", 394243)
+ si lista_tamano(Lp2_51) != 6 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_52 = tokenizar_L(`3.14`, "", 394243)
+ si lista_tamano(Lp2_52) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_53 = tokenizar_L(`12,34`, "", 394243)
+ si lista_tamano(Lp2_53) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_54 = tokenizar_L(`a😀b`, "", 918531)
+ si lista_tamano(Lp2_54) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_55 = tokenizar_L(`a😀b`, "", 394243)
+ si lista_tamano(Lp2_55) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_56 = tokenizar_L(`hello😀world`, "", 918531)
+ si lista_tamano(Lp2_56) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_57 = tokenizar_L(`w ,x0`, "", 394243)
+ si lista_tamano(Lp2_57) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_58 = tokenizar_L(`a@mail`, "", 394243)
+ si lista_tamano(Lp2_58) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_59 = tokenizar_L(`a@1`, "", 394243)
+ si lista_tamano(Lp2_59) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_60 = tokenizar_L(`x,y`, "", 657923)
+ si lista_tamano(Lp2_60) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_61 = tokenizar_L(`hola!!mundo3`, "", 394243)
+ si lista_tamano(Lp2_61) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_62 = tokenizar_L(`1,2`, "", 4588547)
+ si lista_tamano(Lp2_62) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_63 = tokenizar_L(`3,14`, "", 4588547)
+ si lista_tamano(Lp2_63) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_64 = tokenizar_L(`a+b`, "", 1442819)
+ si lista_tamano(Lp2_64) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_65 = tokenizar_L(`hola mundo`, "", 8520707)
+ si lista_tamano(Lp2_65) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_66 = tokenizar_L(`de	el`, "", 515)
+ si lista_tamano(Lp2_66) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_67 = tokenizar_L(`1,2`, "", 394243)
+ si lista_tamano(Lp2_67) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_68 = tokenizar_L(`tok4,tok5,tok6,tok7,tok8,tok9,tok0`, "", 394243)
+ si lista_tamano(Lp2_68) != 7 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_69 = tokenizar_L(`3.14`, "", 394243)
+ si lista_tamano(Lp2_69) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_70 = tokenizar_L(`12,34`, "", 394243)
+ si lista_tamano(Lp2_70) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_71 = tokenizar_L(`a😀b`, "", 918531)
+ si lista_tamano(Lp2_71) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_72 = tokenizar_L(`a😀b`, "", 394243)
+ si lista_tamano(Lp2_72) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_73 = tokenizar_L(`hello😀world`, "", 918531)
+ si lista_tamano(Lp2_73) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_74 = tokenizar_L(`w ,x1`, "", 394243)
+ si lista_tamano(Lp2_74) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_75 = tokenizar_L(`a@mail`, "", 394243)
+ si lista_tamano(Lp2_75) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_76 = tokenizar_L(`a@1`, "", 394243)
+ si lista_tamano(Lp2_76) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_77 = tokenizar_L(`x,y`, "", 657923)
+ si lista_tamano(Lp2_77) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_78 = tokenizar_L(`hola!!mundo0`, "", 394243)
+ si lista_tamano(Lp2_78) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_79 = tokenizar_L(`1,2`, "", 4588547)
+ si lista_tamano(Lp2_79) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_80 = tokenizar_L(`3,14`, "", 4588547)
+ si lista_tamano(Lp2_80) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_81 = tokenizar_L(`a+b`, "", 1442819)
+ si lista_tamano(Lp2_81) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_82 = tokenizar_L(`hola mundo`, "", 8520707)
+ si lista_tamano(Lp2_82) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_83 = tokenizar_L(`de	el`, "", 515)
+ si lista_tamano(Lp2_83) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_84 = tokenizar_L(`1,2`, "", 394243)
+ si lista_tamano(Lp2_84) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_85 = tokenizar_L(`tok5,tok6,tok7,tok8,tok9,tok0,tok1,tok2`, "", 394243)
+ si lista_tamano(Lp2_85) != 8 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_86 = tokenizar_L(`3.14`, "", 394243)
+ si lista_tamano(Lp2_86) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_87 = tokenizar_L(`12,34`, "", 394243)
+ si lista_tamano(Lp2_87) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_88 = tokenizar_L(`a😀b`, "", 918531)
+ si lista_tamano(Lp2_88) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_89 = tokenizar_L(`a😀b`, "", 394243)
+ si lista_tamano(Lp2_89) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_90 = tokenizar_L(`hello😀world`, "", 918531)
+ si lista_tamano(Lp2_90) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_91 = tokenizar_L(`w ,x2`, "", 394243)
+ si lista_tamano(Lp2_91) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_92 = tokenizar_L(`a@mail`, "", 394243)
+ si lista_tamano(Lp2_92) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_93 = tokenizar_L(`a@1`, "", 394243)
+ si lista_tamano(Lp2_93) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_94 = tokenizar_L(`x,y`, "", 657923)
+ si lista_tamano(Lp2_94) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_95 = tokenizar_L(`hola!!mundo1`, "", 394243)
+ si lista_tamano(Lp2_95) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_96 = tokenizar_L(`1,2`, "", 4588547)
+ si lista_tamano(Lp2_96) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_97 = tokenizar_L(`3,14`, "", 4588547)
+ si lista_tamano(Lp2_97) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_98 = tokenizar_L(`a+b`, "", 1442819)
+ si lista_tamano(Lp2_98) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_99 = tokenizar_L(`hola mundo`, "", 8520707)
+ si lista_tamano(Lp2_99) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_100 = tokenizar_L(`de	el`, "", 515)
+ si lista_tamano(Lp2_100) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_101 = tokenizar_L(`1,2`, "", 394243)
+ si lista_tamano(Lp2_101) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_102 = tokenizar_L(`tok6,tok7,tok8`, "", 394243)
+ si lista_tamano(Lp2_102) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_103 = tokenizar_L(`3.14`, "", 394243)
+ si lista_tamano(Lp2_103) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_104 = tokenizar_L(`12,34`, "", 394243)
+ si lista_tamano(Lp2_104) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_105 = tokenizar_L(`a😀b`, "", 918531)
+ si lista_tamano(Lp2_105) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_106 = tokenizar_L(`a😀b`, "", 394243)
+ si lista_tamano(Lp2_106) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_107 = tokenizar_L(`hello😀world`, "", 918531)
+ si lista_tamano(Lp2_107) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_108 = tokenizar_L(`w ,x0`, "", 394243)
+ si lista_tamano(Lp2_108) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_109 = tokenizar_L(`a@mail`, "", 394243)
+ si lista_tamano(Lp2_109) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_110 = tokenizar_L(`a@1`, "", 394243)
+ si lista_tamano(Lp2_110) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_111 = tokenizar_L(`x,y`, "", 657923)
+ si lista_tamano(Lp2_111) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_112 = tokenizar_L(`hola!!mundo2`, "", 394243)
+ si lista_tamano(Lp2_112) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_113 = tokenizar_L(`1,2`, "", 4588547)
+ si lista_tamano(Lp2_113) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_114 = tokenizar_L(`3,14`, "", 4588547)
+ si lista_tamano(Lp2_114) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_115 = tokenizar_L(`a+b`, "", 1442819)
+ si lista_tamano(Lp2_115) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_116 = tokenizar_L(`hola mundo`, "", 8520707)
+ si lista_tamano(Lp2_116) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_117 = tokenizar_L(`de	el`, "", 515)
+ si lista_tamano(Lp2_117) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_118 = tokenizar_L(`1,2`, "", 394243)
+ si lista_tamano(Lp2_118) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_119 = tokenizar_L(`tok7,tok8,tok9,tok0`, "", 394243)
+ si lista_tamano(Lp2_119) != 4 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_120 = tokenizar_L(`3.14`, "", 394243)
+ si lista_tamano(Lp2_120) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_121 = tokenizar_L(`12,34`, "", 394243)
+ si lista_tamano(Lp2_121) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_122 = tokenizar_L(`a😀b`, "", 918531)
+ si lista_tamano(Lp2_122) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_123 = tokenizar_L(`a😀b`, "", 394243)
+ si lista_tamano(Lp2_123) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_124 = tokenizar_L(`hello😀world`, "", 918531)
+ si lista_tamano(Lp2_124) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_125 = tokenizar_L(`w ,x1`, "", 394243)
+ si lista_tamano(Lp2_125) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_126 = tokenizar_L(`a@mail`, "", 394243)
+ si lista_tamano(Lp2_126) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_127 = tokenizar_L(`a@1`, "", 394243)
+ si lista_tamano(Lp2_127) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_128 = tokenizar_L(`x,y`, "", 657923)
+ si lista_tamano(Lp2_128) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_129 = tokenizar_L(`hola!!mundo3`, "", 394243)
+ si lista_tamano(Lp2_129) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_130 = tokenizar_L(`1,2`, "", 4588547)
+ si lista_tamano(Lp2_130) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_131 = tokenizar_L(`3,14`, "", 4588547)
+ si lista_tamano(Lp2_131) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_132 = tokenizar_L(`a+b`, "", 1442819)
+ si lista_tamano(Lp2_132) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_133 = tokenizar_L(`hola mundo`, "", 8520707)
+ si lista_tamano(Lp2_133) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_134 = tokenizar_L(`de	el`, "", 515)
+ si lista_tamano(Lp2_134) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_135 = tokenizar_L(`1,2`, "", 394243)
+ si lista_tamano(Lp2_135) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_136 = tokenizar_L(`tok8,tok9,tok0,tok1,tok2`, "", 394243)
+ si lista_tamano(Lp2_136) != 5 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_137 = tokenizar_L(`3.14`, "", 394243)
+ si lista_tamano(Lp2_137) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_138 = tokenizar_L(`12,34`, "", 394243)
+ si lista_tamano(Lp2_138) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_139 = tokenizar_L(`a😀b`, "", 918531)
+ si lista_tamano(Lp2_139) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_140 = tokenizar_L(`a😀b`, "", 394243)
+ si lista_tamano(Lp2_140) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_141 = tokenizar_L(`hello😀world`, "", 918531)
+ si lista_tamano(Lp2_141) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_142 = tokenizar_L(`w ,x2`, "", 394243)
+ si lista_tamano(Lp2_142) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_143 = tokenizar_L(`a@mail`, "", 394243)
+ si lista_tamano(Lp2_143) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_144 = tokenizar_L(`a@1`, "", 394243)
+ si lista_tamano(Lp2_144) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_145 = tokenizar_L(`x,y`, "", 657923)
+ si lista_tamano(Lp2_145) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_146 = tokenizar_L(`hola!!mundo0`, "", 394243)
+ si lista_tamano(Lp2_146) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_147 = tokenizar_L(`1,2`, "", 4588547)
+ si lista_tamano(Lp2_147) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_148 = tokenizar_L(`3,14`, "", 4588547)
+ si lista_tamano(Lp2_148) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_149 = tokenizar_L(`a+b`, "", 1442819)
+ si lista_tamano(Lp2_149) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_150 = tokenizar_L(`hola mundo`, "", 8520707)
+ si lista_tamano(Lp2_150) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_151 = tokenizar_L(`de	el`, "", 515)
+ si lista_tamano(Lp2_151) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_152 = tokenizar_L(`1,2`, "", 394243)
+ si lista_tamano(Lp2_152) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_153 = tokenizar_L(`tok9,tok0,tok1,tok2,tok3,tok4`, "", 394243)
+ si lista_tamano(Lp2_153) != 6 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_154 = tokenizar_L(`3.14`, "", 394243)
+ si lista_tamano(Lp2_154) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_155 = tokenizar_L(`12,34`, "", 394243)
+ si lista_tamano(Lp2_155) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_156 = tokenizar_L(`a😀b`, "", 918531)
+ si lista_tamano(Lp2_156) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_157 = tokenizar_L(`a😀b`, "", 394243)
+ si lista_tamano(Lp2_157) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_158 = tokenizar_L(`hello😀world`, "", 918531)
+ si lista_tamano(Lp2_158) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_159 = tokenizar_L(`w ,x0`, "", 394243)
+ si lista_tamano(Lp2_159) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_160 = tokenizar_L(`a@mail`, "", 394243)
+ si lista_tamano(Lp2_160) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_161 = tokenizar_L(`a@1`, "", 394243)
+ si lista_tamano(Lp2_161) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_162 = tokenizar_L(`x,y`, "", 657923)
+ si lista_tamano(Lp2_162) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_163 = tokenizar_L(`hola!!mundo1`, "", 394243)
+ si lista_tamano(Lp2_163) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_164 = tokenizar_L(`1,2`, "", 4588547)
+ si lista_tamano(Lp2_164) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_165 = tokenizar_L(`3,14`, "", 4588547)
+ si lista_tamano(Lp2_165) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_166 = tokenizar_L(`a+b`, "", 1442819)
+ si lista_tamano(Lp2_166) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_167 = tokenizar_L(`hola mundo`, "", 8520707)
+ si lista_tamano(Lp2_167) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_168 = tokenizar_L(`de	el`, "", 515)
+ si lista_tamano(Lp2_168) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_169 = tokenizar_L(`1,2`, "", 394243)
+ si lista_tamano(Lp2_169) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_170 = tokenizar_L(`tok0,tok1,tok2,tok3,tok4,tok5,tok6`, "", 394243)
+ si lista_tamano(Lp2_170) != 7 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_171 = tokenizar_L(`3.14`, "", 394243)
+ si lista_tamano(Lp2_171) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_172 = tokenizar_L(`12,34`, "", 394243)
+ si lista_tamano(Lp2_172) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_173 = tokenizar_L(`a😀b`, "", 918531)
+ si lista_tamano(Lp2_173) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_174 = tokenizar_L(`a😀b`, "", 394243)
+ si lista_tamano(Lp2_174) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_175 = tokenizar_L(`hello😀world`, "", 918531)
+ si lista_tamano(Lp2_175) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_176 = tokenizar_L(`w ,x1`, "", 394243)
+ si lista_tamano(Lp2_176) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_177 = tokenizar_L(`a@mail`, "", 394243)
+ si lista_tamano(Lp2_177) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_178 = tokenizar_L(`a@1`, "", 394243)
+ si lista_tamano(Lp2_178) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_179 = tokenizar_L(`x,y`, "", 657923)
+ si lista_tamano(Lp2_179) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_180 = tokenizar_L(`hola!!mundo2`, "", 394243)
+ si lista_tamano(Lp2_180) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_181 = tokenizar_L(`1,2`, "", 4588547)
+ si lista_tamano(Lp2_181) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_182 = tokenizar_L(`3,14`, "", 4588547)
+ si lista_tamano(Lp2_182) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_183 = tokenizar_L(`a+b`, "", 1442819)
+ si lista_tamano(Lp2_183) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_184 = tokenizar_L(`hola mundo`, "", 8520707)
+ si lista_tamano(Lp2_184) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_185 = tokenizar_L(`de	el`, "", 515)
+ si lista_tamano(Lp2_185) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_186 = tokenizar_L(`1,2`, "", 394243)
+ si lista_tamano(Lp2_186) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_187 = tokenizar_L(`tok1,tok2,tok3,tok4,tok5,tok6,tok7,tok8`, "", 394243)
+ si lista_tamano(Lp2_187) != 8 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_188 = tokenizar_L(`3.14`, "", 394243)
+ si lista_tamano(Lp2_188) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_189 = tokenizar_L(`12,34`, "", 394243)
+ si lista_tamano(Lp2_189) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_190 = tokenizar_L(`a😀b`, "", 918531)
+ si lista_tamano(Lp2_190) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_191 = tokenizar_L(`a😀b`, "", 394243)
+ si lista_tamano(Lp2_191) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_192 = tokenizar_L(`hello😀world`, "", 918531)
+ si lista_tamano(Lp2_192) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_193 = tokenizar_L(`w ,x2`, "", 394243)
+ si lista_tamano(Lp2_193) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_194 = tokenizar_L(`a@mail`, "", 394243)
+ si lista_tamano(Lp2_194) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_195 = tokenizar_L(`a@1`, "", 394243)
+ si lista_tamano(Lp2_195) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_196 = tokenizar_L(`x,y`, "", 657923)
+ si lista_tamano(Lp2_196) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_197 = tokenizar_L(`hola!!mundo3`, "", 394243)
+ si lista_tamano(Lp2_197) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_198 = tokenizar_L(`1,2`, "", 4588547)
+ si lista_tamano(Lp2_198) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_199 = tokenizar_L(`3,14`, "", 4588547)
+ si lista_tamano(Lp2_199) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_200 = tokenizar_L(`a+b`, "", 1442819)
+ si lista_tamano(Lp2_200) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_201 = tokenizar_L(`hola mundo`, "", 8520707)
+ si lista_tamano(Lp2_201) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_202 = tokenizar_L(`de	el`, "", 515)
+ si lista_tamano(Lp2_202) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_203 = tokenizar_L(`1,2`, "", 394243)
+ si lista_tamano(Lp2_203) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_204 = tokenizar_L(`tok2,tok3,tok4`, "", 394243)
+ si lista_tamano(Lp2_204) != 3 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_205 = tokenizar_L(`3.14`, "", 394243)
+ si lista_tamano(Lp2_205) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_206 = tokenizar_L(`12,34`, "", 394243)
+ si lista_tamano(Lp2_206) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_207 = tokenizar_L(`a😀b`, "", 918531)
+ si lista_tamano(Lp2_207) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_208 = tokenizar_L(`a😀b`, "", 394243)
+ si lista_tamano(Lp2_208) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_209 = tokenizar_L(`hello😀world`, "", 918531)
+ si lista_tamano(Lp2_209) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_210 = tokenizar_L(`w ,x0`, "", 394243)
+ si lista_tamano(Lp2_210) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_211 = tokenizar_L(`a@mail`, "", 394243)
+ si lista_tamano(Lp2_211) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_212 = tokenizar_L(`a@1`, "", 394243)
+ si lista_tamano(Lp2_212) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_213 = tokenizar_L(`x,y`, "", 657923)
+ si lista_tamano(Lp2_213) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_214 = tokenizar_L(`hola!!mundo0`, "", 394243)
+ si lista_tamano(Lp2_214) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_215 = tokenizar_L(`1,2`, "", 4588547)
+ si lista_tamano(Lp2_215) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_216 = tokenizar_L(`3,14`, "", 4588547)
+ si lista_tamano(Lp2_216) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_217 = tokenizar_L(`a+b`, "", 1442819)
+ si lista_tamano(Lp2_217) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_218 = tokenizar_L(`hola mundo`, "", 8520707)
+ si lista_tamano(Lp2_218) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_219 = tokenizar_L(`de	el`, "", 515)
+ si lista_tamano(Lp2_219) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_220 = tokenizar_L(`1,2`, "", 394243)
+ si lista_tamano(Lp2_220) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_221 = tokenizar_L(`tok3,tok4,tok5,tok6`, "", 394243)
+ si lista_tamano(Lp2_221) != 4 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_222 = tokenizar_L(`3.14`, "", 394243)
+ si lista_tamano(Lp2_222) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_223 = tokenizar_L(`12,34`, "", 394243)
+ si lista_tamano(Lp2_223) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_224 = tokenizar_L(`a😀b`, "", 918531)
+ si lista_tamano(Lp2_224) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_225 = tokenizar_L(`a😀b`, "", 394243)
+ si lista_tamano(Lp2_225) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_226 = tokenizar_L(`hello😀world`, "", 918531)
+ si lista_tamano(Lp2_226) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_227 = tokenizar_L(`w ,x1`, "", 394243)
+ si lista_tamano(Lp2_227) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_228 = tokenizar_L(`a@mail`, "", 394243)
+ si lista_tamano(Lp2_228) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_229 = tokenizar_L(`a@1`, "", 394243)
+ si lista_tamano(Lp2_229) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_230 = tokenizar_L(`x,y`, "", 657923)
+ si lista_tamano(Lp2_230) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_231 = tokenizar_L(`hola!!mundo1`, "", 394243)
+ si lista_tamano(Lp2_231) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_232 = tokenizar_L(`1,2`, "", 4588547)
+ si lista_tamano(Lp2_232) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_233 = tokenizar_L(`3,14`, "", 4588547)
+ si lista_tamano(Lp2_233) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_234 = tokenizar_L(`a+b`, "", 1442819)
+ si lista_tamano(Lp2_234) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_235 = tokenizar_L(`hola mundo`, "", 8520707)
+ si lista_tamano(Lp2_235) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_236 = tokenizar_L(`de	el`, "", 515)
+ si lista_tamano(Lp2_236) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_237 = tokenizar_L(`1,2`, "", 394243)
+ si lista_tamano(Lp2_237) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_238 = tokenizar_L(`tok4,tok5,tok6,tok7,tok8`, "", 394243)
+ si lista_tamano(Lp2_238) != 5 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_239 = tokenizar_L(`3.14`, "", 394243)
+ si lista_tamano(Lp2_239) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_240 = tokenizar_L(`12,34`, "", 394243)
+ si lista_tamano(Lp2_240) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_241 = tokenizar_L(`a😀b`, "", 918531)
+ si lista_tamano(Lp2_241) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_242 = tokenizar_L(`a😀b`, "", 394243)
+ si lista_tamano(Lp2_242) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_243 = tokenizar_L(`hello😀world`, "", 918531)
+ si lista_tamano(Lp2_243) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_244 = tokenizar_L(`w ,x2`, "", 394243)
+ si lista_tamano(Lp2_244) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_245 = tokenizar_L(`a@mail`, "", 394243)
+ si lista_tamano(Lp2_245) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_246 = tokenizar_L(`a@1`, "", 394243)
+ si lista_tamano(Lp2_246) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_247 = tokenizar_L(`x,y`, "", 657923)
+ si lista_tamano(Lp2_247) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_248 = tokenizar_L(`hola!!mundo2`, "", 394243)
+ si lista_tamano(Lp2_248) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_249 = tokenizar_L(`1,2`, "", 4588547)
+ si lista_tamano(Lp2_249) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_250 = tokenizar_L(`3,14`, "", 4588547)
+ si lista_tamano(Lp2_250) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_251 = tokenizar_L(`a+b`, "", 1442819)
+ si lista_tamano(Lp2_251) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_252 = tokenizar_L(`hola mundo`, "", 8520707)
+ si lista_tamano(Lp2_252) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_253 = tokenizar_L(`de	el`, "", 515)
+ si lista_tamano(Lp2_253) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_254 = tokenizar_L(`1,2`, "", 394243)
+ si lista_tamano(Lp2_254) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_255 = tokenizar_L(`tok5,tok6,tok7,tok8,tok9,tok0`, "", 394243)
+ si lista_tamano(Lp2_255) != 6 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_256 = tokenizar_L(`3.14`, "", 394243)
+ si lista_tamano(Lp2_256) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_257 = tokenizar_L(`12,34`, "", 394243)
+ si lista_tamano(Lp2_257) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_258 = tokenizar_L(`a😀b`, "", 918531)
+ si lista_tamano(Lp2_258) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_259 = tokenizar_L(`a😀b`, "", 394243)
+ si lista_tamano(Lp2_259) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_260 = tokenizar_L(`hello😀world`, "", 918531)
+ si lista_tamano(Lp2_260) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_261 = tokenizar_L(`w ,x0`, "", 394243)
+ si lista_tamano(Lp2_261) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_262 = tokenizar_L(`a@mail`, "", 394243)
+ si lista_tamano(Lp2_262) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_263 = tokenizar_L(`a@1`, "", 394243)
+ si lista_tamano(Lp2_263) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_264 = tokenizar_L(`x,y`, "", 657923)
+ si lista_tamano(Lp2_264) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_265 = tokenizar_L(`hola!!mundo3`, "", 394243)
+ si lista_tamano(Lp2_265) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_266 = tokenizar_L(`1,2`, "", 4588547)
+ si lista_tamano(Lp2_266) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_267 = tokenizar_L(`3,14`, "", 4588547)
+ si lista_tamano(Lp2_267) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_268 = tokenizar_L(`a+b`, "", 1442819)
+ si lista_tamano(Lp2_268) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_269 = tokenizar_L(`hola mundo`, "", 8520707)
+ si lista_tamano(Lp2_269) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_270 = tokenizar_L(`de	el`, "", 515)
+ si lista_tamano(Lp2_270) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_271 = tokenizar_L(`1,2`, "", 394243)
+ si lista_tamano(Lp2_271) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_272 = tokenizar_L(`tok6,tok7,tok8,tok9,tok0,tok1,tok2`, "", 394243)
+ si lista_tamano(Lp2_272) != 7 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_273 = tokenizar_L(`3.14`, "", 394243)
+ si lista_tamano(Lp2_273) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_274 = tokenizar_L(`12,34`, "", 394243)
+ si lista_tamano(Lp2_274) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_275 = tokenizar_L(`a😀b`, "", 918531)
+ si lista_tamano(Lp2_275) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_276 = tokenizar_L(`a😀b`, "", 394243)
+ si lista_tamano(Lp2_276) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_277 = tokenizar_L(`hello😀world`, "", 918531)
+ si lista_tamano(Lp2_277) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_278 = tokenizar_L(`w ,x1`, "", 394243)
+ si lista_tamano(Lp2_278) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_279 = tokenizar_L(`a@mail`, "", 394243)
+ si lista_tamano(Lp2_279) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_280 = tokenizar_L(`a@1`, "", 394243)
+ si lista_tamano(Lp2_280) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_281 = tokenizar_L(`x,y`, "", 657923)
+ si lista_tamano(Lp2_281) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_282 = tokenizar_L(`hola!!mundo0`, "", 394243)
+ si lista_tamano(Lp2_282) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_283 = tokenizar_L(`1,2`, "", 4588547)
+ si lista_tamano(Lp2_283) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_284 = tokenizar_L(`3,14`, "", 4588547)
+ si lista_tamano(Lp2_284) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_285 = tokenizar_L(`a+b`, "", 1442819)
+ si lista_tamano(Lp2_285) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_286 = tokenizar_L(`hola mundo`, "", 8520707)
+ si lista_tamano(Lp2_286) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_287 = tokenizar_L(`de	el`, "", 515)
+ si lista_tamano(Lp2_287) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_288 = tokenizar_L(`1,2`, "", 394243)
+ si lista_tamano(Lp2_288) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_289 = tokenizar_L(`tok7,tok8,tok9,tok0,tok1,tok2,tok3,tok4`, "", 394243)
+ si lista_tamano(Lp2_289) != 8 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_290 = tokenizar_L(`3.14`, "", 394243)
+ si lista_tamano(Lp2_290) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_291 = tokenizar_L(`12,34`, "", 394243)
+ si lista_tamano(Lp2_291) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_292 = tokenizar_L(`a😀b`, "", 918531)
+ si lista_tamano(Lp2_292) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_293 = tokenizar_L(`a😀b`, "", 394243)
+ si lista_tamano(Lp2_293) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_294 = tokenizar_L(`hello😀world`, "", 918531)
+ si lista_tamano(Lp2_294) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_295 = tokenizar_L(`w ,x2`, "", 394243)
+ si lista_tamano(Lp2_295) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_296 = tokenizar_L(`a@mail`, "", 394243)
+ si lista_tamano(Lp2_296) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_297 = tokenizar_L(`a@1`, "", 394243)
+ si lista_tamano(Lp2_297) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_298 = tokenizar_L(`x,y`, "", 657923)
+ si lista_tamano(Lp2_298) != 1 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ lista Lp2_299 = tokenizar_L(`hola!!mundo1`, "", 394243)
+ si lista_tamano(Lp2_299) != 2 entonces
+  fallos = fallos + 1
+ fin_si
+ n_casos = n_casos + 1
+ imprimir "CASOS=" + str_desde_numero(n_casos) + " FALLIOS=" + str_desde_numero(fallos)
+fin_principal

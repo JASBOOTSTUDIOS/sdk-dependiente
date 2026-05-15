@@ -26,6 +26,11 @@
 #define TL_MOD_STRIP_UTF8_BOM    VM_TL_MOD_STRIP_UTF8_BOM
 #define TL_MOD_UNICODE_WS_FULL   VM_TL_MOD_UNICODE_WS_FULL
 #define TL_MOD_TOKENIZE_PUNCT_WS VM_TL_MOD_TOKENIZE_PUNCT_WS
+#define TL_MOD_TOKENIZE_SYMBOL_WS VM_TL_MOD_TOKENIZE_SYMBOL_WS
+#define TL_MOD_TOKENIZE_SM_WS VM_TL_MOD_TOKENIZE_SM_WS
+#define TL_MOD_TOKENIZE_SK_WS VM_TL_MOD_TOKENIZE_SK_WS
+#define TL_MOD_COMMA_ASCII_LIST VM_TL_MOD_COMMA_ASCII_LIST
+#define TL_MOD_SEGMENT_GRAPHEME VM_TL_MOD_SEGMENT_GRAPHEME
 
 #define VM_TL_MAX_TOK 384
 #define VM_TL_MAX_CH  256
@@ -33,16 +38,6 @@
 static char g_tl_st[VM_TL_MAX_TOK][VM_TL_MAX_CH];
 static char g_tl_sw_extra[128][48];
 static int g_tl_sw_n;
-
-static void vm_tl_trim_quotes_inplace(char* s) {
-    char* p = s;
-    while (*p && (isspace((unsigned char)*p) || *p == '"' || *p == '\'')) p++;
-    if (p != s) memmove(s, p, strlen(p) + 1);
-    size_t n = strlen(s);
-    while (n > 0 && (isspace((unsigned char)s[n - 1]) || s[n - 1] == '"' || s[n - 1] == '\'')) {
-        s[--n] = '\0';
-    }
-}
 
 static void vm_tl_collapse_ws(const char* in, char* out, size_t cap) {
     size_t o = 0;
@@ -122,6 +117,42 @@ static void vm_tl_fold_latin_utf8(char* buf) {
     }
     out[o] = '\0';
     vm_tl_strcpy_cap(buf, VM_TL_WORK_CAP, out);
+}
+
+static int vm_tl_ascii_lower_eq(const char* s, const char* low_ascii) {
+    for (; *low_ascii; s++, low_ascii++) {
+        if (!*s) return 0;
+        if ((char)tolower((unsigned char)*s) != *low_ascii) return 0;
+    }
+    return *s == 0;
+}
+
+/** Paso S3 del modelo L: fusiona pares de tokens adyacentes (`de`+`el`→`del`, …) si bit CONTRACT. */
+static void vm_tl_contract_merge_adjacent_tokens(int* pn) {
+    int n = *pn;
+    if (n < 2) return;
+    for (;;) {
+        int merged = 0;
+        for (int i = 0; i + 1 < n; i++) {
+            if (vm_tl_ascii_lower_eq(g_tl_st[i], "de") && vm_tl_ascii_lower_eq(g_tl_st[i + 1], "el")) {
+                vm_tl_strcpy_cap(g_tl_st[i], VM_TL_MAX_CH, "del");
+            } else if (vm_tl_ascii_lower_eq(g_tl_st[i], "a") && vm_tl_ascii_lower_eq(g_tl_st[i + 1], "el")) {
+                vm_tl_strcpy_cap(g_tl_st[i], VM_TL_MAX_CH, "al");
+            } else if (vm_tl_ascii_lower_eq(g_tl_st[i], "por") && vm_tl_ascii_lower_eq(g_tl_st[i + 1], "que")) {
+                vm_tl_strcpy_cap(g_tl_st[i], VM_TL_MAX_CH, "porque");
+            } else if (vm_tl_ascii_lower_eq(g_tl_st[i], "para") && vm_tl_ascii_lower_eq(g_tl_st[i + 1], "que")) {
+                vm_tl_strcpy_cap(g_tl_st[i], VM_TL_MAX_CH, "paraque");
+            } else
+                continue;
+            for (int j = i + 1; j + 1 < n; j++)
+                vm_tl_strcpy_cap(g_tl_st[j], VM_TL_MAX_CH, g_tl_st[j + 1]);
+            n--;
+            *pn = n;
+            merged = 1;
+            break;
+        }
+        if (!merged) break;
+    }
 }
 
 static void vm_tl_contract_es(char* buf, size_t cap) {
@@ -238,12 +269,16 @@ static void vm_tl_push_segment_trimmed_utf8(const char* q, const char* seg_end, 
     (void)vm_tl_push_tok(pn, segbuf, strlen(segbuf));
 }
 
-static void vm_tl_segment_fill(const char* texto, size_t texto_end, const char* sep, size_t sep_len, int* pn) {
+static void vm_tl_segment_fill(const char* texto, size_t texto_end, const char* sep, size_t sep_len, uint32_t modo,
+                               int* pn) {
     *pn = 0;
     const char* texto_endp = texto + texto_end;
     if (sep_len == 0) {
         struct vm_tl_seg_push_ctx ctx = { pn };
-        (void)vm_tl_utf8_segment_by_whitespace(texto, texto_end, vm_tl_seg_emit_push, &ctx);
+        if ((modo & TL_MOD_SEGMENT_GRAPHEME) != 0u)
+            (void)vm_tl_utf8_segment_by_whitespace_graphemes(texto, texto_end, vm_tl_seg_emit_push, &ctx);
+        else
+            (void)vm_tl_utf8_segment_by_whitespace(texto, texto_end, vm_tl_seg_emit_push, &ctx);
         return;
     } else if (sep_len == 1) {
         unsigned char sep_ch = (unsigned char)sep[0];
@@ -307,9 +342,10 @@ static void vm_run_tokenizar_L(VM* vm, uint8_t dest_reg, uint32_t id_txt, uint32
                 vm_tl_collapse_ws(work, collapsed, sizeof collapsed);
             vm_tl_strcpy_cap(work, sizeof work, collapsed);
         }
-        vm_tl_trim_quotes_inplace(work);
-        if ((modo & TL_MOD_TOKENIZE_PUNCT_WS) != 0u) {
-            vm_tl_punctuation_to_space_inplace(work, sizeof work);
+        vm_tl_utf8_trim_edges_inplace(work);
+        if ((modo & (TL_MOD_TOKENIZE_PUNCT_WS | TL_MOD_TOKENIZE_SYMBOL_WS | TL_MOD_TOKENIZE_SM_WS | TL_MOD_TOKENIZE_SK_WS))
+            != 0u) {
+            vm_tl_punctuation_to_space_inplace(work, sizeof work, modo);
             if ((modo & TL_MOD_COLLAPSE) != 0u) {
                 char collapsed_p[VM_TL_WORK_CAP];
                 if ((modo & TL_MOD_UNICODE_WS_FULL) != 0u)
@@ -325,11 +361,12 @@ static void vm_run_tokenizar_L(VM* vm, uint8_t dest_reg, uint32_t id_txt, uint32
     size_t texto_end = strlen(texto);
 
     int n_tok = 0;
-    vm_tl_segment_fill(texto, texto_end, sep, sep_len, &n_tok);
+    vm_tl_segment_fill(texto, texto_end, sep, sep_len, modo, &n_tok);
+    if ((modo & TL_MOD_CONTRACT) != 0u) vm_tl_contract_merge_adjacent_tokens(&n_tok);
 
     unsigned char keep[VM_TL_MAX_TOK];
     for (int i = 0; i < n_tok; i++) {
-        vm_tl_trim_quotes_inplace(g_tl_st[i]);
+        vm_tl_utf8_trim_edges_inplace(g_tl_st[i]);
         if ((modo & TL_MOD_STRIP_PUNCT) != 0u)
             vm_tl_strip_punct_edges(g_tl_st[i]);
         /* tolower byte a byte solo si no hay normalización Unicode (rompería UTF-8 multibyte). */
@@ -350,7 +387,9 @@ static void vm_run_tokenizar_L(VM* vm, uint8_t dest_reg, uint32_t id_txt, uint32
     if (texto_raw)
         ensure_jmn_col(vm);
     if (texto_raw && vm->mem_colecciones) {
-        list_id = (uint32_t)(vm_hash_texto(texto_raw) ^ vm_hash_texto(sep ? sep : "") ^ 0x544B4E4Cu);
+        /* Incluir modo, min_len y stopwords (evitar solo `modo<<20`: 918531 vs 394243 colisionaba en 32 bits). */
+        list_id = (uint32_t)(vm_hash_texto(texto_raw) ^ vm_hash_texto(sep ? sep : "")
+            ^ (modo * 0x9E3779B9u) ^ (min_len * 0x85EBCA6Bu) ^ stops_id ^ 0x544B4E4Cu);
         jmn_crear_lista(vm->mem_colecciones, list_id);
 
         for (int i = 0; i < n_tok; i++) {

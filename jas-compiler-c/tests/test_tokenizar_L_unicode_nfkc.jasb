@@ -52,6 +52,52 @@ principal
         fallos = fallos + 1
     fin_si
 
+    /* Decimal con punto entre digitos se conserva (un token) */
+    lista L9 = tokenizar_L("3.14", "", 394243)
+    si lista_tamano(L9) != 1 entonces
+        fallos = fallos + 1
+    fin_si
+
+    /* 918531 = 394243 | 524288: So (emoji) como frontera -> "a" y "b", sin token literal del emoji */
+    lista L10 = tokenizar_L("a😀b", "", 918531)
+    si lista_tamano(L10) != 2 entonces
+        fallos = fallos + 1
+    fin_si
+
+    /* Mismo texto con dos modos: listas distintas (id de lista mezcla modo en la VM) */
+    lista L11a = tokenizar_L("a😀b", "", 918531)
+    lista L11b = tokenizar_L("a😀b", "", 394243)
+    si lista_tamano(L11a) != 2 entonces
+        fallos = fallos + 1
+    fin_si
+    si lista_tamano(L11b) != 1 entonces
+        fallos = fallos + 1
+    fin_si
+
+    /* 4194304 COMMA_ASCII_LIST: coma entre dígitos ASCII parte (lista 1,2) */
+    lista L12 = tokenizar_L("1,2", "", 4588547)
+    si lista_tamano(L12) != 2 entonces
+        fallos = fallos + 1
+    fin_si
+
+    /* 1048576 SM: operador + (Sm) como frontera */
+    lista L13 = tokenizar_L("a+b", "", 1442819)
+    si lista_tamano(L13) != 2 entonces
+        fallos = fallos + 1
+    fin_si
+
+    /* 8388608 SEGMENT_GRAPHEME + paso 1+2 habitual: ASCII sigue bien */
+    lista L14 = tokenizar_L("hola mundo", "", 8520707)
+    si lista_tamano(L14) != 2 entonces
+        fallos = fallos + 1
+    fin_si
+
+    /* S3: contracción en tokens adyacentes (de + el -> del) con CONTRACT */
+    lista L15 = tokenizar_L("de\tel", "", 515)
+    si lista_tamano(L15) != 1 entonces
+        fallos = fallos + 1
+    fin_si
+
     imprimir("UNICODE_NFKC_FALLIOS=")
     imprimir(fallos)
     imprimir("\n")

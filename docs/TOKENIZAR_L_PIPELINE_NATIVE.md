@@ -1,6 +1,6 @@
 # Pipeline L nativo: `tokenizar_L` y `claves_L` (SDK)
 
-Comportamiento y límites alineados con **`jasboot-ir/src/vm_tokenizar_l_pipeline.inc`** y **`vm_unicode_norm.c`** (utf8proc, `third_party/utf8proc/`). Complementa `flujo_model_IA/01_tokenizacion_L.md` con lo que **implementa la VM hoy** (stem sigue siendo heurístico, no Snowball).
+Comportamiento y límites alineados con **`flujo_model_IA/01_tokenizacion_L.md`** (paso 2: delimitadores por bits; S3: contracciones tras segmentar) y con **`jasboot-ir/src/vm_tokenizar_l_pipeline.inc`** y **`vm_unicode_norm.c`** (utf8proc, `third_party/utf8proc/`). El stem sigue siendo heurístico, no Snowball.
 
 ## Qué son
 
@@ -42,11 +42,68 @@ Objetivo alineado con `flujo_model_IA/01_tokenizacion_L.md`: dejar el texto en u
 3. **Plegado Latin lite** (**128**): solo si **no** hay forma **1024…8192** (evita duplicar trabajo).
 4. **Contracciones ES** (**512**): `del`, `al`, etc.
 5. **Colapsar** (**2**): con **131072** + **2**, colapso Unicode-aware (`vm_tl_collapse_ws_unicode`); si no, colapso por bytes `isspace` (`vm_tl_collapse_ws`).
-6. **Trim** de comillas/espacios extremos en `work`.
+6. **Trim bordes UTF-8** en `work`: espacio Unicode (Zs/Zl/Zp, ASCII ws, U+FEFF) y comillas ASCII `"` `'` (`vm_tl_utf8_trim_edges_inplace`).
 
 **Qué no cubre el paso 1 (normalización):** no hay **tailoring por locale** (p. ej. turco *i/İ*) más allá del **casefold** de Unicode cuando usas formas **1024…8192** con minúsculas. No hay normalización **por streaming** fuera del buffer `work[]` (**8191** bytes útiles + NUL): entradas más largas se **truncan** al copiar, sin código de error.
 
-**Segmentación con `sep` vacío (`sep_len == 0`):** la VM parte por **utf8proc** (codepoint a codepoint) con el **mismo criterio de separador** que `vm_tl_collapse_ws_unicode`: categorías **Zs, Zl, Zp**, ASCII HT/LF/CR/FF/VT/SP y **U+FEFF** (`vm_tl_utf8_segment_by_whitespace` en `vm_unicode_norm.c`). Los separadores de ancho cero (p. ej. **ZWSP U+200B**) **no** cortan. UTF-8 inválido: se avanza **1 byte** sin partir (el byte permanece en el token actual). El bit **131072** + colapsar **2** sigue siendo útil para **normalizar** runs de espacio a un solo ASCII **antes** de segmentar; con solo modo **3**, NBSP entre palabras **sí** separa tokens gracias a esta segmentación.
+## Paso 2 — Fronteras antes de segmentar (delimitadores configurables por bits)
+
+Si el modo incluye alguno de **262144** (**P***), **524288** (**So**), **1048576** (**Sm**), **2097152** (**Sk**), tras el trim de `work` la VM ejecuta `vm_tl_punctuation_to_space_inplace` y, si **colapsar (2)** sigue activo, vuelve a colapsar espacios (Unicode-aware si **131072**).
+
+| Categoría utf8proc | Bit (`modo`) | Efecto |
+|--------------------|--------------|--------|
+| **P*** (Pd, Pe, Pf, Pi, Po, Ps, Pc) | **262144** | Sustituye el codepoint por **separación** (espacio tras colapsar): frontera con `sep` vacío. |
+| **So** | **524288** | Igual: **frontera**; el glifo **no** se conserva como token. |
+| **Sm** (símbolo matemático, p. ej. `+`, `=`) | **1048576** | Frontera (mismo mecanismo). |
+| **Sk** (símbolo modificador) | **2097152** | Frontera. |
+
+**Coma entre dígitos ASCII (listas vs decimal):** bit **4194304** (`VM_TL_MOD_COMMA_ASCII_LIST`) con **262144**: la coma entre **`0-9`** y **`0-9`** **no** aplica la heurística decimal (p. ej. `1,2` → dos tokens; `3,14` → `3` y `14`). Sin este bit, `12,34` y `1,2` siguen la regla **Nd**/ASCII de *smart keep*.
+
+**Heurísticas “smart keep”** (solo cuando **262144** está activo y el codepoint es **P***):
+
+- **`.`** ASCII y **U+FF0E**: se conservan si el carácter **significativo anterior** y el **siguiente** codepoint son dígitos (`Nd` o ASCII `0-9`). Ej.: `3.14`; `12,34` con **`,`** y **U+FF0C** entre dígitos se comportan igual (salvo coma **ASCII** si está activo **4194304**).
+- **`@`**: se conserva si el **siguiente** codepoint es letra Unicode (`Lu`, `Ll`, `Lt`, `Lm`, `Lo`).
+
+**Límites del paso 2:**
+
+- No intenta conservar **URLs** completas: puntos entre letras (p. ej. `host.name`) actúan como frontera salvo los casos anteriores.
+- Sin bit **4194304**, **`1,2`** con coma entre dígitos ASCII queda **un** token (decimal europeo); con **4194304**, **dos** tokens (lista).
+- **Contracciones** fijas en ES: bit **512** (ver **S3** abajo); no hay reglas por dominio más allá de los bits.
+- Requiere **colapsar (2)** para limpiar runs de espacio tras sustituir delimitadores; combinación Neurixis típica **918531** = **394243 \| 524288**.
+
+## Paso S3 — Reconstruir contracciones (Regla B del modelo L)
+
+Con bit **512** (`TL_MOD_CONTRACT`):
+
+1. **Sobre el buffer `work`** (antes de segmentar): `vm_tl_contract_es` sustituye subcadenas con espacios (` de el ` → ` del `, etc.), como hasta ahora.
+2. **Tras segmentar** (`vm_tl_segment_fill`): `vm_tl_contract_merge_adjacent_tokens` fusiona **pares de tokens consecutivos** (comparación ASCII case-insensitive): `de`+`el`→`del`, `a`+`el`→`al`, `por`+`que`→`porque`, `para`+`que`→`paraque`. Así se cubre el paso **S3** del diagrama en `01_tokenizacion_L.md` cuando la segmentación separó palabras que debían unirse (p. ej. `de\tel` → dos trozos → un token `del`).
+
+**Ejemplos (con `sep` vacío `""`):**
+
+```jasboot
+# CSV / comas: dos tokens
+lista A = tokenizar_L("x,y", "", 394243)
+
+# Decimal: un token
+lista B = tokenizar_L("3.14", "", 394243)
+
+# Lista con comas ASCII: dos tokens
+lista B2 = tokenizar_L("1,2", "", 4588547)
+
+# Emoji U+1F600 (So): dos tokens "a" y "b"
+lista C = tokenizar_L("a😀b", "", 918531)
+
+# Solo So (524288) sin P*: la coma no parte; el emoji sigue partiendo
+lista D = tokenizar_L("x,y", "", 657923)
+
+# Sm: a + b
+lista E = tokenizar_L("a+b", "", 1442819)
+
+# Contracción tras segmentar
+lista F = tokenizar_L("de\tel", "", 515)
+```
+
+**Segmentación con `sep` vacío (`sep_len == 0`):** por defecto, **cortes en codepoints** no espacio, con el mismo criterio de separador que `vm_tl_collapse_ws_unicode` (`vm_tl_utf8_segment_by_whitespace`). Con bit **8388608** (`VM_TL_MOD_SEGMENT_GRAPHEME`), se usa **`vm_tl_utf8_segment_by_whitespace_graphemes`**: fronteras de **grupo de grafema** UAX#29 (`utf8proc_grapheme_break_stateful`); los blancos se detectan **por clúster** (todo el clúster debe ser “espacio” para cortar). UTF-8 inválido: se avanza **1 byte** sin partir. ZWSP **no** corta.
 
 ## Modo (bits; máscara en VM `modo & 0xFFFFFFFF`)
 
@@ -70,7 +127,12 @@ Objetivo alineado con `flujo_model_IA/01_tokenizacion_L.md`: dejar el texto en u
 | 32768 | `TL_MOD_STRIP_UTF8_BOM` | Quita **BOM UTF-8** (`EF BB BF`) al inicio del buffer **antes** de normalizar. |
 | 65536 | `TL_MOD_UNICODE_STRIPCC` | Con (o sin) forma: quita / normaliza **caracteres de control** (`UTF8PROC_STRIPCC`) en la pasada de postproceso. |
 | 131072 | `TL_MOD_UNICODE_WS_FULL` | Solo tiene efecto útil junto a **colapsar (2)**: colapso de espacio “Unicode-aware” (NBSP, Zl, Zp, etc.). |
-| 262144 | `TL_MOD_TOKENIZE_PUNCT_WS` | Antes de segmentar: codepoints categoría **P*** (puntuación Unicode) → espacio ASCII; si **colapsar** está activo, se vuelve a colapsar el `work`. Equivale a “puntuación como frontera de palabra” para `sep` vacío (p. ej. `x,y` → dos tokens con **394243** = 1027+131072+262144). |
+| 262144 | `TL_MOD_TOKENIZE_PUNCT_WS` | Antes de segmentar: codepoints categoría **P*** → espacio ASCII (tras colapsar si aplica). Ej.: `x,y` → dos tokens con **394243** (= 1027+131072+262144). |
+| 524288 | `TL_MOD_TOKENIZE_SYMBOL_WS` | Igual para categoría **So** (muchos emojis): frontera; el glifo **no** se emite como token. Combinar con **262144** para Neurixis completo: **918531** (= 394243 \| 524288). |
+| 1048576 | `TL_MOD_TOKENIZE_SM_WS` | Categoría **Sm** → frontera (p. ej. `+`, `=`). |
+| 2097152 | `TL_MOD_TOKENIZE_SK_WS` | Categoría **Sk** → frontera. |
+| 4194304 | `TL_MOD_COMMA_ASCII_LIST` | Con **262144**: coma entre dígitos **ASCII** `0-9` **no** se conserva como decimal (listas `1,2`). |
+| 8388608 | `TL_MOD_SEGMENT_GRAPHEME` | Con `sep` vacío: cortes en **frontera de grafema** UAX#29 (`vm_tl_utf8_segment_by_whitespace_graphemes`). |
 
 **Reglas globales del modo:**
 
@@ -85,9 +147,12 @@ Ejemplos:
 - **`8195`** = NFKD + colapsar + casefold (ligaduras compat, p. ej. `ﬁlm` → `film`).
 - **`17411`** = NFKC + strip marcas + colapsar + casefold (`café` → `cafe`).
 - **`131075`** = colapso Unicode + colapsar + lower (NBSP y demás Zs/Zl/Zp se colapsan a espacio ASCII antes de segmentar; `hola` + NBSP + `mundo` → dos tokens). Con solo modo **`3`**, NBSP entre palabras **también** produce dos tokens (segmentación Unicode en `sep` vacío).
-- **`394243`** = `1027 | 131072 | 262144`: NFKC + colapso WS Unicode + **puntuación → espacio** (Neurixis `normalizar_entrada`; p. ej. `x,y` → dos tokens).
+- **`394243`** = `1027 | 131072 | 262144`: NFKC + colapso WS Unicode + **puntuación → espacio** (paso 2 sin So).
+- **`4588547`** = `394243 | 4194304`: paso 2 con **coma lista ASCII** (`1,2` → dos tokens).
+- **`1442819`** = `394243 | 1048576`: paso 2 con **Sm** (`a+b` → dos tokens).
+- **`8520707`** = `1027 | 131072 | 8388608`: NFKC + colapso WS + **segmentación por grafema**.
 
-Orden interno tras la normalización en `work` (incl. trim comillas en `work`): **segmentar** (`vm_tl_segment_fill`; con `sep_len==0`, lógica Unicode anterior) → por token: trim, strip punct (**64**), `tolower` por byte **solo** si no hubo forma Unicode **1024…8192**, stem (**32**), `keep` → lista → bigramas (**4**) → trigramas (**16**).
+Orden interno tras la normalización en `work` (incl. trim bordes UTF-8 en `work`): **segmentar** (Unicode por codepoint o por grafema si **8388608**) → **S3**: fusionar contracciones en tokens adyacentes si **512** → por token: trim bordes UTF-8, strip punct (**64**), `tolower` por byte **solo** si no hubo forma Unicode **1024…8192**, stem (**32**), `keep` → lista → bigramas (**4**) → trigramas (**16**).
 
 ## Separador
 
@@ -97,7 +162,7 @@ Tras normalizar en el buffer de trabajo, `sep_len = strlen(separador)`:
 
 | `sep_len` | Comportamiento |
 |-----------|----------------|
-| **0**     | **Separadores Unicode de espacio** (Zs/Zl/Zp, ASCII HT/LF/FF/CR/VT/SP, U+FEFF) vía `utf8proc_iterate`; implementación `vm_tl_utf8_segment_by_whitespace`. Trozos = runs de no-separador. |
+| **0**     | **Blancos Unicode** (Zs/Zl/Zp, ASCII HT/LF/FF/CR/VT/SP, U+FEFF). Por defecto `vm_tl_utf8_segment_by_whitespace` (**cortes entre codepoints** no espacio). Con bit **8388608**, `vm_tl_utf8_segment_by_whitespace_graphemes` (**cortes entre clústeres de grafema**; un clúster es “separador” solo si todos sus codepoints son espacio). |
 | **1**     | Delimitador **un carácter** (p. ej. `","`). |
 | **> 1**   | Delimitador **`strstr`** con la subcadena completa. |
 
@@ -118,7 +183,7 @@ En segmentos delimitados (`sep_len == 1` o `> 1`) se recortan bordes con **utf8p
 | Trigramas | Buffer interno **1536** bytes | Igual para tres tokens. |
 | Stopwords CSV extra | Hasta **128** entradas × **47** chars útiles + NUL | Tras parseo por comas. |
 | Unicode | **utf8proc** 2.11.3 (`third_party/utf8proc/`): NFC, NFD, NFKC, NFKD, casefold, strip marcas/CC, colapso Zs/Zl/Zp; datos embebidos ~2,3 MiB. | Ver `LICENSE.md`. Sin tailoring regional extra. |
-| Id de lista | `hash(texto_raw) ^ hash(sep) ^ 0x544B4E4C` | Colisiones teóricas posibles entre llamadas distintas. |
+| Id de lista | `hash(texto_raw) ^ hash(sep) ^ (modo·0x9E3779B9) ^ (min_len·0x85EBCA6B) ^ stops_id ^ 0x544B4E4C` (32 bits) | Incluye **modo** y **min_len** para que el mismo literal con distinto `modo` no reutilice la misma lista en memoria. Colisiones 32→32 siguen siendo posibles en teoría. |
 
 ## Casos de uso
 
@@ -137,19 +202,21 @@ En bucles, **`mientras i < N - 1`** puede parsearse de forma no intuitiva; usar 
 | Archivo | Qué comprueba |
 |---------|----------------|
 | `jas-compiler-c/tests/test_tokenizar_L.jasb` | Espacios, comas, modo 7 (bigramas), modo 23 (bi+tri). |
-| `jas-compiler-c/tests/test_tokenizar_L_unicode_nfkc.jasb` | NFKC/NFC/NFKD/strip/NBSP (**1027**, **2051**, **8195**, **17411**, **131075**, ASCII **3**); salida **`UNICODE_NFKC_FALLIOS=0`**. |
+| `jas-compiler-c/tests/test_tokenizar_L_unicode_nfkc.jasb` | NFKC/NFC/NFKD/strip/NBSP; paso 2 (coma lista, Sm, grafema, S3); salida **`UNICODE_NFKC_FALLIOS=0`**. |
 | `jas-compiler-c/tests/test_tokenizar_L_estres_200.jasb` | **200** escenarios (longitud, modos 7/11/23/67/259); salida **`CASOS=200 FALLIOS=0`**. |
-| `jas-compiler-c/tests/test_tokenizar_L_seg_ws_unicode_300.jasb` | **300** casos: NBSP, EM SPACE, Zl/Zp, FEFF, modos **3** / **1027**; **`CASOS=300 FALLIOS=0`**. Generador: `tests/_gen_tokenizar_L_seg_ws_unicode_300.py`. |
+| `jas-compiler-c/tests/test_tokenizar_L_seg_ws_unicode_300.jasb` | **300** casos: NBSP, EM SPACE, Zl/Zp, FEFF, modos **3** / **1027**; **`CASOS = 300 FALLIOS = 0`**. Generador: `_gen_tokenizar_L_seg_ws_unicode_300.py`. |
+| `jas-compiler-c/tests/test_tokenizar_L_paso2_completo_300.jasb` | **300** casos: paso 2 (P*, So, Sm, coma lista, grafema) y **S3** contracciones. **`CASOS=300 FALLIOS=0`**. Generador: `_gen_tokenizar_L_paso2_300.py`. |
 
 ```bash
 node .vscode/run-jasb.cjs sdk-dependiente/jas-compiler-c/tests/test_tokenizar_L.jasb
 node .vscode/run-jasb.cjs sdk-dependiente/jas-compiler-c/tests/test_tokenizar_L_unicode_nfkc.jasb
 node .vscode/run-jasb.cjs sdk-dependiente/jas-compiler-c/tests/test_tokenizar_L_estres_200.jasb
 node .vscode/run-jasb.cjs sdk-dependiente/jas-compiler-c/tests/test_tokenizar_L_seg_ws_unicode_300.jasb
+node .vscode/run-jasb.cjs sdk-dependiente/jas-compiler-c/tests/test_tokenizar_L_paso2_completo_300.jasb
 ```
 
 ## Referencias de código
 
-- VM: **`vm_tokenizar_l_pipeline.inc`**, **`vm_unicode_norm.c`** / **`vm_unicode_norm.h`** (normalización, colapso, **`vm_tl_utf8_segment_by_whitespace`**), **`vm_tokenizar_unicode_bits.h`**, **utf8proc** (`third_party/utf8proc/`).
+- VM: **`vm_tokenizar_l_pipeline.inc`**, **`vm_unicode_norm.c`** / **`vm_unicode_norm.h`** (normalización, colapso, **`vm_tl_utf8_segment_by_whitespace`**, **`vm_tl_utf8_segment_by_whitespace_graphemes`**, **`vm_tl_punctuation_to_space_inplace`**), **`vm_tokenizar_unicode_bits.h`**, **utf8proc** (`third_party/utf8proc/`).
 
-**Última revisión:** 2026-05-14 — Segmentación `sep_len==0` Unicode-aware; prueba **`test_tokenizar_L_seg_ws_unicode_300.jasb`**; paso 1 (NFD/NFKD, BOM, strip, colapso WS, buffer **8192**).
+**Última revisión:** 2026-05-15 — Paso 2 completo al modelo L: **Sm/Sk**, **coma lista ASCII**, **grafema**, **S3** contracciones; pruebas **`test_tokenizar_L_paso2_completo_300.jasb`** y **`test_tokenizar_L_unicode_nfkc.jasb`** (L12+).

@@ -90,6 +90,68 @@ int vm_tl_utf8_segment_by_whitespace(const char* texto, size_t texto_len, vm_tl_
     return 1;
 }
 
+static int vm_tl_cluster_all_space_like(const char* s, size_t len) {
+    if (!s || len == 0) return 1;
+    utf8proc_ssize_t pos = 0;
+    while ((size_t)pos < len) {
+        utf8proc_int32_t cp = 0;
+        utf8proc_ssize_t adv = utf8proc_iterate(
+            (const utf8proc_uint8_t*)s + pos, (utf8proc_ssize_t)(len - (size_t)pos), &cp);
+        if (adv <= 0) return 0;
+        if (!vm_tl_cp_is_space_like(cp)) return 0;
+        pos += adv;
+    }
+    return 1;
+}
+
+int vm_tl_utf8_segment_by_whitespace_graphemes(const char* texto, size_t texto_len, vm_tl_ws_emit_fn emit, void* udata) {
+    if (!emit) return 0;
+    if (!texto || texto_len == 0) return 1;
+    utf8proc_int32_t gb_state = 0;
+    size_t gb_cluster_start = 0;
+    size_t token_start = 0;
+    utf8proc_ssize_t p = 0;
+    utf8proc_int32_t prev_cp = 0;
+    int first_cp = 1;
+    while ((size_t)p < texto_len) {
+        utf8proc_int32_t cp = 0;
+        utf8proc_ssize_t adv = utf8proc_iterate(
+            (const utf8proc_uint8_t*)texto + p, (utf8proc_ssize_t)(texto_len - (size_t)p), &cp);
+        if (adv <= 0) {
+            if ((size_t)p >= texto_len) break;
+            p += 1;
+            continue;
+        }
+        if (!first_cp && utf8proc_grapheme_break_stateful(prev_cp, cp, &gb_state)) {
+            const size_t c0 = gb_cluster_start;
+            const size_t c1 = (size_t)p;
+            if (vm_tl_cluster_all_space_like(texto + c0, c1 - c0)) {
+                if (c0 > token_start) {
+                    if (!emit(udata, texto + token_start, c0 - token_start)) return 0;
+                }
+                token_start = c1;
+            }
+            gb_cluster_start = (size_t)p;
+            gb_state = 0;
+        }
+        first_cp = 0;
+        prev_cp = cp;
+        p += adv;
+    }
+    const size_t c0 = gb_cluster_start;
+    const size_t c1 = texto_len;
+    if (vm_tl_cluster_all_space_like(texto + c0, c1 - c0)) {
+        if (c0 > token_start) {
+            if (!emit(udata, texto + token_start, c0 - token_start)) return 0;
+        }
+    } else {
+        if (c1 > token_start) {
+            if (!emit(udata, texto + token_start, c1 - token_start)) return 0;
+        }
+    }
+    return 1;
+}
+
 static int vm_tl_cp_is_punct_cat(utf8proc_int32_t cp) {
     utf8proc_category_t c = utf8proc_category(cp);
     return (c == UTF8PROC_CATEGORY_PD || c == UTF8PROC_CATEGORY_PE || c == UTF8PROC_CATEGORY_PF
@@ -97,33 +159,91 @@ static int vm_tl_cp_is_punct_cat(utf8proc_int32_t cp) {
             || c == UTF8PROC_CATEGORY_PC);
 }
 
-void vm_tl_punctuation_to_space_inplace(char* buf, size_t cap) {
+static int vm_tl_cp_is_nd_or_ascii_digit(utf8proc_int32_t cp) {
+    if (cp >= '0' && cp <= '9') return 1;
+    return utf8proc_category(cp) == UTF8PROC_CATEGORY_ND;
+}
+
+static int vm_tl_cp_is_letter(utf8proc_int32_t cp) {
+    utf8proc_category_t c = utf8proc_category(cp);
+    return (c == UTF8PROC_CATEGORY_LU || c == UTF8PROC_CATEGORY_LL || c == UTF8PROC_CATEGORY_LT
+            || c == UTF8PROC_CATEGORY_LM || c == UTF8PROC_CATEGORY_LO);
+}
+
+static int vm_tl_punct_smart_keep(utf8proc_int32_t cp, utf8proc_int32_t last_sig, utf8proc_int32_t next_cp,
+                                  utf8proc_ssize_t next_adv, uint32_t modo) {
+    if (next_adv <= 0) next_cp = 0;
+    if (cp == '.' || cp == 0xFF0Eu) { /* ASCII FULL STOP, FULLWIDTH FULL STOP */
+        if (last_sig >= 0 && vm_tl_cp_is_nd_or_ascii_digit(last_sig) && vm_tl_cp_is_nd_or_ascii_digit(next_cp))
+            return 1;
+    }
+    if (cp == ',' || cp == 0xFF0Cu) { /* COMMA, FULLWIDTH COMMA */
+        if ((modo & VM_TL_MOD_COMMA_ASCII_LIST) != 0 && next_adv > 0 && last_sig >= '0' && last_sig <= '9'
+            && next_cp >= '0' && next_cp <= '9') {
+            return 0;
+        }
+        if (last_sig >= 0 && vm_tl_cp_is_nd_or_ascii_digit(last_sig) && vm_tl_cp_is_nd_or_ascii_digit(next_cp))
+            return 1;
+    }
+    if (cp == '@' && next_adv > 0 && vm_tl_cp_is_letter(next_cp)) return 1;
+    return 0;
+}
+
+void vm_tl_punctuation_to_space_inplace(char* buf, size_t cap, uint32_t modo) {
+    const int want_punct = (modo & VM_TL_MOD_TOKENIZE_PUNCT_WS) != 0;
+    const int want_sym = (modo & VM_TL_MOD_TOKENIZE_SYMBOL_WS) != 0;
+    const int want_sm = (modo & VM_TL_MOD_TOKENIZE_SM_WS) != 0;
+    const int want_sk = (modo & VM_TL_MOD_TOKENIZE_SK_WS) != 0;
+    if (!want_punct && !want_sym && !want_sm && !want_sk) return;
     if (!buf || cap < 2) return;
     char tmp[8192];
     if (cap > sizeof tmp) cap = sizeof tmp;
     size_t w = 0;
-    int pending_space = 0;
+    int pending = 0;
+    utf8proc_int32_t last_sig = -1;
     utf8proc_ssize_t pos = 0;
     for (;;) {
         utf8proc_int32_t cp = 0;
         utf8proc_ssize_t adv = utf8proc_iterate((const utf8proc_uint8_t*)buf + pos, -1, &cp);
         if (adv <= 0) break;
-        if (vm_tl_cp_is_punct_cat(cp)) {
-            pending_space = 1;
-        } else {
-            if (pending_space) {
-                if (w == 0 || (w > 0 && tmp[w - 1] != ' ')) {
-                    if (w + 1 < cap) tmp[w++] = ' ';
-                }
-                pending_space = 0;
+
+        utf8proc_int32_t next_cp = 0;
+        utf8proc_ssize_t next_adv = utf8proc_iterate((const utf8proc_uint8_t*)buf + pos + adv, -1, &next_cp);
+
+        utf8proc_category_t cat = utf8proc_category(cp);
+        const int is_so = (cat == UTF8PROC_CATEGORY_SO);
+        const int is_sm = (cat == UTF8PROC_CATEGORY_SM);
+        const int is_sk = (cat == UTF8PROC_CATEGORY_SK);
+        const int is_punct = vm_tl_cp_is_punct_cat(cp);
+        const int sym_boundary = (want_sym && is_so) || (want_sm && is_sm) || (want_sk && is_sk);
+
+        int smart_keep = 0;
+        if (want_punct && is_punct) smart_keep = vm_tl_punct_smart_keep(cp, last_sig, next_cp, next_adv, modo);
+
+        if (want_punct && is_punct && smart_keep) {
+            if (pending) {
+                if ((w == 0 || tmp[w - 1] != ' ') && w + 1 < cap) tmp[w++] = ' ';
+                pending = 0;
             }
             if ((size_t)adv >= cap - w) break;
             memcpy(tmp + w, buf + pos, (size_t)adv);
             w += (size_t)adv;
+            if (!vm_tl_cp_is_space_like(cp)) last_sig = cp;
+        } else if (sym_boundary || (want_punct && is_punct)) {
+            pending = 1;
+        } else {
+            if (pending) {
+                if ((w == 0 || tmp[w - 1] != ' ') && w + 1 < cap) tmp[w++] = ' ';
+                pending = 0;
+            }
+            if ((size_t)adv >= cap - w) break;
+            memcpy(tmp + w, buf + pos, (size_t)adv);
+            w += (size_t)adv;
+            if (!vm_tl_cp_is_space_like(cp)) last_sig = cp;
         }
         pos += adv;
     }
-    if (pending_space && w > 0 && tmp[w - 1] != ' ' && w + 1 < cap) tmp[w++] = ' ';
+    if (pending && w > 0 && tmp[w - 1] != ' ' && w + 1 < cap) tmp[w++] = ' ';
     tmp[w] = '\0';
     size_t i = 0;
     for (; tmp[i] && i + 1 < cap; i++) buf[i] = tmp[i];

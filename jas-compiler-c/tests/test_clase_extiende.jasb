@@ -5,9 +5,14 @@ fin_clase
 
 clase Perro extiende Animal
     texto nombre
-    funcion ladrar
+    funcion ladrar() retorna
+        imprimir "Guau!"
+    fin_funcion
 fin_clase
 
 principal
+    Perro p
+    p.nombre = "Firulais"
+    p.ladrar()
     imprimir "clase_extiende_ok"
 fin_principal

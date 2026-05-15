@@ -28,6 +28,30 @@
  */
 #define VM_TL_MOD_TOKENIZE_PUNCT_WS 262144u
 
+/**
+ * Antes de segmentar: categoría **So** (símbolo distinto / emojis típicos) → espacio ASCII como frontera.
+ * Combinar con **262144** para puntuación + emojis (p. ej. Neurixis **918531** = 394243 | 524288).
+ */
+#define VM_TL_MOD_TOKENIZE_SYMBOL_WS 524288u
+
+/** Categoría **Sm** (símbolos matemáticos, p. ej. `+`, `=`) → frontera (sustitución por espacio como So). */
+#define VM_TL_MOD_TOKENIZE_SM_WS 1048576u
+
+/** Categoría **Sk** (símbolo modificador) → frontera. */
+#define VM_TL_MOD_TOKENIZE_SK_WS 2097152u
+
+/**
+ * Con **262144**: la coma entre **dígitos ASCII** (`0-9`) **no** usa la heurística decimal
+ * (sirve para listas tipo `1,2,3`). Los dígitos Unicode `Nd` no ASCII siguen pudiendo conservar coma decimal.
+ */
+#define VM_TL_MOD_COMMA_ASCII_LIST 4194304u
+
+/**
+ * Con `sep` vacío: segmentar por blancos en **fronteras de grafema** (UAX#29, `utf8proc_grapheme_break_stateful`).
+ * Agrupa p. ej. base + marcas combinantes o secuencias emoji+ZWJ+emoji en un solo token si no hay espacio intermedio.
+ */
+#define VM_TL_MOD_SEGMENT_GRAPHEME 8388608u
+
 #define VM_TL_UNICODE_NORM_FORM_MASK \
     (VM_TL_MOD_UNICODE_NFKC | VM_TL_MOD_UNICODE_NFC | VM_TL_MOD_UNICODE_NFD | VM_TL_MOD_UNICODE_NFKD)
 
