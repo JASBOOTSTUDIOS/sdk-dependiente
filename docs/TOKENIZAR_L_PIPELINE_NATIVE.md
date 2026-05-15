@@ -70,6 +70,7 @@ Objetivo alineado con `flujo_model_IA/01_tokenizacion_L.md`: dejar el texto en u
 | 32768 | `TL_MOD_STRIP_UTF8_BOM` | Quita **BOM UTF-8** (`EF BB BF`) al inicio del buffer **antes** de normalizar. |
 | 65536 | `TL_MOD_UNICODE_STRIPCC` | Con (o sin) forma: quita / normaliza **caracteres de control** (`UTF8PROC_STRIPCC`) en la pasada de postproceso. |
 | 131072 | `TL_MOD_UNICODE_WS_FULL` | Solo tiene efecto útil junto a **colapsar (2)**: colapso de espacio “Unicode-aware” (NBSP, Zl, Zp, etc.). |
+| 262144 | `TL_MOD_TOKENIZE_PUNCT_WS` | Antes de segmentar: codepoints categoría **P*** (puntuación Unicode) → espacio ASCII; si **colapsar** está activo, se vuelve a colapsar el `work`. Equivale a “puntuación como frontera de palabra” para `sep` vacío (p. ej. `x,y` → dos tokens con **394243** = 1027+131072+262144). |
 
 **Reglas globales del modo:**
 
@@ -84,6 +85,7 @@ Ejemplos:
 - **`8195`** = NFKD + colapsar + casefold (ligaduras compat, p. ej. `ﬁlm` → `film`).
 - **`17411`** = NFKC + strip marcas + colapsar + casefold (`café` → `cafe`).
 - **`131075`** = colapso Unicode + colapsar + lower (NBSP y demás Zs/Zl/Zp se colapsan a espacio ASCII antes de segmentar; `hola` + NBSP + `mundo` → dos tokens). Con solo modo **`3`**, NBSP entre palabras **también** produce dos tokens (segmentación Unicode en `sep` vacío).
+- **`394243`** = `1027 | 131072 | 262144`: NFKC + colapso WS Unicode + **puntuación → espacio** (Neurixis `normalizar_entrada`; p. ej. `x,y` → dos tokens).
 
 Orden interno tras la normalización en `work` (incl. trim comillas en `work`): **segmentar** (`vm_tl_segment_fill`; con `sep_len==0`, lógica Unicode anterior) → por token: trim, strip punct (**64**), `tolower` por byte **solo** si no hubo forma Unicode **1024…8192**, stem (**32**), `keep` → lista → bigramas (**4**) → trigramas (**16**).
 
@@ -99,7 +101,7 @@ Tras normalizar en el buffer de trabajo, `sep_len = strlen(separador)`:
 | **1**     | Delimitador **un carácter** (p. ej. `","`). |
 | **> 1**   | Delimitador **`strstr`** con la subcadena completa. |
 
-En segmentos delimitados se recortan espacios y comillas al inicio/fin antes de contar longitud.
+En segmentos delimitados (`sep_len == 1` o `> 1`) se recortan bordes con **utf8proc** (espacio Unicode + comillas ASCII `"` `'`).
 
 ## Diferencia con `dividir_texto` / `dividir`
 

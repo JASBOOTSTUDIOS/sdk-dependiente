@@ -28,4 +28,10 @@ void vm_tl_collapse_ws_unicode(const char* in, char* out, size_t cap);
 typedef int (*vm_tl_ws_emit_fn)(void* udata, const char* src, size_t len);
 int vm_tl_utf8_segment_by_whitespace(const char* texto, size_t texto_len, vm_tl_ws_emit_fn emit, void* udata);
 
+/** Sustituye codepoints categoría P* por espacio ASCII in-place (compacta; UTF-8 válido). */
+void vm_tl_punctuation_to_space_inplace(char* buf, size_t cap);
+
+/** Copia `src[0..src_len)` a `out`, recorta bordes (espacio Unicode + comillas ASCII " ') y NUL-termina. */
+int vm_tl_utf8_copy_trim_segment(const char* src, size_t src_len, char* out, size_t out_cap);
+
 #endif

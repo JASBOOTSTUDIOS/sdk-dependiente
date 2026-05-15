@@ -21,6 +21,13 @@
 /** Con bit **2** (colapsar): usar colapso de separadores Unicode (Zs/Zl/Zp + ASCII isspace) en UTF-8. */
 #define VM_TL_MOD_UNICODE_WS_FULL 131072u
 
+/**
+ * Antes de segmentar: sustituir caracteres Unicode de **puntuación** (categorías P*) por espacio ASCII,
+ * para fronteras de token tipo Neurixis / CSV natural (`,.;:!?` y equivalentes Unicode).
+ * Suele combinarse con **colapsar (2)** y opcionalmente **131072** para colapsar runs de espacio.
+ */
+#define VM_TL_MOD_TOKENIZE_PUNCT_WS 262144u
+
 #define VM_TL_UNICODE_NORM_FORM_MASK \
     (VM_TL_MOD_UNICODE_NFKC | VM_TL_MOD_UNICODE_NFC | VM_TL_MOD_UNICODE_NFD | VM_TL_MOD_UNICODE_NFKD)
 

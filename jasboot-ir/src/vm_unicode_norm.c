@@ -90,6 +90,96 @@ int vm_tl_utf8_segment_by_whitespace(const char* texto, size_t texto_len, vm_tl_
     return 1;
 }
 
+static int vm_tl_cp_is_punct_cat(utf8proc_int32_t cp) {
+    utf8proc_category_t c = utf8proc_category(cp);
+    return (c == UTF8PROC_CATEGORY_PD || c == UTF8PROC_CATEGORY_PE || c == UTF8PROC_CATEGORY_PF
+            || c == UTF8PROC_CATEGORY_PI || c == UTF8PROC_CATEGORY_PO || c == UTF8PROC_CATEGORY_PS
+            || c == UTF8PROC_CATEGORY_PC);
+}
+
+void vm_tl_punctuation_to_space_inplace(char* buf, size_t cap) {
+    if (!buf || cap < 2) return;
+    char tmp[8192];
+    if (cap > sizeof tmp) cap = sizeof tmp;
+    size_t w = 0;
+    int pending_space = 0;
+    utf8proc_ssize_t pos = 0;
+    for (;;) {
+        utf8proc_int32_t cp = 0;
+        utf8proc_ssize_t adv = utf8proc_iterate((const utf8proc_uint8_t*)buf + pos, -1, &cp);
+        if (adv <= 0) break;
+        if (vm_tl_cp_is_punct_cat(cp)) {
+            pending_space = 1;
+        } else {
+            if (pending_space) {
+                if (w == 0 || (w > 0 && tmp[w - 1] != ' ')) {
+                    if (w + 1 < cap) tmp[w++] = ' ';
+                }
+                pending_space = 0;
+            }
+            if ((size_t)adv >= cap - w) break;
+            memcpy(tmp + w, buf + pos, (size_t)adv);
+            w += (size_t)adv;
+        }
+        pos += adv;
+    }
+    if (pending_space && w > 0 && tmp[w - 1] != ' ' && w + 1 < cap) tmp[w++] = ' ';
+    tmp[w] = '\0';
+    size_t i = 0;
+    for (; tmp[i] && i + 1 < cap; i++) buf[i] = tmp[i];
+    buf[i] = '\0';
+}
+
+void vm_tl_utf8_trim_edges_inplace(char* s) {
+    if (!s || !s[0]) return;
+    for (;;) {
+        utf8proc_int32_t cp = 0;
+        utf8proc_ssize_t adv = utf8proc_iterate((const utf8proc_uint8_t*)s, -1, &cp);
+        if (adv <= 0) break;
+        if (vm_tl_cp_is_space_like(cp)) {
+            memmove(s, s + adv, strlen(s + adv) + 1u);
+            continue;
+        }
+        if (adv == 1 && (s[0] == '"' || s[0] == '\'')) {
+            memmove(s, s + 1, strlen(s + 1) + 1u);
+            continue;
+        }
+        break;
+    }
+    for (;;) {
+        size_t L = strlen(s);
+        if (L == 0) break;
+        const char* end = s + L;
+        const char* u = end - 1;
+        while (u > s && ((unsigned char)*u & 0xC0u) == 0x80u) u--;
+        utf8proc_int32_t cp = 0;
+        utf8proc_ssize_t adv = utf8proc_iterate((const utf8proc_uint8_t*)u, (utf8proc_ssize_t)(end - u), &cp);
+        if (adv <= 0 || (size_t)((const char*)u - s) + (size_t)adv != L) {
+            s[L - 1] = '\0';
+            continue;
+        }
+        if (vm_tl_cp_is_space_like(cp)) {
+            s[(size_t)(u - s)] = '\0';
+            continue;
+        }
+        if (adv == 1 && (*u == '"' || *u == '\'')) {
+            s[(size_t)(u - s)] = '\0';
+            continue;
+        }
+        break;
+    }
+}
+
+int vm_tl_utf8_copy_trim_segment(const char* src, size_t src_len, char* out, size_t out_cap) {
+    if (!src || !out || out_cap < 2) return 0;
+    size_t n = src_len;
+    if (n >= out_cap) n = out_cap - 1u;
+    memcpy(out, src, n);
+    out[n] = '\0';
+    vm_tl_utf8_trim_edges_inplace(out);
+    return 1;
+}
+
 void vm_tl_unicode_normalize_buffer(char* buf, size_t cap, uint32_t modo) {
     if (!buf || cap == 0) return;
     const int want_nfkc = (modo & VM_TL_MOD_UNICODE_NFKC) != 0;

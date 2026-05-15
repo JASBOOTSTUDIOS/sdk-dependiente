@@ -25,6 +25,7 @@
 #define TL_MOD_UNICODE_STRIPCC   VM_TL_MOD_UNICODE_STRIPCC
 #define TL_MOD_STRIP_UTF8_BOM    VM_TL_MOD_STRIP_UTF8_BOM
 #define TL_MOD_UNICODE_WS_FULL   VM_TL_MOD_UNICODE_WS_FULL
+#define TL_MOD_TOKENIZE_PUNCT_WS VM_TL_MOD_TOKENIZE_PUNCT_WS
 
 #define VM_TL_MAX_TOK 384
 #define VM_TL_MAX_CH  256
@@ -227,6 +228,16 @@ static int vm_tl_seg_emit_push(void* udata, const char* src, size_t len) {
     return vm_tl_push_tok(c->pn, src, len);
 }
 
+static void vm_tl_push_segment_trimmed_utf8(const char* q, const char* seg_end, int* pn) {
+    char segbuf[VM_TL_WORK_CAP];
+    size_t segbytes = (size_t)(seg_end > q ? (size_t)(seg_end - q) : 0u);
+    if (segbytes == 0u) return;
+    if (segbytes >= VM_TL_WORK_CAP) segbytes = VM_TL_WORK_CAP - 1u;
+    if (!vm_tl_utf8_copy_trim_segment(q, segbytes, segbuf, sizeof segbuf)) return;
+    if (segbuf[0] == '\0') return;
+    (void)vm_tl_push_tok(pn, segbuf, strlen(segbuf));
+}
+
 static void vm_tl_segment_fill(const char* texto, size_t texto_end, const char* sep, size_t sep_len, int* pn) {
     *pn = 0;
     const char* texto_endp = texto + texto_end;
@@ -241,12 +252,7 @@ static void vm_tl_segment_fill(const char* texto, size_t texto_end, const char* 
             const char* found = p;
             while (found < texto_endp && (unsigned char)*found != sep_ch) found++;
             const char* seg_end = found;
-            const char* q = p;
-            while (q < seg_end && (isspace((unsigned char)*q) || *q == '"' || *q == '\'')) q++;
-            const char* end = seg_end;
-            while (end > q && (isspace((unsigned char)*(end - 1)) || *(end - 1) == '"' || *(end - 1) == '\'')) end--;
-            size_t len = (size_t)(end - q);
-            if (len > 0) vm_tl_push_tok(pn, q, len);
+            vm_tl_push_segment_trimmed_utf8(p, seg_end, pn);
             if (found >= texto_endp) break;
             p = found + 1;
         }
@@ -255,12 +261,7 @@ static void vm_tl_segment_fill(const char* texto, size_t texto_end, const char* 
         for (;;) {
             const char* found = strstr(p, sep);
             const char* seg_end = found ? found : texto_endp;
-            const char* q = p;
-            while (q < seg_end && (isspace((unsigned char)*q) || *q == '"' || *q == '\'')) q++;
-            const char* end = seg_end;
-            while (end > q && (isspace((unsigned char)*(end - 1)) || *(end - 1) == '"' || *(end - 1) == '\'')) end--;
-            size_t len = (size_t)(end - q);
-            if (len > 0) vm_tl_push_tok(pn, q, len);
+            vm_tl_push_segment_trimmed_utf8(p, seg_end, pn);
             if (!found) break;
             p = found + sep_len;
         }
@@ -307,6 +308,17 @@ static void vm_run_tokenizar_L(VM* vm, uint8_t dest_reg, uint32_t id_txt, uint32
             vm_tl_strcpy_cap(work, sizeof work, collapsed);
         }
         vm_tl_trim_quotes_inplace(work);
+        if ((modo & TL_MOD_TOKENIZE_PUNCT_WS) != 0u) {
+            vm_tl_punctuation_to_space_inplace(work, sizeof work);
+            if ((modo & TL_MOD_COLLAPSE) != 0u) {
+                char collapsed_p[VM_TL_WORK_CAP];
+                if ((modo & TL_MOD_UNICODE_WS_FULL) != 0u)
+                    vm_tl_collapse_ws_unicode(work, collapsed_p, sizeof collapsed_p);
+                else
+                    vm_tl_collapse_ws(work, collapsed_p, sizeof collapsed_p);
+                vm_tl_strcpy_cap(work, sizeof work, collapsed_p);
+            }
+        }
     }
     const char* texto = work;
     size_t sep_len = sep ? strlen(sep) : 0;

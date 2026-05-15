@@ -46,6 +46,12 @@ principal
         fallos = fallos + 1
     fin_si
 
+    /* 1027+131072+262144 = 394243: NFKC + colapso WS Unicode + puntuacion -> espacio (paso 2 nativo) */
+    lista L8 = tokenizar_L("x,y", "", 394243)
+    si lista_tamano(L8) != 2 entonces
+        fallos = fallos + 1
+    fin_si
+
     imprimir("UNICODE_NFKC_FALLIOS=")
     imprimir(fallos)
     imprimir("\n")
