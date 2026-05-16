@@ -55,7 +55,7 @@ static void jb_init_console_unicode(void) {
 }
 
 /* Directorio que contiene jbc.exe (sin barra final); para encontrar la VM aunque cwd este en tests profundos. */
-static char g_jbc_exe_dir[1024];
+static char g_jbc_exe_dir[2048];
 
 static void init_jbc_exe_dir(void) {
     g_jbc_exe_dir[0] = '\0';
@@ -2382,6 +2382,7 @@ int do_compile(const char *in_path, const char *out_path, char **err_msg) {
     fclose(f);
 
     Lexer lex;
+    fprintf(stderr, "[JBC] Iniciando Lexer...\n");
     lexer_init(&lex, buf);
     TokenVec tvec;
     token_vec_init(&tvec);
@@ -2391,6 +2392,7 @@ int do_compile(const char *in_path, const char *out_path, char **err_msg) {
         token_free_value(&tok);
         if (tok.type == TOK_EOF) break;
     }
+    fprintf(stderr, "[JBC] Lexer finalizado. Tokens: %zu\n", tvec.size);
 
     if (lex.last_error) {
         if (buf && lex.err_line >= 1 && lex.err_column >= 1) {
@@ -2409,8 +2411,10 @@ int do_compile(const char *in_path, const char *out_path, char **err_msg) {
     lexer_free(&lex);
 
     Parser par;
+    fprintf(stderr, "[JBC] Iniciando Parser...\n");
     parser_init(&par, &tvec, diag_path, buf);
     ASTNode *ast = parser_parse(&par);
+    fprintf(stderr, "[JBC] Parser finalizado. AST: %p\n", (void*)ast);
     int parse_errs = 0;
 
     if (par.last_error) {
@@ -2442,7 +2446,9 @@ int do_compile(const char *in_path, const char *out_path, char **err_msg) {
         free(buf);
         return 1;
     }
+    fprintf(stderr, "[JBC] Registrando modulos 'usar'...\n");
     int mod_errs = register_usar_modules((ProgramNode *)ast, in_path, diag_path, cg);
+    fprintf(stderr, "[JBC] Modulos registrados.\n");
     if (mod_errs > 0) {
         fprintf(stderr, "%sCompilacion fallida: errores al cargar modulos `usar`.%s\n", ANSI_RED, ANSI_RESET);
         codegen_free(cg);
@@ -2453,7 +2459,9 @@ int do_compile(const char *in_path, const char *out_path, char **err_msg) {
         return 1;
     }
 
+    fprintf(stderr, "[JBC] Pre-check de declaraciones reservadas...\n");
     int rsv_batch = merged_program_precheck_reserved_declarations((ProgramNode *)ast, diag_path, buf);
+    fprintf(stderr, "[JBC] Pre-check finalizado.\n");
     if (rsv_batch > 0) {
         fprintf(stderr, "%sCompilacion fallida: %d error(es) semantico(s) por identificadores no permitidos o palabras reservadas (corrija todas las apariciones antes de recompilar).%s\n",
                 ANSI_RED, rsv_batch, ANSI_RESET);
@@ -2469,7 +2477,9 @@ int do_compile(const char *in_path, const char *out_path, char **err_msg) {
     int sem_errs = 0;
     {
         extern int werror_unused;
+        fprintf(stderr, "[JBC] Validando retornos y avisos...\n");
         sem_errs = validate_function_returns_and_warnings(diag_path, buf, ast);
+        fprintf(stderr, "[JBC] Validacion finalizada.\n");
         if (sem_errs > 0) {
             codegen_free(cg);
             ast_free(ast);
@@ -2483,6 +2493,7 @@ int do_compile(const char *in_path, const char *out_path, char **err_msg) {
     SymbolTable sym;
     sym_init_global(&sym);
     sym.is_global = 1;
+    fprintf(stderr, "[JBC] Iniciando resolucion de simbolos (resolve_program)...\n");
     if (resolve_program(ast, &sym, buf, diag_path) > 0) {
         fprintf(stderr, "%sCompilacion fallida: error al registrar clases/registros (herencia o orden de tipos).%s\n",
                 ANSI_RED, ANSI_RESET);
@@ -2500,6 +2511,7 @@ int do_compile(const char *in_path, const char *out_path, char **err_msg) {
         free(buf);
         return 1;
     }
+    fprintf(stderr, "[JBC] Resolucion de simbolos finalizada.\n");
     
     /* Limpiar scopes de simbolos tras resolve_program. */
     sym_exit_scope(&sym);
@@ -2512,7 +2524,9 @@ int do_compile(const char *in_path, const char *out_path, char **err_msg) {
     }
 
     size_t len;
+    fprintf(stderr, "[JBC] Iniciando generacion de codigo (codegen_generate)...\n");
     uint8_t *bin = codegen_generate(cg, ast, &len);
+    fprintf(stderr, "[JBC] Generacion de codigo finalizada.\n");
     if (!bin) {
         size_t nd = codegen_collected_diag_count(cg);
         if (nd > 0) {
@@ -2939,6 +2953,7 @@ static int run_vm(const char *bin_path, const char *ruta_cerebro, const char *cw
 #endif
 }
 
+#ifndef JBC_MINIMAL_MAIN
 static void print_usage(const char *prog) {
     fprintf(stderr, "Uso: %s [archivo.jasb] [opciones]\n", prog);
     fprintf(stderr, "     %s test [--dir DIR]\n\n", prog);
@@ -2953,7 +2968,9 @@ static void print_usage(const char *prog) {
     fprintf(stderr, "Subcomandos:\n");
     fprintf(stderr, "  test [--dir DIR]       Suite de pruebas (default dir: tests)\n");
 }
+#endif
 
+#ifndef JBC_MINIMAL_MAIN
 /* Test runner: compila .jasb en dir y opcionalmente ejecuta */
 static int do_test(const char *tests_dir) {
     char pattern[512];
@@ -3025,6 +3042,7 @@ static int do_test(const char *tests_dir) {
     printf("\n=== Resumen: %d OK, %d Fallidos ===\n\n", ok, fail);
     return (fail > 0) ? 1 : 0;
 }
+#endif
 
 #if !defined(JBC_TEST_DO_COMPILE)
 #if defined(JBC_MINIMAL_MAIN)
@@ -3032,8 +3050,12 @@ static int find_vm_path(char *out, size_t out_size);
 static int run_vm(const char *bin_path, const char *ruta_cerebro, const char *cwd, const char *jasb_input);
 
 int main(int argc, char **argv) {
+    setvbuf(stderr, NULL, _IONBF, 0);
+    fprintf(stderr, "[JBC] Iniciando compilador...\n");
     init_jbc_exe_dir();
+    fprintf(stderr, "[JBC] init_jbc_exe_dir OK\n");
     jb_init_console_unicode();
+    fprintf(stderr, "[JBC] jb_init_console_unicode OK\n");
     const char *input = NULL;
     const char *output = NULL;
     int do_execute = 0;

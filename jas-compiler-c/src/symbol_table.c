@@ -561,8 +561,10 @@ const char *sym_get_struct_lista_elem_type(SymbolTable *st, const char *struct_n
             size_t len = strlen(tn);
             if (len > 2 && tn[len-2] == '[' && tn[len-1] == ']') {
                 static char buf[128];
-                strncpy(buf, tn, len - 2);
-                buf[len - 2] = '\0';
+                size_t n = len - 2;
+                if (n >= sizeof(buf)) n = sizeof(buf) - 1;
+                memcpy(buf, tn, n);
+                buf[n] = '\0';
                 return buf;
             }
             
@@ -571,7 +573,10 @@ const char *sym_get_struct_lista_elem_type(SymbolTable *st, const char *struct_n
                 char *p = strchr(tn, '<');
                 if (p) {
                     static char buf[128];
-                    strncpy(buf, p + 1, 127);
+                    size_t n = strlen(p + 1);
+                    if (n >= sizeof(buf)) n = sizeof(buf) - 1;
+                    memcpy(buf, p + 1, n);
+                    buf[n] = '\0';
                     char *q = strrchr(buf, '>');
                     if (q) *q = '\0';
                     return buf;

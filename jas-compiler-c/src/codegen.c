@@ -2472,7 +2472,8 @@ static int is_access_allowed(CodeGen *cg, const char *class_name, int is_private
     if (!is_private) return 1;
     if (!cg || !cg->current_fn_name || !class_name) return 0;
     size_t clen = strlen(class_name);
-    if (strncmp(cg->current_fn_name, class_name, clen) == 0 && cg->current_fn_name[clen] == '.')
+    size_t fnlen = strlen(cg->current_fn_name);
+    if (fnlen > clen && strncmp(cg->current_fn_name, class_name, clen) == 0 && cg->current_fn_name[clen] == '.')
         return 1;
     return 0;
 }
@@ -3368,8 +3369,6 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         SymResult sb = sym_lookup(&cg->sym, ((IdentifierNode*)ARG1)->name);
         if (!sa.found || !sb.found) return 0;
         int n = (name[3] == '2') ? 2 : (name[3] == '3') ? 3 : 4;
-        uint8_t flA = IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE | (sa.is_relative ? IR_INST_FLAG_RELATIVE : 0);
-        uint8_t flB = IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE | (sb.is_relative ? IR_INST_FLAG_RELATIVE : 0);
         /* Acumular en reg fijo: si dest_reg es 1 o 2, los LEER del bucle pisan el resultado parcial. */
         const int acc = 4;
         emit_leer_u24(cg, 1, sa.addr, sa.is_relative);
@@ -3397,8 +3396,6 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         SymResult sa = sym_lookup(&cg->sym, ((IdentifierNode*)ARG1)->name);
         SymResult sb = sym_lookup(&cg->sym, ((IdentifierNode*)ARG2)->name);
         if (!dst.found || !sa.found || !sb.found) return 0;
-        uint8_t flA = IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE | (sa.is_relative ? IR_INST_FLAG_RELATIVE : 0);
-        uint8_t flB = IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE | (sb.is_relative ? IR_INST_FLAG_RELATIVE : 0);
         for (int i = 0; i < 3; i++) {
             int j = (i + 1) % 3, k = (i + 2) % 3;
             uint32_t aj = sa.addr + (uint32_t)(j * 8), ak = sa.addr + (uint32_t)(k * 8);
@@ -4155,6 +4152,64 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
              IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER | IR_INST_FLAG_RELATIVE);
         codegen_emit_write_resultado(cg, (uint8_t)r1);
         emit(cg, OP_MOVER, (uint8_t)dest_reg, (uint8_t)r1, 0, IR_INST_FLAG_B_REGISTER);
+        return 1;
+    }
+    if (strcmp(name, "configurar_peso_g") == 0) {
+        if (cn->n_args < 2) {
+            codegen_error_sistema_incorporada_arity(cg, cn, 2, "tau (entero), peso (flotante)", "configurar_peso_g(3, 0.8)", NULL);
+            return 1;
+        }
+        int r_tau = visit_expression(cg, ARG0, dest_reg + 1);
+        int r_peso = visit_expression(cg, ARG1, dest_reg + 2);
+        /* El peso es flotante, pero lo pasamos como bits en el registro B/C si fuera inmediato, 
+         * pero aquí lo pasamos en registros. La VM leerá los bits del registro. */
+        emit(cg, OP_MEM_CONFIGURAR_PESO_G, 0, (uint8_t)r_tau, (uint8_t)r_peso,
+             IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
+        return 1;
+    }
+    if (strcmp(name, "configurar_pesos_g") == 0) {
+        if (!ARG0) {
+            sistema_error_sin_argumentos(cg, name, "lista de pesos (flotantes)", cn->base.line, cn->base.col);
+            return 1;
+        }
+        int r_lista = visit_expression(cg, ARG0, dest_reg + 1);
+        emit(cg, OP_MEM_CONFIGURAR_PESOS_G_LISTA, 0, (uint8_t)r_lista, 0,
+             IR_INST_FLAG_B_REGISTER);
+        return 1;
+    }
+    if (strcmp(name, "normalizar_pesos_g") == 0) {
+        emit(cg, OP_MEM_NORMALIZAR_PESOS_G, 0, 0, 0, 0);
+        return 1;
+    }
+    if (strcmp(name, "cargar_perfil_g") == 0) {
+        if (!ARG0) {
+            sistema_error_sin_argumentos(cg, name, "nombre del perfil (texto)", cn->base.line, cn->base.col);
+            return 1;
+        }
+        int r_perfil = visit_expression(cg, ARG0, dest_reg + 1);
+        emit(cg, OP_MEM_CARGAR_PERFIL_G, 0, (uint8_t)r_perfil, 0,
+             IR_INST_FLAG_B_REGISTER);
+        return 1;
+    }
+    if (strcmp(name, "configurar_mascara_g") == 0) {
+        if (cn->n_args < 2) {
+            codegen_error_sistema_incorporada_arity(cg, cn, 2, "tau (entero), valor (flotante 0..1)", "configurar_mascara_g(11, 0.0)", NULL);
+            return 1;
+        }
+        int r_tau = visit_expression(cg, ARG0, dest_reg + 1);
+        int r_val = visit_expression(cg, ARG1, dest_reg + 2);
+        emit(cg, OP_MEM_CONFIGURAR_MASK_G, 0, (uint8_t)r_tau, (uint8_t)r_val,
+             IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
+        return 1;
+    }
+    if (strcmp(name, "configurar_mascaras_g") == 0) {
+        if (!ARG0) {
+            sistema_error_sin_argumentos(cg, name, "lista de mascaras (flotantes)", cn->base.line, cn->base.col);
+            return 1;
+        }
+        int r_lista = visit_expression(cg, ARG0, dest_reg + 1);
+        emit(cg, OP_MEM_CONFIGURAR_MASKS_G_LISTA, 0, (uint8_t)r_lista, 0,
+             IR_INST_FLAG_B_REGISTER);
         return 1;
     }
     if (strcmp(name, "elegir_por_peso") == 0 || strcmp(name, "elegir_por_peso_segun") == 0) {
@@ -4970,24 +5025,6 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         if (!ARG0) return 0;
         visit_expression(cg, ARG0, 1);
         emit(cg, OP_JSON_A_TEXTO, dest_reg, 1, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
-        return 1;
-    }
-    if (strcmp(name, "json_a_entero") == 0) {
-        if (!ARG0) return 0;
-        visit_expression(cg, ARG0, 1);
-        emit(cg, OP_JSON_A_ENTERO, dest_reg, 1, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
-        return 1;
-    }
-    if (strcmp(name, "json_a_flotante") == 0) {
-        if (!ARG0) return 0;
-        visit_expression(cg, ARG0, 1);
-        emit(cg, OP_JSON_A_FLOTANTE, dest_reg, 1, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
-        return 1;
-    }
-    if (strcmp(name, "json_a_bool") == 0) {
-        if (!ARG0) return 0;
-        visit_expression(cg, ARG0, 1);
-        emit(cg, OP_JSON_A_BOOL, dest_reg, 1, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
         return 1;
     }
     if (strcmp(name, "json_tipo") == 0) {
@@ -6077,7 +6114,7 @@ static void emit_build_interpolated_string(CodeGen *cg, const char *text, int de
                 if (err) free(err);
                 return;
             }
-            SymResult tmp_dest;
+            SymResult tmp_dest = {0};
             if (!first) {
                 tmp_dest = sym_reserve_temp(&cg->sym, 8);
                 uint8_t fl_w = IR_INST_FLAG_A_IMMEDIATE | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE;
@@ -6592,7 +6629,7 @@ static int visit_expression(CodeGen *cg, ASTNode *node, int dest_reg) {
             return dest_reg;
         }
         char vbuf[CODEGEN_ERROR_MAX];
-        snprintf(vbuf, sizeof vbuf, "Error: variable '%s' no declarada antes de su uso", name);
+        snprintf(vbuf, sizeof vbuf, "Error: variable '%s' no declarada antes de su uso", (name ? name : "desconocida"));
         cg_collect_push(cg, vbuf, id_node->line, id_node->col);
         return dest_reg;
     }
@@ -6845,6 +6882,8 @@ static int visit_expression(CodeGen *cg, ASTNode *node, int dest_reg) {
             }
             else if (strcmp(op, "<<") == 0) emit(cg, OP_BIT_SHL, dest_reg, rL, rR_reg, 0);
             else if (strcmp(op, ">>") == 0) emit(cg, OP_BIT_SHR, dest_reg, rL, rR_reg, 0);
+            else if (strcmp(op, "|") == 0) emit(cg, OP_O, dest_reg, rL, rR_reg, 0);
+            else if (strcmp(op, "&") == 0) emit(cg, OP_Y, dest_reg, rL, rR_reg, 0);
         }
         return dest_reg;
     }
@@ -9215,11 +9254,13 @@ uint8_t *codegen_generate(CodeGen *cg, ASTNode *ast, size_t *out_len) {
             size_t idx = 0;
             for (size_t i = 0; i < p->n_funcs; i++) {
                 FunctionNode *fn = (FunctionNode*)p->functions[i];
-                cg->func_names[idx] = fn->name;
-                cg->func_return_types[idx] = fn->return_type ? fn->return_type : "entero";
-                cg->func_return_task_elems[idx] = fn->return_task_elem;
-                cg->func_labels[idx] = new_label(cg);
-                idx++;
+                if (fn) {
+                    cg->func_names[idx] = fn->name;
+                    cg->func_return_types[idx] = fn->return_type ? fn->return_type : "entero";
+                    cg->func_return_task_elems[idx] = fn->return_task_elem;
+                    cg->func_labels[idx] = new_label(cg);
+                    idx++;
+                }
             }
             for (size_t i = 0; i < p->n_globals; i++) {
                 if (p->globals[i]->type == NODE_STRUCT_DEF) {
@@ -9229,10 +9270,14 @@ uint8_t *codegen_generate(CodeGen *cg, ASTNode *ast, size_t *out_len) {
                         for (size_t j = 0; j < si->n_methods; j++) {
                             FunctionNode *fn = (FunctionNode*)si->methods[j].method_ast;
                             char *full_name = malloc(256);
-                            snprintf(full_name, 256, "%s.%s", sd->name, si->methods[j].name);
-                            cg->func_names[idx] = full_name;
-                            cg->func_return_types[idx] = fn->return_type ? fn->return_type : "entero";
-                            cg->func_return_task_elems[idx] = fn->return_task_elem;
+                            if (full_name) {
+                                snprintf(full_name, 256, "%s.%s", sd->name, si->methods[j].name);
+                                cg->func_names[idx] = full_name;
+                            } else {
+                                cg->func_names[idx] = strdup("?");
+                            }
+                            cg->func_return_types[idx] = (fn && fn->return_type) ? fn->return_type : "entero";
+                            cg->func_return_task_elems[idx] = fn ? fn->return_task_elem : NULL;
                             cg->func_labels[idx] = new_label(cg);
                             idx++;
                         }
@@ -9240,10 +9285,14 @@ uint8_t *codegen_generate(CodeGen *cg, ASTNode *ast, size_t *out_len) {
                         for (size_t j = 0; j < sd->n_methods; j++) {
                             FunctionNode *fn = (FunctionNode*)sd->methods[j];
                             char *full_name = malloc(256);
-                            snprintf(full_name, 256, "%s.%s", sd->name, fn->name);
-                            cg->func_names[idx] = full_name;
-                            cg->func_return_types[idx] = fn->return_type ? fn->return_type : "entero";
-                            cg->func_return_task_elems[idx] = fn->return_task_elem;
+                            if (full_name) {
+                                snprintf(full_name, 256, "%s.%s", sd->name, fn->name);
+                                cg->func_names[idx] = full_name;
+                            } else {
+                                cg->func_names[idx] = strdup("?");
+                            }
+                            cg->func_return_types[idx] = (fn && fn->return_type) ? fn->return_type : "entero";
+                            cg->func_return_task_elems[idx] = fn ? fn->return_task_elem : NULL;
                             cg->func_labels[idx] = new_label(cg);
                             idx++;
                         }
@@ -9261,20 +9310,26 @@ uint8_t *codegen_generate(CodeGen *cg, ASTNode *ast, size_t *out_len) {
     size_t f_idx = 0;
     for (size_t i = 0; i < p->n_funcs; i++) {
         if (cg->func_labels) mark_label(cg, cg->func_labels[f_idx++]);
+        FunctionNode *fn = (FunctionNode*)p->functions[i];
+        if (fn) fprintf(stderr, "Compilando funcion global: %s\n", fn->name ? fn->name : "?");
         visit_function(cg, p->functions[i], NULL);
     }
     for (size_t i = 0; i < p->n_globals; i++) {
         if (p->globals[i]->type == NODE_STRUCT_DEF) {
             StructDefNode *sd = (StructDefNode*)p->globals[i];
+            fprintf(stderr, "Compilando metodos de clase: %s\n", sd->name ? sd->name : "?");
             StructInfo *si = sym_get_struct_info(&cg->sym, sd->name);
             if (si) {
                 for (size_t j = 0; j < si->n_methods; j++) {
                     if (cg->func_labels) mark_label(cg, cg->func_labels[f_idx++]);
+                    fprintf(stderr, "  Metodo: %s\n", si->methods[j].name ? si->methods[j].name : "?");
                     visit_function(cg, si->methods[j].method_ast, sd->name);
                 }
             } else {
                 for (size_t j = 0; j < sd->n_methods; j++) {
                     if (cg->func_labels) mark_label(cg, cg->func_labels[f_idx++]);
+                    FunctionNode *fn = (FunctionNode*)sd->methods[j];
+                    if (fn) fprintf(stderr, "  Metodo (fallback): %s\n", fn->name ? fn->name : "?");
                     visit_function(cg, sd->methods[j], sd->name);
                 }
             }
@@ -9282,6 +9337,7 @@ uint8_t *codegen_generate(CodeGen *cg, ASTNode *ast, size_t *out_len) {
     }
 
     mark_label(cg, main_id);
+    fprintf(stderr, "Compilando bloque principal (principal)\n");
     sym_enter_scope(&cg->sym, 1);
     size_t reserve_pos = cg->code_size;
     emit(cg, OP_RESERVAR_PILA, 0, 0, 0, IR_INST_FLAG_A_IMMEDIATE);

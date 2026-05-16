@@ -91,7 +91,22 @@ typedef struct JMNPropagarExtra {
     int queue_mode; /* 0 = BFS (cola), 1 = DFS (pila LIFO) */
     int score_mode; /* 0 = mejor aportación por profundidad (legacy), 1 = suma de na en aristas exploradas */
     float g_tau[JMN_RELACION_MAX + 1]; /* multiplicador por tipo de relación τ (índice 0 = defecto si τ fuera de rango) */
+    float mask_tau[JMN_RELACION_MAX + 1]; /* Máscara contextual mask(C, τ) en [0,1]. Por defecto 1.0 */
 } JMNPropagarExtra;
+
+/** Inicializa extra con valores por defecto (1.0). */
+void jmn_propagar_extra_init(JMNPropagarExtra* extra);
+/** Normaliza g_tau: por defecto escala para que max_{τ=1..30} g(τ)=1 (si hay valores > 0).
+ *  Si `JASBOOT_PROPAGAR_G_NORM` empieza por `s` o `S`, divide cada g(τ)>0 por la suma de los g positivos (Σ=1). */
+void jmn_propagar_extra_normalizar(JMNPropagarExtra* extra);
+/** Carga un perfil predefinido de pesos g(τ) por nombre (ej: "explorador", "analitico", "secuencial"). */
+int jmn_propagar_extra_cargar_perfil(JMNPropagarExtra* extra, const char* perfil_nombre);
+/** Combina dest con src (los valores de src sobreescriben dest si son distintos de 0 o 1 según lógica). */
+void jmn_propagar_extra_merge(JMNPropagarExtra* dest, const JMNPropagarExtra* src);
+/** construir_g(defecto, override): copia `g_default` (o init si NULL) y fusiona `p_override` si no es NULL. */
+void jmn_propagar_extra_construir(const JMNPropagarExtra* g_default, const JMNPropagarExtra* p_override, JMNPropagarExtra* out);
+/** factor_arista(g, mask, τ) = g(τ)·mask(C,τ); τ en 1..30 (fuera de rango usa índice 0 como respaldo). */
+float jmn_propagar_factor_arista(const JMNPropagarExtra* ex, uint32_t tau);
 
 /* Apertura/cierre y persistencia */
 JMNMemoria* jmn_abrir_escritura(const char* ruta);
@@ -138,6 +153,8 @@ int jmn_existe_texto(JMNMemoria* mem, uint32_t id);
 int jmn_listar_nodos_por_texto_exacto(JMNMemoria* mem, const char* literal, uint32_t* out, int max_out);
 int jmn_contiene_texto(JMNMemoria* mem, uint32_t id_frase, uint32_t id_patron);
 int jmn_termina_con(JMNMemoria* mem, uint32_t id_frase, uint32_t id_sufijo);
+int jmn_establecer_contexto(JMNMemoria* mem, uint32_t id);
+int jmn_activar_modulo(JMNMemoria* mem, uint32_t id);
 void jmn_copiar_texto(JMNMemoria* mem, uint32_t id_origen, uint32_t id_destino);
 uint32_t jmn_ultima_palabra(JMNMemoria* mem, uint32_t id_frase, uint32_t id_destino);
 uint32_t jmn_ultima_silaba(JMNMemoria* mem, uint32_t id_frase, uint32_t id_destino);
@@ -212,7 +229,7 @@ int jmn_buscar_asociaciones(JMNMemoria* mem, uint32_t origen, uint32_t tipo_rel,
     uint16_t profundidad, JMNBusquedaResultado* out, uint16_t max_out);
 int jmn_propagar_activacion(JMNMemoria* mem, uint32_t origen, float activacion, float factor,
     float umbral, uint16_t prof, uint32_t tipo_rel, JMNActivacionResultado* out, uint16_t max_out,
-    JMNActivacionRastroFn rastro_fn, int reserved, void* rastro_ud);
+    JMNActivacionRastroFn rastro_fn, void* rastro_ud);
 /** Varias semillas (misma activacion inicial cada una). Excluye semillas del ranking final.
  *  Ver `JASBOOT_PROPAGAR_H_*` en documentacion: atenuacion h(d) por distancia del destino.
  *  `extra` puede ser NULL (entonces queue/score/g solo por entorno JASBOOT_PROPAGAR_*). */

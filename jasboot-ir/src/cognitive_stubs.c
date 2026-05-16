@@ -53,6 +53,16 @@ int jmn_corregir_secuencia(JMNMemoria* mem, uint32_t id_lista) {
     return 0;
 }
 
+int jmn_establecer_contexto(JMNMemoria* mem, uint32_t id) {
+    (void)mem; (void)id;
+    return 0;
+}
+
+int jmn_activar_modulo(JMNMemoria* mem, uint32_t id) {
+    (void)mem; (void)id;
+    return 0;
+}
+
 int jmn_asociar_relacion(JMNMemoria* mem, uint32_t id_a, uint32_t id_b, uint32_t tipo) {
     (void)mem; (void)id_a; (void)id_b; (void)tipo;
     return 0;

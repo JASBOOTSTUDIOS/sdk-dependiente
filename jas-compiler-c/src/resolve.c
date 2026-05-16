@@ -114,7 +114,8 @@ static void register_struct_recursive(SymbolTable *st, ASTNode *node, int *errs,
     const char **mnames = sd->n_methods ? malloc(sd->n_methods * sizeof(char*)) : NULL;
     void **masts = sd->n_methods ? malloc(sd->n_methods * sizeof(void*)) : NULL;
     for (size_t j = 0; j < sd->n_methods; j++) {
-        mnames[j] = ((FunctionNode*)sd->methods[j])->name;
+        FunctionNode *fn = (FunctionNode*)sd->methods[j];
+        mnames[j] = fn ? fn->name : "?";
         masts[j] = sd->methods[j];
     }
 
@@ -162,6 +163,7 @@ static void resolve_struct_methods_recursive(SymbolTable *st, ASTNode *node, int
     
     for (size_t j = 0; j < sd->n_methods; j++) {
         FunctionNode *fn = (FunctionNode *)sd->methods[j];
+        if (!fn) continue;
         sym_enter_scope(st, 1);
         /* 'este' apunta a la instancia de la clase */
         sym_declare(st, "este", sd->name, 8, 1, 0, NULL, SYMDECL_FLAGS_ALLOW_RESERVED_NAME);

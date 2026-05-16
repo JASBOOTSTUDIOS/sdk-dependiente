@@ -158,7 +158,7 @@ int ir_file_set_ia_metadata(IRFile* ir, const uint8_t* data, size_t size) {
     return 0;
 }
 
-static int ir_file_reservar_data(IRFile* ir, size_t size, size_t* out_offset) {
+static int ir_file_reservar_data(IRFile* ir, size_t size, uint32_t* out_offset) {
     if (!ir || size == 0) return -1;
     
     size_t offset = ir->header.data_size;
@@ -181,7 +181,7 @@ static int ir_file_reservar_data(IRFile* ir, size_t size, size_t* out_offset) {
     return 0;
 }
 
-int ir_file_add_data(IRFile* ir, const uint8_t* data, size_t size, size_t* out_offset) {
+int ir_file_add_data(IRFile* ir, const uint8_t* data, size_t size, uint32_t* out_offset) {
     if (!ir || !data || size == 0) return -1;
     
     if (ir_file_reservar_data(ir, size, out_offset) != 0) return -1;
@@ -193,16 +193,30 @@ int ir_file_add_data(IRFile* ir, const uint8_t* data, size_t size, size_t* out_o
     return 0;
 }
 
-int ir_file_add_u64(IRFile* ir, uint64_t value, size_t* out_offset) {
+int ir_file_add_u64(IRFile* ir, uint64_t value, uint32_t* out_offset) {
     uint8_t buffer[8];
     memcpy(buffer, &value, sizeof(buffer));
     return ir_file_add_data(ir, buffer, sizeof(buffer), out_offset);
 }
 
-int ir_file_add_string(IRFile* ir, const char* text, size_t* out_offset) {
+int ir_file_add_string(IRFile* ir, const char* text, uint32_t* out_offset) {
     if (!ir || !text) return -1;
     size_t len = strlen(text) + 1; // incluir terminador nulo
     return ir_file_add_data(ir, (const uint8_t*)text, len, out_offset);
+}
+
+int ir_file_save(IRFile* ir, const char* filename) {
+    return ir_file_write(ir, filename);
+}
+
+IRFile* ir_file_load(const char* filename) {
+    IRFile* ir = ir_file_create();
+    if (!ir) return NULL;
+    if (ir_file_read(ir, filename) != 0) {
+        ir_file_destroy(ir);
+        return NULL;
+    }
+    return ir;
 }
 
 int ir_file_write(IRFile* ir, const char* filename) {

@@ -45,6 +45,8 @@ const char *const SISTEMA_LLAMADAS[] = {
     "n_abrir_grafo", "n_cerrar_grafo", "n_grafo_valido",
     "n_obtener_id", "n_obtener_texto", "n_existe_concepto",
     "n_recordar", "n_recordar_peso", "n_recordar_triple_texto",
+    "configurar_peso_g", "configurar_pesos_g", "normalizar_pesos_g", "cargar_perfil_g",
+    "configurar_mascara_g", "configurar_mascaras_g",
     "n_buscar_objeto", "n_buscar_objetos", "n_buscar_objeto_texto",
     "n_buscar_sujeto", "n_buscar_sujetos", "n_buscar_predicados",
     "n_buscar_donde_aparece", "n_lista_triples", "n_tamano_grafo",

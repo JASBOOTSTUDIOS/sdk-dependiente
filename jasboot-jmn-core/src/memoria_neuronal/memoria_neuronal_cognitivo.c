@@ -34,7 +34,7 @@ int jmn_buscar_asociaciones(JMNMemoria* mem, uint32_t origen, uint32_t tipo_rel,
 
     // Para profundidad > 1, usamos una búsqueda por propagación (BFS simplificado)
     JMNActivacionResultado act_res[64];
-    int n_act = jmn_propagar_activacion(mem, origen, 1.0f, 0.8f, umbral, p, tipo_rel, act_res, 64, NULL, 0, NULL);
+    int n_act = jmn_propagar_activacion(mem, origen, 1.0f, 0.8f, umbral, p, tipo_rel, act_res, 64, NULL, NULL);
     
     int n = 0;
     for (int i = 0; i < n_act && n < (int)max_out; i++) {
@@ -116,6 +116,113 @@ static void jmn_propagar_precompute_h(float H[33], uint16_t d_max, int mode, flo
     for (int d = dm + 1; d < 33; d++) H[d] = 0.f;
 }
 
+void jmn_propagar_extra_init(JMNPropagarExtra* extra) {
+    if (!extra) return;
+    for (int i = 0; i <= JMN_RELACION_MAX; i++) {
+        extra->g_tau[i] = 1.0f;
+        extra->mask_tau[i] = 1.0f;
+    }
+    extra->queue_mode = 0;
+    extra->score_mode = 0;
+}
+
+void jmn_propagar_extra_normalizar(JMNPropagarExtra* extra) {
+    if (!extra) return;
+    const char* ev = getenv("JASBOOT_PROPAGAR_G_NORM");
+    int modo_suma = ev && ev[0] && (ev[0] == 's' || ev[0] == 'S');
+    if (modo_suma) {
+        float s = 0.f;
+        for (int i = 1; i <= JMN_RELACION_MAX; i++)
+            if (extra->g_tau[i] > 0.f) s += extra->g_tau[i];
+        if (s > 1e-12f) {
+            for (int i = 1; i <= JMN_RELACION_MAX; i++)
+                if (extra->g_tau[i] > 0.f) extra->g_tau[i] /= s;
+        }
+        return;
+    }
+    float max_v = 0.0f;
+    for (int i = 1; i <= JMN_RELACION_MAX; i++) {
+        if (extra->g_tau[i] > max_v) max_v = extra->g_tau[i];
+    }
+    if (max_v > 0.00001f) {
+        for (int i = 1; i <= JMN_RELACION_MAX; i++) {
+            extra->g_tau[i] /= max_v;
+        }
+    }
+}
+
+void jmn_propagar_extra_merge(JMNPropagarExtra* dest, const JMNPropagarExtra* src) {
+    if (!dest || !src) return;
+    for (int i = 0; i <= JMN_RELACION_MAX; i++) {
+        /* Solo sobreescribimos si el valor en src es distinto al "defecto absoluto" 1.0 
+         * o si queremos forzar un valor específico. En este modelo, P.g_override
+         * suele ser ralo. */
+        if (src->g_tau[i] != 1.0f) dest->g_tau[i] = src->g_tau[i];
+        if (src->mask_tau[i] != 1.0f) dest->mask_tau[i] = src->mask_tau[i];
+    }
+    /* El modo de cola y puntuación se hereda si src lo especifica (no 0) */
+    if (src->queue_mode != 0) dest->queue_mode = src->queue_mode;
+    if (src->score_mode != 0) dest->score_mode = src->score_mode;
+}
+
+void jmn_propagar_extra_construir(const JMNPropagarExtra* g_default, const JMNPropagarExtra* p_override,
+    JMNPropagarExtra* out) {
+    if (!out) return;
+    if (g_default) {
+        *out = *g_default;
+    } else {
+        jmn_propagar_extra_init(out);
+    }
+    if (p_override) jmn_propagar_extra_merge(out, p_override);
+}
+
+int jmn_propagar_extra_cargar_perfil(JMNPropagarExtra* extra, const char* perfil_nombre) {
+    if (!extra || !perfil_nombre) return 0;
+    
+    /* Perfil 0: Defecto (Todo 1.0) */
+    if (strcmp(perfil_nombre, "defecto") == 0 || strcmp(perfil_nombre, "estandar") == 0) {
+        jmn_propagar_extra_init(extra);
+        return 1;
+    }
+    
+    /* Perfil: Explorador (Asociativo, similitud, causalidad) */
+    if (strcmp(perfil_nombre, "explorador") == 0 || strcmp(perfil_nombre, "creativo") == 0) {
+        jmn_propagar_extra_init(extra);
+        extra->g_tau[JMN_RELACION_ASOCIACION] = 1.0f;
+        extra->g_tau[JMN_RELACION_SIMILITUD] = 1.2f;
+        extra->g_tau[JMN_RELACION_CAUSALIDAD] = 0.9f;
+        extra->g_tau[JMN_RELACION_OPOSICION] = 0.5f;
+        extra->g_tau[JMN_RELACION_VALORATIVA] = 0.3f;
+        return 1;
+    }
+    
+    /* Perfil: Analítico (Lógico, operadores, magnitudes, condiciones) */
+    if (strcmp(perfil_nombre, "analitico") == 0 || strcmp(perfil_nombre, "logico") == 0) {
+        jmn_propagar_extra_init(extra);
+        extra->g_tau[JMN_RELACION_OPERADOR] = 1.5f;
+        extra->g_tau[JMN_RELACION_MEDIDA] = 1.2f;
+        extra->g_tau[JMN_RELACION_MAGNITUD] = 1.2f;
+        extra->g_tau[JMN_RELACION_CONDICION] = 1.4f;
+        extra->g_tau[JMN_RELACION_CUANTIFICACION] = 1.1f;
+        extra->g_tau[JMN_RELACION_ASOCIACION] = 0.4f; /* Menos ruido asociativo */
+        return 1;
+    }
+    
+    /* Perfil: Secuencial (Paso a paso, temporal, narrativo) */
+    if (strcmp(perfil_nombre, "secuencial") == 0 || strcmp(perfil_nombre, "narrativo") == 0) {
+        jmn_propagar_extra_init(extra);
+        extra->g_tau[JMN_RELACION_SECUENCIA] = 1.6f;
+        extra->g_tau[JMN_RELACION_TEMPORALIDAD] = 1.4f;
+        extra->g_tau[JMN_RELACION_CONSECUENCIA] = 1.3f;
+        extra->g_tau[JMN_RELACION_ACCION] = 1.2f;
+        extra->g_tau[JMN_RELACION_COMPLEMENTO] = 1.1f;
+        extra->g_tau[JMN_RELACION_SIMILITUD] = 0.5f;
+        return 1;
+    }
+
+    return 0;
+}
+
 static void jmn_propagar_merge_g_env(float g[JMN_RELACION_MAX + 1]) {
     const char* p = getenv("JASBOOT_PROPAGAR_G");
     if (!p || !*p) return;
@@ -127,23 +234,44 @@ static void jmn_propagar_merge_g_env(float g[JMN_RELACION_MAX + 1]) {
         double v = strtod(p, &end);
         if (end == p) break;
         p = end;
-        if (v > 0.0 && v <= 10.0) g[idx++] = (float)v;
+        if (v > 0.0 && v <= 10.0) g[idx] = (float)v;
+        idx++;
+    }
+}
+
+static void jmn_propagar_merge_mask_env(float mask[JMN_RELACION_MAX + 1]) {
+    const char* p = getenv("JASBOOT_PROPAGAR_MASK");
+    if (!p || !*p) return;
+    int idx = 1;
+    while (*p && idx <= JMN_RELACION_MAX) {
+        while (*p == ' ' || *p == ',' || *p == ';') p++;
+        if (*p == '\0') break;
+        char* end = NULL;
+        double v = strtod(p, &end);
+        if (end == p) break;
+        p = end;
+        if (v >= 0.0 && v <= 1.0) mask[idx] = (float)v;
+        idx++;
     }
 }
 
 static void jmn_propagar_extra_resolve(const JMNPropagarExtra* opt, JMNPropagarExtra* out) {
-    for (int i = 0; i <= JMN_RELACION_MAX; i++) out->g_tau[i] = 1.f;
+    for (int i = 0; i <= JMN_RELACION_MAX; i++) {
+        out->g_tau[i] = 1.f;
+        out->mask_tau[i] = 1.f;
+    }
     out->queue_mode = 0;
     out->score_mode = 0;
     if (!opt) {
         const char* q = getenv("JASBOOT_PROPAGAR_QUEUE");
-        if (q && (q[0] == 'd' || q[0] == 'D')) out->queue_mode = 1;
-        const char* sc = getenv("JASBOOT_PROPAGAR_SCORE");
-        if (sc && (sc[0] == 's' || sc[0] == 'S')) out->score_mode = 1;
+        if (q && (q[0] == 'd' || q[0] == 'D' || q[0] == '1')) out->queue_mode = 1;
+        const char* s = getenv("JASBOOT_PROPAGAR_SCORE");
+        if (s && (s[0] == 's' || s[0] == 'S' || s[0] == '1')) out->score_mode = 1;
+        jmn_propagar_merge_g_env(out->g_tau);
+        jmn_propagar_merge_mask_env(out->mask_tau);
     } else {
         *out = *opt;
     }
-    jmn_propagar_merge_g_env(out->g_tau);
 }
 
 static float jmn_g_mul(const JMNPropagarExtra* ex, uint32_t tau) {
@@ -151,14 +279,22 @@ static float jmn_g_mul(const JMNPropagarExtra* ex, uint32_t tau) {
     if (tau > JMN_RELACION_MAX) tau = 0;
     float g = ex->g_tau[tau];
     if (g <= 0.f || g > 10.f) g = (ex->g_tau[0] > 0.f && ex->g_tau[0] <= 10.f) ? ex->g_tau[0] : 1.f;
-    return g;
+    
+    float m = ex->mask_tau[tau];
+    if (m < 0.f) m = 0.f; else if (m > 1.f) m = 1.f;
+    
+    return g * m;
+}
+
+float jmn_propagar_factor_arista(const JMNPropagarExtra* ex, uint32_t tau) {
+    return jmn_g_mul(ex, tau);
 }
 
 int jmn_propagar_activacion_semillas(JMNMemoria* mem, const uint32_t* semillas, int n_sem,
     float activacion, float factor, float umbral, uint16_t prof, uint32_t tipo_rel,
     JMNActivacionResultado* out, uint16_t max_out, JMNActivacionRastroFn rastro_fn, void* rastro_ud,
     const JMNPropagarExtra* extra) {
-    if (!mem || !out || max_out == 0) return 0;
+    if (!mem || !out || max_out == 0 || !semillas || n_sem < 1) return 0;
 
     JMNPropagarExtra ex0;
     jmn_propagar_extra_resolve(extra, &ex0);
@@ -228,7 +364,7 @@ int jmn_propagar_activacion_semillas(JMNMemoria* mem, const uint32_t* semillas, 
     if (!use_dfs) {
         for (int s = 0; s < n_sem_u; s++) {
             uint32_t sid = sem_u[s];
-            if (rastro_fn) rastro_fn(rastro_ud, sid, activacion);
+            if (rastro_fn) rastro_fn(rastro_ud, sid, activacion, 0);
             if (vn >= 256) break;
             vid[vn] = sid;
             vbest[vn] = activacion;
@@ -240,7 +376,7 @@ int jmn_propagar_activacion_semillas(JMNMemoria* mem, const uint32_t* semillas, 
     } else {
         for (int s = n_sem_u - 1; s >= 0; s--) {
             uint32_t sid = sem_u[s];
-            if (rastro_fn) rastro_fn(rastro_ud, sid, activacion);
+            if (rastro_fn) rastro_fn(rastro_ud, sid, activacion, 0);
             if (vn >= 256) break;
             vid[vn] = sid;
             vbest[vn] = activacion;
@@ -293,7 +429,7 @@ int jmn_propagar_activacion_semillas(JMNMemoria* mem, const uint32_t* semillas, 
                 vbest[vn] = na;
                 vdepth[vn] = nd;
                 vn++;
-                if (rastro_fn) rastro_fn(rastro_ud, nid, na);
+                if (rastro_fn) rastro_fn(rastro_ud, nid, na, nd);
                 if (use_dfs) {
                     if (sp < JMN_BFS_Q_CAP) buf[sp++] = (JmnBfsItem){ nid, nd, na };
                 } else {
@@ -303,7 +439,7 @@ int jmn_propagar_activacion_semillas(JMNMemoria* mem, const uint32_t* semillas, 
                 vbest[ix] += na;
                 if (nd < vdepth[ix]) {
                     vdepth[ix] = nd;
-                    if (rastro_fn) rastro_fn(rastro_ud, nid, na);
+                    if (rastro_fn) rastro_fn(rastro_ud, nid, na, nd);
                     if (use_dfs) {
                         if (sp < JMN_BFS_Q_CAP) buf[sp++] = (JmnBfsItem){ nid, nd, na };
                     } else {
@@ -313,7 +449,7 @@ int jmn_propagar_activacion_semillas(JMNMemoria* mem, const uint32_t* semillas, 
             } else if (nd < vdepth[ix]) {
                 vdepth[ix] = nd;
                 vbest[ix] = na;
-                if (rastro_fn) rastro_fn(rastro_ud, nid, na);
+                if (rastro_fn) rastro_fn(rastro_ud, nid, na, nd);
                 if (use_dfs) {
                     if (sp < JMN_BFS_Q_CAP) buf[sp++] = (JmnBfsItem){ nid, nd, na };
                 } else {
@@ -321,7 +457,7 @@ int jmn_propagar_activacion_semillas(JMNMemoria* mem, const uint32_t* semillas, 
                 }
             } else if (nd == vdepth[ix] && na > vbest[ix]) {
                 vbest[ix] = na;
-                if (rastro_fn) rastro_fn(rastro_ud, nid, na);
+                if (rastro_fn) rastro_fn(rastro_ud, nid, na, nd);
                 if (!sum_mode && same_depth_requeue_budget > 0) {
                     same_depth_requeue_budget--;
                     if (use_dfs) {
@@ -355,8 +491,7 @@ int jmn_propagar_activacion_semillas(JMNMemoria* mem, const uint32_t* semillas, 
 
 int jmn_propagar_activacion(JMNMemoria* mem, uint32_t origen, float activacion, float factor,
     float umbral, uint16_t prof, uint32_t tipo_rel, JMNActivacionResultado* out, uint16_t max_out,
-    JMNActivacionRastroFn rastro_fn, int reserved, void* rastro_ud) {
-    (void)reserved;
+    JMNActivacionRastroFn rastro_fn, void* rastro_ud) {
     uint32_t one = origen;
     return jmn_propagar_activacion_semillas(mem, &one, 1, activacion, factor, umbral, prof, tipo_rel, out, max_out,
         rastro_fn, rastro_ud, NULL);

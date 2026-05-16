@@ -223,6 +223,7 @@ IRValidationInfo ir_validate_memory(IRFile* ir) {
             inst.opcode != OP_CMP_LT_FLT && inst.opcode != OP_CMP_GT_FLT &&
             inst.opcode != OP_CMP_LE_FLT && inst.opcode != OP_CMP_GE_FLT && inst.opcode != OP_CMP_EQ_FLT &&
             inst.opcode != OP_Y && inst.opcode != OP_O && inst.opcode != OP_XOR && inst.opcode != OP_NO &&
+            inst.opcode != OP_BIT_NOT &&
             inst.opcode != OP_COMPARAR && inst.opcode != OP_CMP_EQ && inst.opcode != OP_CMP_LT &&
             inst.opcode != OP_CMP_GT && inst.opcode != OP_CMP_LE && inst.opcode != OP_CMP_GE &&
             inst.opcode != OP_CMP_LT_U && inst.opcode != OP_CMP_GT_U && inst.opcode != OP_CMP_LE_U && inst.opcode != OP_CMP_GE_U &&
@@ -234,9 +235,8 @@ IRValidationInfo ir_validate_memory(IRFile* ir) {
             inst.opcode != OP_RESERVAR_PILA &&
             inst.opcode != OP_STR_DESDE_NUMERO &&
             inst.opcode != OP_STR_FLOTANTE_PREC &&
-            inst.opcode != OP_JSON_A_TEXTO && inst.opcode != OP_JSON_A_ENTERO &&
-            inst.opcode != OP_JSON_A_FLOTANTE && inst.opcode != OP_JSON_A_BOOL &&
-            inst.opcode != OP_JSON_TIPO &&
+            inst.opcode != OP_JSON_A_TEXTO &&
+            inst.opcode != OP_JSON_TIPO && inst.opcode != OP_JSON_PARSE &&
             inst.opcode != OP_CLOSURE_CREAR && inst.opcode != OP_CLOSURE_CARGAR &&
             inst.opcode != OP_BYTES_CREAR && inst.opcode != OP_BYTES_TAMANO &&
             inst.opcode != OP_BYTES_OBTENER && inst.opcode != OP_BYTES_PONER &&
@@ -269,16 +269,14 @@ IRValidationInfo ir_validate_memory(IRFile* ir) {
             inst.opcode != OP_JSON_PARSE && inst.opcode != OP_JSON_STRINGIFY &&
             inst.opcode != OP_JSON_OBJETO_OBTENER && inst.opcode != OP_JSON_LISTA_OBTENER &&
             inst.opcode != OP_JSON_LISTA_TAMANO &&
-            inst.opcode != OP_FS_ESCRIBIR_TEXTO && inst.opcode != OP_MEM_IMPRIMIR_CONCEPTO &&
+            inst.opcode != OP_FS_ESCRIBIR_TEXTO &&
             inst.opcode != OP_ACTIVAR_MODULO && inst.opcode != OP_ESTABLECER_CONTEXTO &&
-            inst.opcode != OP_USA_CONCEPTO && inst.opcode != OP_ASOCIADO_CON &&
             inst.opcode != OP_MEM_COMPARAR_TEXTO && inst.opcode != OP_MEM_PROCESAR_TEXTO &&
             inst.opcode != OP_MEM_CONTIENE_TEXTO && inst.opcode != OP_MEM_COPIAR_TEXTO &&
             inst.opcode != OP_STR_EXTRAER_ANTES && inst.opcode != OP_STR_EXTRAER_DESPUES &&
             inst.opcode != OP_STR_EXTRAER_ANTES_REG && inst.opcode != OP_STR_EXTRAER_DESPUES_REG &&
             inst.opcode != OP_STR_CONCATENAR && inst.opcode != OP_STR_CONCATENAR_REG &&
             inst.opcode != OP_ANALITICA_MLP_FIT &&
-            inst.opcode != OP_ANALITICA_MLP_PREDICT &&
             inst.opcode != OP_STR_REGISTRAR_LITERAL &&
             inst.opcode != OP_IMPRIMIR_NUMERO &&
             inst.opcode != OP_IMPRIMIR_BOOLEANO &&
@@ -286,7 +284,6 @@ IRValidationInfo ir_validate_memory(IRFile* ir) {
             inst.opcode != OP_MEM_ASOCIAR &&
             inst.opcode != OP_MEM_ULTIMA_PALABRA &&
             inst.opcode != OP_MEM_IMPRIMIR_ID &&
-            inst.opcode != OP_MEM_ECO &&
             inst.opcode != OP_MEM_TERMINA_CON &&
             inst.opcode != OP_LEER_U32_IND &&
             inst.opcode != OP_MEM_LISTA_CREAR &&
@@ -341,6 +338,12 @@ IRValidationInfo ir_validate_memory(IRFile* ir) {
             inst.opcode != OP_MEM_TERMINA_CON_REG &&
             inst.opcode != OP_MEM_OBTENER_SECUENCIA &&
             inst.opcode != OP_MEM_PROPAGAR_ACTIVACION &&
+            inst.opcode != OP_MEM_CONFIGURAR_PESO_G &&
+            inst.opcode != OP_MEM_CONFIGURAR_PESOS_G_LISTA &&
+            inst.opcode != OP_MEM_NORMALIZAR_PESOS_G &&
+            inst.opcode != OP_MEM_CARGAR_PERFIL_G &&
+            inst.opcode != OP_MEM_CONFIGURAR_MASK_G &&
+            inst.opcode != OP_MEM_CONFIGURAR_MASKS_G_LISTA &&
             inst.opcode != OP_MEM_DECAE_CONEXIONES &&
             inst.opcode != OP_MEM_OBTENER_TODOS &&
             inst.opcode != OP_FS_LISTAR &&
@@ -356,13 +359,8 @@ IRValidationInfo ir_validate_memory(IRFile* ir) {
             inst.opcode != OP_IR_ESCRIBIR &&
             inst.opcode != OP_MEM_PENALIZAR &&
             inst.opcode != OP_MEM_ASOCIAR &&
-            inst.opcode != OP_MEM_ECO &&
-            inst.opcode != OP_MARCAR_ESTADO &&
-            inst.opcode != OP_OBSERVAR &&
             inst.opcode != OP_MEM_CREAR &&
             inst.opcode != OP_MEM_CERRAR &&
-            inst.opcode != OP_USA_CONCEPTO &&
-            inst.opcode != OP_ASOCIADO_CON &&
             inst.opcode != OP_MEM_ULTIMA_SILABA &&
             inst.opcode != OP_STR_ASOCIAR_SECUENCIA &&
             inst.opcode != OP_MEM_PENSAR_SIGUIENTE &&

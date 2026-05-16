@@ -17,8 +17,7 @@ static int inst_is_control_flow(const IRInstruction* inst) {
 }
 
 static int inst_has_side_effects(const IRInstruction* inst) {
-    return inst->opcode == OP_ESCRIBIR || inst->opcode == OP_OBSERVAR ||
-           inst->opcode == OP_MARCAR_ESTADO || inst_is_control_flow(inst);
+    return inst->opcode == OP_ESCRIBIR || inst_is_control_flow(inst);
 }
 
 static void inst_to_nop(IRInstruction* inst) {
@@ -70,7 +69,7 @@ static int fold_to_literal(IRFile* ir, IRInstruction* inst, uint64_t value, uint
         return 0;
     }
     
-    size_t offset = 0;
+    uint32_t offset = 0;
     if (ir_file_add_u64(ir, value, &offset) != 0) {
         return -1;
     }
@@ -333,8 +332,6 @@ static void analyze_block(IRFile* ir, IRInstruction* insts, size_t start, size_t
             }
             case OP_LEER:
             case OP_ESCRIBIR:
-            case OP_OBSERVAR:
-            case OP_MARCAR_ESTADO:
             case OP_IR:
             case OP_LLAMAR:
             case OP_RETORNAR:
@@ -420,8 +417,6 @@ static void analyze_block(IRFile* ir, IRInstruction* insts, size_t start, size_t
         } else if (inst->opcode == OP_SI) {
             if (!(inst->flags & IR_INST_FLAG_A_IMMEDIATE)) live[inst->operand_a] = 1;
         } else if (inst->opcode == OP_IR || inst->opcode == OP_LLAMAR) {
-            if (!(inst->flags & IR_INST_FLAG_A_IMMEDIATE)) live[inst->operand_a] = 1;
-        } else if (inst->opcode == OP_OBSERVAR) {
             if (!(inst->flags & IR_INST_FLAG_A_IMMEDIATE)) live[inst->operand_a] = 1;
         }
     }

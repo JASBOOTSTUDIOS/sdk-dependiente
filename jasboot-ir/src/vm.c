@@ -451,18 +451,20 @@ static int vm_rastro_set_cap(VM* vm, uint32_t newcap) {
     return 0;
 }
 
-static void vm_rastro_push(VM* vm, uint32_t id, float act) {
+static void vm_rastro_push(VM* vm, uint32_t id, float act, uint16_t depth) {
     if (!vm || !vm->rastro_buf || vm->rastro_cap == 0) return;
     uint32_t cap = vm->rastro_cap;
     if (vm->rastro_count < cap) {
         uint32_t pos = (vm->rastro_head + vm->rastro_count) % cap;
         vm->rastro_buf[pos].id = id;
         vm->rastro_buf[pos].activacion = act;
+        vm->rastro_buf[pos].depth = depth;
         vm->rastro_count++;
     } else {
         uint32_t pos = vm->rastro_head;
         vm->rastro_buf[pos].id = id;
         vm->rastro_buf[pos].activacion = act;
+        vm->rastro_buf[pos].depth = depth;
         vm->rastro_head = (vm->rastro_head + 1u) % cap;
     }
 }
@@ -479,12 +481,18 @@ static float vm_rastro_peso_at(const VM* vm, uint32_t i) {
     return vm->rastro_buf[(vm->rastro_head + i) % cap].activacion;
 }
 
+static uint16_t vm_rastro_depth_at(const VM* vm, uint32_t i) {
+    if (!vm || !vm->rastro_buf || i >= vm->rastro_count) return 0u;
+    uint32_t cap = vm->rastro_cap;
+    return vm->rastro_buf[(vm->rastro_head + i) % cap].depth;
+}
+
 #ifdef JASBOOT_LANG_INTEGRATION
 #include "memoria_neuronal.h"
 
-static void vm_jmn_rastro_cb(void* ud, uint32_t id, float act) {
+static void vm_jmn_rastro_cb(void* ud, uint32_t id, float act, uint16_t depth) {
     VM* vm = (VM*)ud;
-    vm_rastro_push(vm, id, act);
+    vm_rastro_push(vm, id, act, depth);
 }
 
 /* Auditoria opcional de propagacion (stderr). Niveles: 0=off, 1=resumen, 2=+muestra rastro, 3=+pack IR */
@@ -506,10 +514,19 @@ static void vm_propagar_audit_maybe(VM* vm, int is_mai, uint32_t origen_id, uint
     if (level >= 2 && vm) {
         uint32_t rc = vm->rastro_count;
         uint32_t limit = rc < 64u ? rc : 64u;
+        const char* audit_limit = getenv("JASBOOT_PROPAGAR_AUDIT_LIMIT");
+        if (audit_limit && audit_limit[0]) {
+            int al = atoi(audit_limit);
+            if (al > 0) limit = (uint32_t)al;
+        }
         fprintf(stderr, "[PROPAGAR_AUDIT L2] rastro_count=%u muestra=%u\n", (unsigned)rc, (unsigned)limit);
-        for (uint32_t i = 0; i < limit; i++)
-            fprintf(stderr, "  r[%u] id=%u act=%.6f\n", (unsigned)i,
-                (unsigned)vm_rastro_id_at(vm, i), (double)vm_rastro_peso_at(vm, i));
+        for (uint32_t i = 0; i < limit && i < rc; i++) {
+            uint32_t rid = vm_rastro_id_at(vm, i);
+            const char* txt = vm_text_cache_get(vm, rid);
+            if (!txt) txt = "???";
+            fprintf(stderr, "  r[%u] id=%u d=%u act=%.6f txt='%s'\n", (unsigned)i,
+                (unsigned)rid, (unsigned)vm_rastro_depth_at(vm, i), (double)vm_rastro_peso_at(vm, i), txt);
+        }
     }
 }
 
@@ -573,11 +590,11 @@ static int vm_propagar_seeds_from_list(VM* vm, uint32_t lista_id, uint32_t buf[V
     return out;
 }
 
-static void vm_propagar_pack_extra(uint32_t ext_hi, JMNPropagarExtra* out) {
-    memset(out, 0, sizeof(*out));
-    for (int i = 0; i <= JMN_RELACION_MAX; i++) out->g_tau[i] = 1.f;
-    out->queue_mode = (ext_hi & 1u) ? 1 : 0;
-    out->score_mode = (ext_hi & 2u) ? 1 : 0;
+static void vm_propagar_pack_extra(VM* vm, uint32_t ext_hi, JMNPropagarExtra* out) {
+    *out = vm->g_extra;
+    /* ext_hi puede forzar modos BFS/DFS o puntuación suma/best para esta llamada concreta */
+    if (ext_hi & 1u) out->queue_mode = 1;
+    if (ext_hi & 2u) out->score_mode = 1;
 }
 
 /* ensure_jmn eliminado para soberanía de datos */
@@ -1537,6 +1554,9 @@ VM* vm_create(void) {
     
     // Inicializar MAI (Memoria Activa Independiente)
     vm->mai_system = mai_init(MAI_MAX_ACTIVE_NEURONS, NULL);
+
+    // Inicializar configuración global de propagación
+    jmn_propagar_extra_init(&vm->g_extra);
 
     return vm;
 }
@@ -3723,6 +3743,77 @@ int vm_step(VM* vm) {
             vm->pc += IR_INSTRUCTION_SIZE;
             break;
         }
+
+        case OP_MEM_CONFIGURAR_PESO_G: {
+            uint32_t tau = (uint32_t)b_val;
+            union { uint64_t u64; float f32; } fp = {0};
+            fp.u64 = c_val & 0xFFFFFFFF;
+            if (tau <= JMN_RELACION_MAX) {
+                vm->g_extra.g_tau[tau] = fp.f32;
+            }
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
+        case OP_MEM_CONFIGURAR_PESOS_G_LISTA: {
+            uint32_t lista_id = (uint32_t)b_val;
+            if (vm->mem_neuronal) {
+                uint32_t n = jmn_lista_tamano(vm->mem_neuronal, lista_id);
+                uint32_t cap_tau = (uint32_t)JMN_RELACION_MAX;
+                for (uint32_t i = 0; i < n && i < cap_tau; i++) {
+                    JMNValor v = jmn_lista_obtener(vm->mem_neuronal, lista_id, i);
+                    vm->g_extra.g_tau[i + 1u] = v.f;
+                }
+            }
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
+        case OP_MEM_NORMALIZAR_PESOS_G: {
+            jmn_propagar_extra_normalizar(&vm->g_extra);
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
+        case OP_MEM_CARGAR_PERFIL_G: {
+            uint32_t txt_id = (uint32_t)b_val;
+            const char* name = vm_text_cache_get(vm, txt_id);
+            if (name) {
+                jmn_propagar_extra_cargar_perfil(&vm->g_extra, name);
+            } else if (vm->mem_neuronal) {
+                char buf[64];
+                if (jmn_obtener_texto(vm->mem_neuronal, txt_id, buf, sizeof(buf)) >= 0) {
+                    jmn_propagar_extra_cargar_perfil(&vm->g_extra, buf);
+                }
+            }
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
+        case OP_MEM_CONFIGURAR_MASK_G: {
+            uint32_t tau = (uint32_t)b_val;
+            union { uint64_t u64; float f32; } fp = {0};
+            fp.u64 = c_val & 0xFFFFFFFF;
+            if (tau <= JMN_RELACION_MAX) {
+                vm->g_extra.mask_tau[tau] = fp.f32;
+            }
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
+        case OP_MEM_CONFIGURAR_MASKS_G_LISTA: {
+            uint32_t lista_id = (uint32_t)b_val;
+            if (vm->mem_neuronal) {
+                uint32_t n = jmn_lista_tamano(vm->mem_neuronal, lista_id);
+                uint32_t cap_tau = (uint32_t)JMN_RELACION_MAX;
+                for (uint32_t i = 0; i < n && i < cap_tau; i++) {
+                    JMNValor v = jmn_lista_obtener(vm->mem_neuronal, lista_id, i);
+                    vm->g_extra.mask_tau[i + 1u] = v.f;
+                }
+            }
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
             
         case OP_Y:
             vm_set_register(vm, inst.operand_a, b_val & c_val);
@@ -3744,7 +3835,7 @@ int vm_step(VM* vm) {
             vm->pc += IR_INSTRUCTION_SIZE;
             break;
 
-        case 0x24: // OP_BIT_NOT
+        case OP_BIT_NOT:
             vm_set_register(vm, inst.operand_a, ~b_val);
             vm->pc += IR_INSTRUCTION_SIZE;
             break;
@@ -3857,13 +3948,13 @@ int vm_step(VM* vm) {
             break;
         }
 
-        case 0x69: { // OP_SYS_ARGC
+        case OP_SYS_ARGC: {
             vm_set_register(vm, inst.operand_a, (uint64_t)vm->argc);
             vm->pc += IR_INSTRUCTION_SIZE;
             break;
         }
 
-        case 0x6A: { // OP_SYS_ARGV
+        case OP_SYS_ARGV: {
             int index = (int)b_val;
             uint32_t id = 0;
             if (index >= 0 && index < vm->argc && vm->argv[index]) {
@@ -4166,7 +4257,7 @@ int vm_step(VM* vm) {
             break;
         }
 
-        case 0x44: { // OP_RESERVAR_PILA
+        case OP_RESERVAR_PILA: {
             // Tamaño como u24 (A|B<<8|C<<16) para soportar >255 bytes de frame
             uint32_t bytes_to_alloc = (uint32_t)inst.operand_a 
                                     | ((uint32_t)inst.operand_b << 8) 
@@ -5023,36 +5114,21 @@ int vm_step(VM* vm) {
             break;
         }
 
-        case OP_MEM_IMPRIMIR_CONCEPTO: {
-            size_t offset = (size_t)inst.operand_a | ((size_t)inst.operand_b << 8) | ((size_t)inst.operand_c << 16);
-#ifdef JASBOOT_LANG_INTEGRATION
-            uint32_t id = 0, fallback = 0;
-            int impreso = 0;
-            if (vm->ir && vm->ir->data && offset + 8 <= vm->ir->header.data_size) {
-                if (vm_leer_u32(vm->ir->data, vm->ir->header.data_size, offset, &id) == 0 &&
-                    vm_leer_u32(vm->ir->data, vm->ir->header.data_size, offset + 4, &fallback) == 0) {
-                    if (vm->mem_neuronal) impreso = jmn_imprimir_texto(vm->mem_neuronal, id);
-                    if (!impreso) {
-                        const char* cached = vm_text_cache_get(vm, id);
-                        if (cached && cached[0]) { vm_escribir_cadena(cached); vm->pc += IR_INSTRUCTION_SIZE; break; }
-                        if (fallback < vm->ir->header.data_size) vm_escribir_cadena((const char*)vm->ir->data + fallback);
-                    }
-                }
-            }
-#endif
-            vm->pc += IR_INSTRUCTION_SIZE;
-            break;
-        }
-        
         case OP_MEM_IMPRIMIR_ID: {
             uint32_t id = (uint32_t)vm_get_register(vm, inst.operand_a);
-#ifdef JASBOOT_LANG_INTEGRATION
-            JMNValor v;
-            v.u = id;
-            vm_imprimir_valor_recursivo(vm, v, 0);
-#else
-            vm_escribir_entero((uint64_t)id);
-#endif
+            const char* txt = vm_text_cache_get(vm, id);
+            if (txt) {
+                printf("%s", txt);
+            } else if (vm->mem_neuronal) {
+                char buf[4096];
+                if (jmn_obtener_texto(vm->mem_neuronal, id, buf, sizeof(buf)) >= 0) {
+                    printf("%s", buf);
+                } else {
+                    printf("<id %u>", (unsigned)id);
+                }
+            } else {
+                printf("<id %u>", (unsigned)id);
+            }
             vm->pc += IR_INSTRUCTION_SIZE;
             break;
         }
@@ -5402,7 +5478,7 @@ int vm_step(VM* vm) {
                 JMNMemoria* mem = vm->mem_neuronal;
                 JMNBusquedaResultado resultados[16];
                 vm_rastro_clear(vm);
-                vm_rastro_push(vm, id_frase, 1.0f);
+                vm_rastro_push(vm, id_frase, 1.0f, 0);
                 
                 // --- FASE 2: Parámetros Configurables ---
                 float umbral = 0.1f;
@@ -5424,7 +5500,7 @@ int vm_step(VM* vm) {
 
                 int n_res = jmn_buscar_asociaciones(mem, id_frase, 0, umbral, (uint16_t)profundidad, resultados, 16);
                 for (int ri = 0; ri < n_res; ri++)
-                    vm_rastro_push(vm, resultados[ri].id, resultados[ri].fuerza);
+                    vm_rastro_push(vm, resultados[ri].id, resultados[ri].fuerza, 1);
                 // Ver cuántos resultados se encontraron
                 // printf("[VM DEBUG] n_res=%d (Umbral=%.2f, Prof=%d)\n", n_res, umbral, profundidad);
                 
@@ -5534,42 +5610,6 @@ int vm_step(VM* vm) {
             break;
         }
 
-
-        case OP_MEM_ECO: {
-#ifdef JASBOOT_LANG_INTEGRATION
-            if (vm->mem_neuronal) {
-                uint32_t id_origen = (uint32_t)vm->registers[inst.operand_a];
-                uint32_t dest_addr = (uint32_t)inst.operand_b | ((uint32_t)inst.operand_c << 8);
-                
-                // Lógica de Fase 3: Eco Inteligente / Balbuceo
-                // 1. Intentar obtener la última sílaba
-                uint32_t id_res = jmn_ultima_silaba(vm->mem_neuronal, id_origen, 0);
-
-                if (id_res == 0) {
-                    // 2. Si falla (palabra monosílaba o vacía), intentar palabra completa
-                    id_res = jmn_ultima_palabra(vm->mem_neuronal, id_origen, 0);
-                }
-                
-                if (id_res == 0) {
-                     // 3. Si todo falla, usar identidad (eco directo)
-                     id_res = id_origen;
-                }
-                
-                // Guardar resultado en memoria
-                (void)vm_mem_write_u64_checked(vm, dest_addr, (uint64_t)id_res);
-                
-                // Cachear texto para optimizar visualización posterior
-                char buffer[4096];
-                if (jmn_obtener_texto(vm->mem_neuronal, id_res, buffer, sizeof(buffer)) >= 0) {
-                    vm_text_cache_put(vm, id_res, buffer);
-                }
-            } else {
-                // Sin memoria neuronal, comportamiento indefinido o error silencioso
-            }
-#endif
-            vm->pc += IR_INSTRUCTION_SIZE;
-            break;
-        }
 
         case OP_MEM_ASOCIAR: {
 #ifdef JASBOOT_LANG_INTEGRATION
@@ -5849,6 +5889,15 @@ int vm_step(VM* vm) {
             break;
         }
 
+        case OP_ESTABLECER_CONTEXTO: {
+            uint32_t id = (uint32_t)vm_get_register(vm, inst.operand_a);
+            if (vm->mem_neuronal) {
+                jmn_establecer_contexto(vm->mem_neuronal, id);
+            }
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
         case OP_RASTRO_ACTIVACION_PESO: {
             uint32_t idx;
             if (inst.flags & IR_INST_FLAG_B_IMMEDIATE)
@@ -6006,7 +6055,6 @@ int vm_step(VM* vm) {
             vm->pc += IR_INSTRUCTION_SIZE;
             break;
         }
-
 
         case OP_STR_EXTRAER_ANTES: {
             uint32_t off24 = (uint32_t)inst.operand_a | ((uint32_t)inst.operand_b << 8) | ((uint32_t)inst.operand_c << 16);
@@ -6805,89 +6853,6 @@ int vm_step(VM* vm) {
             break;
         }
 
-        case OP_JSON_A_ENTERO: {
-            uint32_t json_h = (uint32_t)vm_get_register(vm, inst.operand_b);
-            VMJsonValue* v = vm_json_get(vm, json_h);
-            int64_t iv = 0;
-            char buf[256];
-            if (!v) {
-                if (vm_try_catch_or_abort(vm, "json_a_entero: handle JSON invalido")) return 0;
-                fprintf(stderr, "Error de ejecucion (VM): json_a_entero: handle JSON invalido\n");
-                vm->running = 0;
-                vm->exit_code = 1;
-                return 0;
-            }
-            if (v->kind == VM_JSON_INT) iv = v->int_value;
-            else if (v->kind == VM_JSON_BOOL) iv = v->bool_value ? 1 : 0;
-            else if (v->kind == VM_JSON_FLOAT) iv = (int64_t)v->float_value;
-            else if (v->kind == VM_JSON_STRING && vm_text_cache_get_copy(vm, v->text_id, buf, sizeof(buf)) &&
-                     vm_parse_decimal_entero_estricto(buf, &iv)) { }
-            else {
-                if (vm_try_catch_or_abort(vm, "json_a_entero: conversion JSON invalida")) return 0;
-                fprintf(stderr, "Error de ejecucion (VM): json_a_entero: conversion JSON invalida\n");
-                vm->running = 0;
-                vm->exit_code = 1;
-                return 0;
-            }
-            vm->registers[inst.operand_a] = (uint64_t)iv;
-            vm->pc += IR_INSTRUCTION_SIZE;
-            break;
-        }
-
-        case OP_JSON_A_FLOTANTE: {
-            uint32_t json_h = (uint32_t)vm_get_register(vm, inst.operand_b);
-            VMJsonValue* v = vm_json_get(vm, json_h);
-            float fv = 0.0f;
-            char buf[256];
-            if (!v) {
-                if (vm_try_catch_or_abort(vm, "json_a_flotante: handle JSON invalido")) return 0;
-                fprintf(stderr, "Error de ejecucion (VM): json_a_flotante: handle JSON invalido\n");
-                vm->running = 0;
-                vm->exit_code = 1;
-                return 0;
-            }
-            if (v->kind == VM_JSON_FLOAT) fv = (float)v->float_value;
-            else if (v->kind == VM_JSON_INT) fv = (float)v->int_value;
-            else if (v->kind == VM_JSON_BOOL) fv = v->bool_value ? 1.0f : 0.0f;
-            else if (v->kind == VM_JSON_STRING && vm_text_cache_get_copy(vm, v->text_id, buf, sizeof(buf))) fv = vm_parse_decimal_flotante_estricto(buf);
-            else fv = nanf("");
-            if (isnan((double)fv)) {
-                if (vm_try_catch_or_abort(vm, "json_a_flotante: conversion JSON invalida")) return 0;
-                fprintf(stderr, "Error de ejecucion (VM): json_a_flotante: conversion JSON invalida\n");
-                vm->running = 0;
-                vm->exit_code = 1;
-                return 0;
-            }
-            vm->registers[inst.operand_a] = 0;
-            memcpy(&vm->registers[inst.operand_a], &fv, sizeof(fv));
-            vm->pc += IR_INSTRUCTION_SIZE;
-            break;
-        }
-
-        case OP_JSON_A_BOOL: {
-            uint32_t json_h = (uint32_t)vm_get_register(vm, inst.operand_b);
-            VMJsonValue* v = vm_json_get(vm, json_h);
-            uint64_t bv = 0;
-            if (!v) {
-                if (vm_try_catch_or_abort(vm, "json_a_bool: handle JSON invalido")) return 0;
-                fprintf(stderr, "Error de ejecucion (VM): json_a_bool: handle JSON invalido\n");
-                vm->running = 0;
-                vm->exit_code = 1;
-                return 0;
-            }
-            switch (v->kind) {
-                case VM_JSON_NULL: bv = 0; break;
-                case VM_JSON_BOOL: bv = v->bool_value ? 1u : 0u; break;
-                case VM_JSON_INT: bv = v->int_value != 0 ? 1u : 0u; break;
-                case VM_JSON_FLOAT: bv = v->float_value != 0.0 ? 1u : 0u; break;
-                case VM_JSON_STRING: bv = v->text_id != 5381 ? 1u : 0u; break;
-                default: bv = v->count != 0 ? 1u : 0u; break;
-            }
-            vm->registers[inst.operand_a] = bv;
-            vm->pc += IR_INSTRUCTION_SIZE;
-            break;
-        }
-
         case OP_JSON_TIPO: {
             uint32_t json_h = (uint32_t)vm_get_register(vm, inst.operand_b);
             VMJsonValue* v = vm_json_get(vm, json_h);
@@ -7458,23 +7423,6 @@ int vm_step(VM* vm) {
             // No incrementamos PC porque reiniciamos o fallamos
             break;
         }
-
-        case OP_ESTABLECER_CONTEXTO: {
-            size_t offset = (size_t)inst.operand_a |
-                            ((size_t)inst.operand_b << 8) |
-                            ((size_t)inst.operand_c << 16);
-            if (vm->ir && vm->ir->data && offset < vm->ir->header.data_size) {
-                const char* ctx = (const char*)vm->ir->data + offset;
-                if (vm->context) free(vm->context);
-                vm->context = strdup(ctx);
-            }
-            vm->pc += IR_INSTRUCTION_SIZE;
-            break;
-        }
-
-        case OP_USA_CONCEPTO:
-            vm->pc += IR_INSTRUCTION_SIZE;
-            break;
 
         case OP_MEM_LISTA_CREAR: {
             uint32_t id = 0;
@@ -8267,11 +8215,11 @@ int vm_step(VM* vm) {
                 float umbral = 0.1f;
                 uint16_t profundidad = 2;
                 vm_rastro_clear(vm);
-                vm_rastro_push(vm, origen_id, 1.0f);
+                vm_rastro_push(vm, origen_id, 1.0f, 0);
                 int n = jmn_buscar_asociaciones(vm->mem_neuronal, origen_id, tipo_relacion, umbral, profundidad, resultados, 16);
                 if (n > 0) {
                     vm_set_register(vm, inst.operand_a, (uint64_t)resultados[0].id);
-                    vm_rastro_push(vm, resultados[0].id, resultados[0].fuerza);
+                    vm_rastro_push(vm, resultados[0].id, resultados[0].fuerza, 1);
                 } else {
                     vm_set_register(vm, inst.operand_a, 0);
                 }
@@ -8391,11 +8339,13 @@ int vm_step(VM* vm) {
                              | (1u << JMN_RELACION_POSESION) | (1u << JMN_RELACION_PARENTESCO);
                     float best_act = -1.0f;
                     uint32_t best_id = 0;
+                    JMNPropagarExtra pex_mai;
+                    vm_propagar_pack_extra(vm, 0u, &pex_mai);
                     for (uint32_t t = 1u; t <= JMN_RELACION_MAX; t++) {
                         if (((mask >> t) & 1u) == 0u) continue;
                         JMNActivacionResultado tmp[32];
                         int nt = jmn_propagar_activacion_semillas(vm->mem_neuronal, seedb, nseed, 1.0f, 0.8f, 0.1f,
-                            (uint16_t)prof, t, tmp, (uint16_t)K, vm_jmn_rastro_cb, vm, NULL);
+                            (uint16_t)prof, t, tmp, (uint16_t)K, vm_jmn_rastro_cb, vm, &pex_mai);
                         if (nt > 0 && tmp[0].activacion > best_act) {
                             best_act = tmp[0].activacion;
                             best_id = tmp[0].id;
@@ -8416,7 +8366,7 @@ int vm_step(VM* vm) {
                     if (prof > 32) prof = 32;
                     if (tipo_relacion > JMN_RELACION_MAX) tipo_relacion = 0;
                     JMNPropagarExtra pex;
-                    vm_propagar_pack_extra((uint32_t)((c_val >> 24) & 0xFFu), &pex);
+                    vm_propagar_pack_extra(vm, (uint32_t)((c_val >> 24) & 0xFFu), &pex);
                     if (nseed < 1) {
                         n = 0;
                     } else {
@@ -8563,7 +8513,7 @@ int vm_step(VM* vm) {
             break;
         }
 
-        case 0x3F: { // OP_MEM_BUSCAR_MAPA_ASOCIADOS
+        case OP_MEM_BUSCAR_MAPA_ASOCIADOS: {
             // A <- mapa {concepto: [asociados...]} 
             // B = lista_origen, C = (max_p*1000 << 16) | min_p*1000
 #ifdef JASBOOT_LANG_INTEGRATION
@@ -9148,7 +9098,7 @@ int vm_step(VM* vm) {
         break;
     }
 
-    case 0xC6: { // OP_MEM_CORREGIR_SECUENCIA
+    case OP_MEM_CORREGIR_SECUENCIA: {
         // A = anterior, B = incorrecto, C = correcto
 #ifdef JASBOOT_LANG_INTEGRATION
         if (vm->mem_neuronal) {
@@ -9171,7 +9121,7 @@ int vm_step(VM* vm) {
         break;
     }
 
-        case 0xC7: { // OP_MEM_ASOCIAR_RELACION (y *_mai vía IR_INST_FLAG_RELATIVE)
+        case OP_MEM_ASOCIAR_RELACION: { // OP_MEM_ASOCIAR_RELACION (y *_mai vía IR_INST_FLAG_RELATIVE)
             // A = id1, B = id2, C = tipo (low 16 bits) + peso*1000 (bits 16-31); si bits 16-31 == 0 → peso 1.0
 #ifdef JASBOOT_LANG_INTEGRATION
             if (vm->mem_neuronal) {

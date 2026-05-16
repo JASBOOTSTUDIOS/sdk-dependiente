@@ -36,7 +36,7 @@ const char *const KEYWORDS[] = {
     "bit_shl", "bit_shr", "sistema_ejecutar",
     "fs_escribir_byte", "mapa_crear", "mapa_poner", "mapa_obtener", "lista_poner",
     "str_a_entero", "str_a_flotante", "entrada_flotante",
-    "registro", "fin_registro", "clase", "fin_clase", "extiende", "lista", "mapa", "bool", "hacer", "fin_hacer", "usar", "enviar", "privado", "padre",
+    "registro", "fin_registro", "clase", "fin_clase", "extiende", "lista", "mapa", "bool", "hacer", "fin_hacer", "usar", "enviar", "privado", "publico", "padre",
     "seleccionar", "caso", "defecto", "fin_seleccionar",
     "intentar", "atrapar", "final", "fin_intentar", "lanzar", "macro", "llamar",
     "fs_abrir", "fs_cerrar", "fs_escribir", "fs_leer_linea",
@@ -66,7 +66,7 @@ const char *const KEYWORDS[] = {
 const size_t KEYWORDS_COUNT = sizeof(KEYWORDS) / sizeof(KEYWORDS[0]);
 
 /* 1.6 Operadores de un carácter (incluye < > para comparaciones) */
-static const char ops_single[] = "=+-*/%(),.[]{}:?!<>";
+static const char ops_single[] = "=+-*/%(),.[]{}:?!<>|&";
 const char *const OPERATORS_SINGLE = ops_single;
 
 /* Operadores de dos caracteres (ordenados para matching: más largos primero) */
@@ -88,39 +88,13 @@ int is_reserved_identifier(const char *name) {
         return 0;
     size_t len = strlen(name);
     
-    // Algunos keywords se permiten como identificadores si son tipos o palabras de conexión
-    if (strcmp(name, "vec2") == 0 || strcmp(name, "vec3") == 0 ||
-        strcmp(name, "vec4") == 0 || strcmp(name, "mat4") == 0 || strcmp(name, "mat3") == 0 ||
-        strcmp(name, "entrada") == 0 || strcmp(name, "texto") == 0 ||
-        strcmp(name, "caracter") == 0 || strcmp(name, "bool") == 0 ||
-        strcmp(name, "lista") == 0 || strcmp(name, "mapa") == 0 ||
-        strcmp(name, "entero") == 0 || strcmp(name, "flotante") == 0 || strcmp(name, "elemento") == 0 ||
-        strcmp(name, "u32") == 0 || strcmp(name, "u64") == 0 ||
-        strcmp(name, "u8") == 0 || strcmp(name, "byte") == 0 ||
-        strcmp(name, "bytes") == 0 || strcmp(name, "padre") == 0 ||
-        strcmp(name, "a") == 0 || strcmp(name, "de") == 0 ||
-        strcmp(name, "con") == 0 || strcmp(name, "o") == 0 ||
-        strcmp(name, "y") == 0 || strcmp(name, "que") == 0 ||
-        strcmp(name, "como") == 0 ||
-        strcmp(name, "sobre") == 0 ||
-        strcmp(name, "en") == 0 || strcmp(name, "cada") == 0 ||
-        strcmp(name, "valor") == 0 || strcmp(name, "peso") == 0 ||
-        strcmp(name, "igual") == 0 || strcmp(name, "es") == 0 ||
-        strcmp(name, "entonces") == 0 || strcmp(name, "retorna") == 0 ||
-        strcmp(name, "mayor") == 0 || strcmp(name, "menor") == 0 ||
-        strcmp(name, "distinto") == 0 || strcmp(name, "hacer") == 0 ||
-        strcmp(name, "json") == 0 || strcmp(name, "objeto") == 0 ||
-        strcmp(name, "decimal") == 0 || strcmp(name, "registro") == 0 ||
-        strcmp(name, "clase") == 0 || strcmp(name, "privado") == 0 ||
-        strcmp(name, "caso") == 0 || strcmp(name, "defecto") == 0 ||
-        is_sistema_llamada(name, len)) {
-        return 0;
-    }
-
     if (is_keyword(name, len))
         return 1;
     if (is_forbidden(name, len))
         return 1;
+    if (is_sistema_llamada(name, len))
+        return 1;
+        
     return 0;
 }
 

@@ -55,9 +55,12 @@ void ast_free(ASTNode *node) {
             for (size_t i = 0; i < n->n_fields; i++) {
                 free_str(n->field_types[i]);
                 free_str(n->field_names[i]);
+                if (n->field_initializers && n->field_initializers[i])
+                    ast_free(n->field_initializers[i]);
             }
             free(n->field_types);
             free(n->field_names);
+            if (n->field_initializers) free(n->field_initializers);
             for (size_t i = 0; i < n->n_methods; i++) {
                 ast_free(n->methods[i]);
             }

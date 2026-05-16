@@ -10,6 +10,7 @@
 #define VM_TRY_STACK_MAX 64
 #define VM_TEXT_PREVIEW_MAX 128
 #include "ir_format.h"
+#include "memoria_neuronal.h"
 #include <stdint.h>
 #include <stddef.h>
 
@@ -111,9 +112,11 @@ typedef struct VMPercepcionEntrada {
 typedef struct VMRastroActivacionEntrada {
     uint32_t id;
     float activacion;
+    uint16_t depth;
 } VMRastroActivacionEntrada;
 
-// Estado de la VM
+// IA: Estructura para configuración de propagación - DEFINIDA EN memoria_neuronal.h
+
 typedef struct {
     uint64_t registers[IR_REGISTER_COUNT];  // Registros virtuales
     uint8_t* memory;                         // Memoria de datos
@@ -210,6 +213,8 @@ typedef struct {
     /** Últimos IDs de concepto tocados por MAI/JMN (buffer circular 10; plan 3.1). */
     uint32_t mai_ctx_ring[10];
     uint32_t mai_ctx_write_idx;
+    /** Configuración global de propagación g(τ) y mask(C, τ) (Plan 3.1 / Documento 03_g_tau.md). */
+    JMNPropagarExtra g_extra;
 } VM;
 
 // Crear y destruir VM

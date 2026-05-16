@@ -115,6 +115,7 @@ typedef struct {
     size_t n_extends;
     char **field_types;
     char **field_names;
+    ASTNode **field_initializers; /* opcional: NULL si no hay initializer */
     size_t n_fields;
     ASTNode **methods;        /* FunctionNode */
     size_t n_methods;
