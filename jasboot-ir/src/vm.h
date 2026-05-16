@@ -215,6 +215,10 @@ typedef struct {
     uint32_t mai_ctx_write_idx;
     /** Configuración global de propagación g(τ) y mask(C, τ) (Plan 3.1 / Documento 03_g_tau.md). */
     JMNPropagarExtra g_extra;
+    /** Auditoría de IA acumulada para exportar como JSON (lista de IDs de objetos JSON). */
+    uint32_t* audit_json_list;
+    uint32_t audit_json_count;
+    uint32_t audit_json_cap;
 } VM;
 
 // Crear y destruir VM

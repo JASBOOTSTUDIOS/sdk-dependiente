@@ -179,7 +179,7 @@ typedef enum {
     OP_STR_MAYUSCULAS = 0x4F,
 
     OP_STR_MINUSCULAS = 0x50,
-    OP_STR_COPIAR = 0x51,
+    OP_MEM_CONFIGURAR_H_PARAM = 0x51, // B=tipo_param(0=modo,1=lambda,2=kappa); C=valor (int o float)
     OP_FS_ABRIR = 0x52,
     OP_FS_ESCRIBIR = 0x53,
     OP_FS_FIN_ARCHIVO = 0x54,
@@ -200,174 +200,174 @@ typedef enum {
     OP_MEM_MAPA_PONER = 0x62,
     OP_MEM_MAPA_OBTENER = 0x63,
     OP_FS_LEER_BYTE = 0x64,
-    OP_FS_ESCRIBIR_U32 = 0x65,
-    OP_FS_LEER_ARCHIVO_REG = 0x66,
-    OP_FS_ESCRIBIR_ARCHIVO_REG = 0x67,
-    OP_FS_LEER_U32 = 0x68,
-    OP_SYS_ARGC = 0x69,
-    OP_SYS_ARGV = 0x6A,
-    OP_STR_SUBTEXTO = 0x6B,
-    OP_IO_PERCIBIR_TECLADO = 0x6C,
-    OP_RASTRO_ACTIVACION_PESO = 0x6D,
-    OP_RASTRO_ACTIVACION_LISTA = 0x6E,
-    OP_MEM_ELEGIR_POR_PESO_IDX = 0x6F,
+    OP_MEM_CARGAR_PERFIL_G_FILE = 0x65,
+    OP_MEM_CONFIGURAR_AUDITORIA = 0x66,
+    OP_MEM_OBTENER_AUDITORIA_JSON = 0x67, // A <- id lista JSON
+    OP_FS_LEER_ARCHIVO_REG = 0x68,
+    OP_FS_ESCRIBIR_ARCHIVO_REG = 0x69,
+    OP_FS_LEER_U32 = 0x6A,
+    OP_SYS_ARGC = 0x6B,
+    OP_SYS_ARGV = 0x6C,
+    OP_STR_SUBTEXTO = 0x6D,
+    OP_IO_PERCIBIR_TECLADO = 0x6E,
+    OP_RASTRO_ACTIVACION_PESO = 0x6F,
+    OP_RASTRO_ACTIVACION_LISTA = 0x70,
+    OP_MEM_ELEGIR_POR_PESO_IDX = 0x71,
 
-    OP_MEM_ELEGIR_POR_PESO_ID = 0x70,
-    OP_MEM_ELEGIR_POR_PESO_SEMILLA = 0x71,
-    OP_STR_REEMPLAZAR = 0x72,
-    OP_ANALITICA_MLP_PREDICT = 0x73,
-    OP_ANALITICA_MLP_SAVE = 0x74,
-    OP_MAI_CONTEXTO_LISTA = 0x75,
-    OP_JSON_TIPO = 0x76,
-    OP_CLOSURE_CREAR = 0x77,
-    OP_CLOSURE_CARGAR = 0x78,
-    OP_BYTES_CREAR = 0x79,
-    OP_BYTES_TAMANO = 0x7A,
-    OP_BYTES_OBTENER = 0x7B,
-    OP_BYTES_PONER = 0x7C,
-    OP_BYTES_ANEXAR = 0x7D,
-    OP_MEM_MAPA_TAMANO = 0x7E,
-    OP_BYTES_SUBBYTES = 0x7F,
-
-    OP_BYTES_DESDE_TEXTO = 0x80,
-    OP_BYTES_A_TEXTO = 0x81,
-    OP_DNS_RESOLVER = 0x82,
-    OP_TCP_CONECTAR = 0x83,
-    OP_TCP_ESCUCHAR = 0x84,
-    OP_TCP_ACEPTAR = 0x85,
-    OP_TRY_ENTER = 0x86,
-    OP_TRY_LEAVE = 0x87,
-    OP_JSON_PARSE = 0x88,
-    OP_JSON_STRINGIFY = 0x89,
-    OP_JSON_OBJETO_OBTENER = 0x8A,
-    OP_JSON_LISTA_OBTENER = 0x8B,
-    OP_JSON_LISTA_TAMANO = 0x8C,
-    OP_MEM_LISTA_LIBERAR = 0x8D,
-    OP_IO_ENTRADA_FLOTANTE = 0x8E,
-    OP_CARGAR_BIBLIOTECA = 0x8F, // Movido para evitar colisión con TLS_CLIENTE
+    OP_MEM_ELEGIR_POR_PESO_ID = 0x72,
+    OP_MEM_ELEGIR_POR_PESO_SEMILLA = 0x73,
+    OP_STR_REEMPLAZAR = 0x74,
+    OP_ANALITICA_MLP_PREDICT = 0x75,
+    OP_ANALITICA_MLP_SAVE = 0x76,
+    OP_MAI_CONTEXTO_LISTA = 0x77,
+    OP_JSON_TIPO = 0x78,
+    OP_CLOSURE_CREAR = 0x79,
+    OP_CLOSURE_CARGAR = 0x7A,
+    OP_BYTES_CREAR = 0x7B,
+    OP_BYTES_TAMANO = 0x7C,
+    OP_BYTES_OBTENER = 0x7D,
+    OP_BYTES_PONER = 0x7E,
+    OP_BYTES_DESDE_TEXTO = 0x7F,
+    OP_MEM_MAPA_TAMANO = 0x80,
+    OP_BYTES_SUBBYTES = 0x81,
+    OP_BYTES_A_TEXTO = 0x82,
+    OP_DNS_RESOLVER = 0x83,
+    OP_TCP_CONECTAR = 0x84,
+    OP_TCP_ESCUCHAR = 0x85,
+    OP_TCP_ACEPTAR = 0x86,
+    OP_TRY_ENTER = 0x87,
+    OP_TRY_LEAVE = 0x88,
+    OP_JSON_PARSE = 0x89,
+    OP_JSON_STRINGIFY = 0x8A,
+    OP_JSON_OBJETO_OBTENER = 0x8B,
+    OP_JSON_LISTA_OBTENER = 0x8C,
+    OP_JSON_LISTA_TAMANO = 0x8D,
+    OP_MEM_LISTA_LIBERAR = 0x8E,
+    OP_IO_ENTRADA_FLOTANTE = 0x8F,
+    OP_CARGAR_BIBLIOTECA = 0x90,
     
     // Conversión
-    OP_CONV_I2F = 0x90,
-    OP_CONV_F2I = 0x91,    // Conversión flotante -> entero
-    OP_RAIZ = 0x92,        // A <- sqrt(B) flotante
-    OP_FFI_OBTENER_SIMBOLO = 0x93,
-    OP_FFI_LLAMAR = 0x94,
-    OP_SIN = 0x95,         // A <- sin(B) radianes, flotante
-    OP_COS = 0x96,         // A <- cos(B) radianes, flotante
-    OP_TAN = 0x97,         // A <- tan(B) radianes, flotante
-    OP_STR_DESDE_NUMERO = 0x98, // A ← string(B); C inm/reg: 0=float, 1=entero, 2=bool→"verdadero"/"falso"
-    OP_ATAN2 = 0x99,       // A <- atan2(B=y, C=x) radianes, flotante
-    OP_STR_DESDE_CODIGO = 0x9A,
-    OP_MAT4_MUL_VEC4 = 0x9B,  // dest(A), mat(B), vec(C) = direcciones en bytes (regs)
-    OP_MAT4_MUL = 0x9C,        // Restaurado a su valor original
-    OP_EXP = 0x9D,             // A <- exp(B) flotante
-    OP_LOG = 0x9E,             // A <- log(B) flotante
-    OP_LOG10 = 0x9F,           // A <- log10(B) flotante
+    OP_CONV_I2F = 0x91,
+    OP_CONV_F2I = 0x92,
+    OP_RAIZ = 0x93,
+    OP_FFI_OBTENER_SIMBOLO = 0x94,
+    OP_FFI_LLAMAR = 0x95,
+    OP_SIN = 0x96,
+    OP_COS = 0x97,
+    OP_TAN = 0x98,
+    OP_STR_DESDE_NUMERO = 0x99,
+    OP_ATAN2 = 0x9A,
+    OP_STR_DESDE_CODIGO = 0x9B,
+    OP_MAT4_MUL_VEC4 = 0x9C,
+    OP_MAT4_MUL = 0x9D,
+    OP_EXP = 0x9E,
+    OP_LOG = 0x9F,
+    OP_LOG10 = 0xA0,
 
-    OP_MAT4_IDENTIDAD = 0xA0,  // dest(A) = matriz identidad
-    OP_MAT4_TRANSPUESTA = 0xA1, // dest(A), src(B) = direcciones en regs
-    OP_MAT4_INVERSA = 0xA2,    // dest(A), src(B) = direcciones en regs
-    OP_MAT3_MUL_VEC3 = 0xA3,   // dest(A), mat(B), vec(C) = direcciones en regs
-    OP_MAT3_MUL = 0xA4,        // dest(A), matL(B), matR(C) = direcciones en regs
-    OP_MEM_REFORZAR_CONCEPTO = 0xA5,  // A: reg id concepto; C inmediato 1..100 → delta = C/100 a aristas incidentes
-    OP_MEM_PENALIZAR_CONCEPTO = 0xA6, // Igual; resta delta, fuerza mínima 0
-    OP_MEM_CONSOLIDAR_SUENO = 0xA7,   // Sueño: decaer + olvidar + consolidar (ver vm.c)
-    OP_MEM_OLVIDAR_DEBILES = 0xA8,    // Solo elimina aristas con fuerza ≤ umbral
-    OP_PERCEPCION_REGISTRAR = 0xA9,   // B reg = id concepto a añadir al buffer circular
-    OP_PERCEPCION_VENTANA = 0xAA,     // A=ok; capacidad = B|C inm (u16 LE, 0→64)
-    OP_PERCEPCION_LIMPIAR = 0xAB,
-    OP_PERCEPCION_TAMANO = 0xAC,      // A <- count
-    OP_PERCEPCION_ANTERIOR = 0xAD,    // A <- id en índice B (0=más reciente)
-    OP_PERCEPCION_LISTA = 0xAE,       // A <- id lista episódica (orden reciente→antiguo)
-    OP_RASTRO_ACTIVACION_VENTANA = 0xAF,  // Cap B|C u16 LE (16..2048, 0→128); A=ok
+    OP_MAT4_IDENTIDAD = 0xA1,
+    OP_MAT4_TRANSPUESTA = 0xA2,
+    OP_MAT4_INVERSA = 0xA3,
+    OP_MAT3_MUL_VEC3 = 0xA4,
+    OP_MAT3_MUL = 0xA5,
+    OP_MEM_REFORZAR_CONCEPTO = 0xA6,
+    OP_MEM_PENALIZAR_CONCEPTO = 0xA7,
+    OP_MEM_CONSOLIDAR_SUENO = 0xA8,
+    OP_MEM_OLVIDAR_DEBILES = 0xA9,
+    OP_PERCEPCION_REGISTRAR = 0xAA,
+    OP_PERCEPCION_VENTANA = 0xAB,
+    OP_PERCEPCION_LIMPIAR = 0xAC,
+    OP_PERCEPCION_TAMANO = 0xAD,
+    OP_PERCEPCION_ANTERIOR = 0xAE,
+    OP_PERCEPCION_LISTA = 0xAF,
+    OP_RASTRO_ACTIVACION_VENTANA = 0xB0,
 
     // Listas / Memoria Episódica
-    OP_MEM_LISTA_CREAR = 0xB0,       // A <- Crear lista
-    OP_MEM_LISTA_AGREGAR = 0xB1,     // A (nombre/ID) <- Agregar valor B
-    OP_MEM_LISTA_OBTENER = 0xB2,     // A <- Obtener de lista B en index C
-    OP_MEM_LISTA_TAMANO = 0xB3,      // A <- Tamaño de lista B
-    OP_MEM_LISTA_ID = 0xB4,          // A <- Obtener ID interno de lista
-    OP_MEM_PENSAR_RESPUESTA = 0xB5,  // A <- PensarRespuesta(B)
-    OP_MEM_LISTA_LIMPIAR    = 0xB6,  // A <- Limpiar lista
-    OP_MEM_LISTA_PONER = 0xB7,       // ListSet(A:list_id, B:index, C:val_reg)
-    OP_MEM_LISTA_UNIR = 0xB8,        // A <- Unir(B, C)
-    OP_RASTRO_ACTIVACION_TAMANO = 0xB9,
-    OP_STR_LONGITUD = 0xBA,
-    OP_MEM_CERRAR = 0xBB,
-    OP_MEM_CREAR = 0xBC,
-    OP_MEM_PENALIZAR = 0xBD,
-    OP_STR_A_ENTERO = 0xBE,
-    OP_RASTRO_ACTIVACION_OBTENER = 0xBF,
+    OP_MEM_LISTA_CREAR = 0xB1,
+    OP_MEM_LISTA_AGREGAR = 0xB2,
+    OP_MEM_LISTA_OBTENER = 0xB3,
+    OP_MEM_LISTA_TAMANO = 0xB4,
+    OP_MEM_LISTA_ID = 0xB5,
+    OP_MEM_PENSAR_RESPUESTA = 0xB6,
+    OP_MEM_LISTA_LIMPIAR    = 0xB7,
+    OP_MEM_LISTA_PONER = 0xB8,
+    OP_MEM_LISTA_UNIR = 0xB9,
+    OP_RASTRO_ACTIVACION_TAMANO = 0xBA,
+    OP_STR_LONGITUD = 0xBB,
+    OP_MEM_CERRAR = 0xBC,
+    OP_MEM_CREAR = 0xBD,
+    OP_MEM_PENALIZAR = 0xBE,
+    OP_STR_A_ENTERO = 0xBF,
+    OP_RASTRO_ACTIVACION_OBTENER = 0xC0,
 
-    OP_ESTABLECER_CONTEXTO = 0xC0,
-    OP_STR_FLOTANTE_PREC = 0xC1,
-    OP_MEM_REGISTRAR_PATRON = 0xC2, // A: id_lista -> Registra patrón secuencial
-    OP_STR_ASOCIAR_SECUENCIA = 0xC3, // Asociar secuencia
-    OP_MEM_PENSAR_SIGUIENTE = 0xC4,  // Pensar siguiente
-    OP_MEM_PENSAR_ANTERIOR = 0xC5,   // Pensar anterior
-    OP_MEM_CORREGIR_SECUENCIA = 0xC6, // Corregir secuencia
-    OP_MEM_ASOCIAR_RELACION = 0xC7,   // Asociar relación (similitud/oposición)
-    OP_MEM_COMPARAR_PATRONES = 0xC8,  // A: id_lista_a, B: id_lista_b -> reg C (similitud)
-    OP_MEM_BUSCAR_ASOCIADOS = 0xC9,   // A <- mejor asociado de B (tipo C); umbral 0.1, prof 2
-    OP_MEM_BUSCAR_ASOCIADOS_LISTA = 0xCA, // A <- lista con top-K ids asociados a B; C = tipo|(K<<8)
-    OP_MEM_OBTENER_VALOR = 0xCB,      // A = valor en clave B (recordar); tipo ASOCIACION; si no hay, A=B
-    OP_MEM_BUSCAR_INTROSPECTIVA = 0xCC, // A <- primer ID que contiene texto B (case insensitive)
-    OP_MEM_DECAE_CONEXIONES = 0xCD,   // Decaimiento global; A=reg ok; B,C inm opcional factor%/1000‰ umbral
-    OP_MEM_PROPAGAR_ACTIVACION = 0xCE, // A <- mejor id; B=origen; C=tipo|(K<<8)|(prof<<16) o *_mai+RELATIVE: máscara|(K<<16)|(prof<<24)
-    OP_RASTRO_ACTIVACION_LIMPIAR = 0xCF,  // Vacía rastro manual
+    OP_ESTABLECER_CONTEXTO = 0xC1,
+    OP_STR_FLOTANTE_PREC = 0xC2,
+    OP_MEM_REGISTRAR_PATRON = 0xC3,
+    OP_STR_ASOCIAR_SECUENCIA = 0xC4,
+    OP_MEM_PENSAR_SIGUIENTE = 0xC5,
+    OP_MEM_PENSAR_ANTERIOR = 0xC6,
+    OP_MEM_CORREGIR_SECUENCIA = 0xC7,
+    OP_MEM_ASOCIAR_RELACION = 0xC8,
+    OP_MEM_COMPARAR_PATRONES = 0xC9,
+    OP_MEM_BUSCAR_ASOCIADOS = 0xCA,
+    OP_MEM_BUSCAR_ASOCIADOS_LISTA = 0xCB,
+    OP_MEM_OBTENER_VALOR = 0xCC,
+    OP_MEM_BUSCAR_INTROSPECTIVA = 0xCD,
+    OP_MEM_DECAE_CONEXIONES = 0xCE,
+    OP_MEM_PROPAGAR_ACTIVACION = 0xCF,
+    OP_RASTRO_ACTIVACION_LIMPIAR = 0xD0,
 
-    OP_STR_EXTRAER_ANTES = 0xD0,     // Extraer texto antes de patrón
-    OP_STR_EXTRAER_DESPUES = 0xD1,   // Extraer texto después de patrón
-    OP_STR_CONCATENAR = 0xD2,
-    OP_IMPRIMIR_NUMERO = 0xD3,       // Imprime valor numérico de un registro
-    OP_MEM_ULTIMA_PALABRA = 0xD4,   // Extrae última palabra (concept ID -> dest_var_addr)
-    OP_MEM_TERMINA_CON = 0xD5,      // Verifica sufijo (id_frase, id_sufijo) -> reg
-    OP_MEM_ULTIMA_SILABA = 0xD6,    // Extrae última sílaba (concept ID -> dest_var_addr)
-    OP_STR_CONCATENAR_REG = 0xD7,    // Concatenar regs B y C en destino A
-    OP_STR_EXTRAER_ANTES_REG = 0xD8,   // Extraer (regs: A=frase, B=patron) -> C=dest_reg
-    OP_STR_EXTRAER_DESPUES_REG = 0xD9, // Extraer (regs: A=frase, B=patron) -> C=dest_reg
-    OP_MEM_IMPRIMIR_ID = 0xDA,       // Imprime texto de un concepto desde ID en registro
-    OP_MEM_COPIAR_TEXTO = 0xDB,      // Copia texto de concepto B a concepto A
-    OP_MEM_CONTIENE_TEXTO = 0xDC,    // Verifica si concepto A contiene concepto B -> reg
-    OP_MEM_COMPARAR_TEXTO = 0xDD,    // Compara dos conceptos (id_a, id_b) -> resultado en reg
-    OP_MEM_PROCESAR_TEXTO = 0xDE,    // Procesa texto cognitivamente (id)
-    OP_MEM_PENSAR = 0xDF,            // Razonamiento multipath (BFS)
+    OP_STR_EXTRAER_ANTES = 0xD1,
+    OP_STR_EXTRAER_DESPUES = 0xD2,
+    OP_STR_CONCATENAR = 0xD3,
+    OP_IMPRIMIR_NUMERO = 0xD4,
+    OP_MEM_ULTIMA_PALABRA = 0xD5,
+    OP_MEM_TERMINA_CON = 0xD6,
+    OP_MEM_ULTIMA_SILABA = 0xD7,
+    OP_STR_CONCATENAR_REG = 0xD8,
+    OP_STR_EXTRAER_ANTES_REG = 0xD9,
+    OP_STR_EXTRAER_DESPUES_REG = 0xDA,
+    OP_MEM_IMPRIMIR_ID = 0xDB,
+    OP_MEM_COPIAR_TEXTO = 0xDC,
+    OP_MEM_CONTIENE_TEXTO = 0xDD,
+    OP_MEM_COMPARAR_TEXTO = 0xDE,
+    OP_MEM_PROCESAR_TEXTO = 0xDF,
+    OP_MEM_PENSAR = 0xE0,
 
-    OP_IO_INGRESAR_TEXTO = 0xE0, // Lee stdin y guarda texto en memoria neuronal (id desde data)
-    OP_MEM_CONTIENE_TEXTO_REG = 0xE1, // A ← B contains C (B and C are reg IDs)
-    OP_MEM_TERMINA_CON_REG = 0xE2,    // A ← B ends with C (B and C are reg IDs)
-    OP_MEM_MAPA_BORRAR = 0xE3,
-    OP_STR_REGISTRAR_LITERAL = 0xE4, // Registrar string literal desde data
-    OP_IO_INPUT_REG = 0xE5,        // Leer texto de stdin -> Reg A (ID generado)
-    OP_MEM_BUSCAR_PESO_REG = 0xE6, // Buscar peso usando ID en registro A -> DestAddr[B|C]
-    OP_MEM_APRENDER_PESO_REG = 0xE7, // Aprender peso dinámico
-    OP_MEM_ASOCIAR = 0xE8,           // Asociar legacy; si IR_INST_FLAG_SAFE y !A_IMM → mai_contexto (ver vm.c)
-    OP_MEM_OBTENER_RELACIONADOS = 0xE9, // A <- GetRelated(A), Store at B|C
-    OP_LEER_U32_IND = 0xEA,           // A <- *u32(Reg B)
-    OP_MEM_ES_VARIABLE_SISTEMA = 0xEB,
-    OP_STR_EXTRAER_CARACTER = 0xEC,
-    OP_MEM_OBTENER_FUERZA = 0xED,
-    OP_STR_CODIGO_CARACTER = 0xEE,
-    OP_IMPRIMIR_FLOTANTE = 0xEF,
+    OP_IO_INGRESAR_TEXTO = 0xE1,
+    OP_MEM_CONTIENE_TEXTO_REG = 0xE2,
+    OP_MEM_TERMINA_CON_REG = 0xE3,
+    OP_MEM_MAPA_BORRAR = 0xE4,
+    OP_STR_REGISTRAR_LITERAL = 0xE5,
+    OP_IO_INPUT_REG = 0xE6,
+    OP_MEM_BUSCAR_PESO_REG = 0xE7,
+    OP_MEM_APRENDER_PESO_REG = 0xE8,
+    OP_MEM_ASOCIAR = 0xE9,
+    OP_MEM_OBTENER_RELACIONADOS = 0xEA,
+    OP_LEER_U32_IND = 0xEB,
+    OP_MEM_ES_VARIABLE_SISTEMA = 0xEC,
+    OP_STR_EXTRAER_CARACTER = 0xED,
+    OP_MEM_OBTENER_FUERZA = 0xEE,
+    OP_STR_CODIGO_CARACTER = 0xEF,
+    OP_IMPRIMIR_FLOTANTE = 0xF0,
 
     // Sistema / IA / Memoria Neuronal
-    OP_MEM_APRENDER_CONCEPTO = 0xF0,    // A: reg_id, B: reg_weight, C: 0
-    OP_MEM_BUSCAR_CONCEPTO = 0xF1,      // A: reg_id, B: reg_dest, C: 0
-    OP_MEM_ASOCIAR_CONCEPTOS = 0xF2,    // A: reg_id1, B: reg_id2, C: reg_weight
-    OP_MEM_ACTUALIZAR_PESO = 0xF3,      // A: reg_id, B: reg_weight, C: 0
-    OP_MEM_OBTENER_ASOCIACIONES = 0xF4, // A: reg_id, B: reg_dest_count, C: 0
-    OP_MEM_OBTENER_RELACION = 0xF5,     // A: dest, B: id1, C: id2
+    OP_MEM_APRENDER_CONCEPTO = 0xF1,
+    OP_MEM_BUSCAR_CONCEPTO = 0xF2,
+    OP_MEM_ASOCIAR_CONCEPTOS = 0xF3,
+    OP_MEM_ACTUALIZAR_PESO = 0xF4,
+    OP_MEM_OBTENER_ASOCIACIONES = 0xF5,
+    OP_MEM_OBTENER_RELACION = 0xF6,
     
     // TLS
-    OP_TLS_SERVIDOR = 0xF6,
-    OP_TLS_ENVIAR = 0xF7,
-    OP_TLS_RECIBIR = 0xF8,
-    OP_TLS_CERRAR = 0xF9,
-    OP_IO_PAUSA = 0xFA,
-    OP_FS_LEER_TEXTO = 0xFB,
-    OP_FS_ESCRIBIR_TEXTO = 0xFC,
-    OP_ACTIVAR_MODULO = 0xFD,
-    OP_MEM_OBTENER_TODOS = 0xFE,      // A <- Obtener lista de todos los IDs
+    OP_TLS_SERVIDOR = 0xF7,
+    OP_TLS_ENVIAR = 0xF8,
+    OP_TLS_RECIBIR = 0xF9,
+    OP_TLS_CERRAR = 0xFA,
+    OP_IO_PAUSA = 0xFB,
+    OP_FS_LEER_TEXTO = 0xFC,
+    OP_FS_ESCRIBIR_TEXTO = 0xFD,
+    OP_ACTIVAR_MODULO = 0xFE,
+    OP_MEM_OBTENER_TODOS = 0xFF,
     
     OP_NOP = 0xFF             // No operation
 } IROpcode;

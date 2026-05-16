@@ -1611,6 +1611,7 @@ static int is_builtin_type(const char *t) {
     return (strcmp(t, "entero") == 0 || strcmp(t, "flotante") == 0 ||
             strcmp(t, "texto") == 0 || strcmp(t, "booleano") == 0 ||
             strcmp(t, "lista") == 0 || strcmp(t, "mapa") == 0 ||
+            strcmp(t, "json") == 0 ||
             strcmp(t, "vec2") == 0 || strcmp(t, "vec3") == 0 ||
             strcmp(t, "vec4") == 0 || strcmp(t, "color") == 0 ||
             strcmp(t, "funcion") == 0 || strcmp(t, "macro") == 0 ||
@@ -1891,9 +1892,10 @@ static const char *get_expression_type(CodeGen *cg, ASTNode *node) {
         if (cn->name && (strcmp(cn->name, "vec4") == 0 && cn->n_args == 4)) return "vec4";
         if (cn->name && (strcmp(cn->name, "str_a_entero") == 0 || strcmp(cn->name, "convertir_entero") == 0)) return "entero";
         if (cn->name && (strcmp(cn->name, "str_a_flotante") == 0 || strcmp(cn->name, "convertir_flotante") == 0)) return "flotante";
-        if (cn->name && strcmp(cn->name, "json_parse") == 0) return "objeto";
+        if (cn->name && strcmp(cn->name, "json_parse") == 0) return "json";
         if (cn->name && (strcmp(cn->name, "json_objeto_obtener") == 0 || strcmp(cn->name, "json_lista_obtener") == 0))
-            return "objeto";
+            return "json";
+        if (cn->name && strcmp(cn->name, "obtener_auditoria_ia_json") == 0) return "json";
         if (cn->name && strcmp(cn->name, "json_stringify") == 0) return "texto";
         if (cn->name && strcmp(cn->name, "json_a_texto") == 0) return "texto";
         if (cn->name && strcmp(cn->name, "json_a_flotante") == 0) return "flotante";
@@ -4212,6 +4214,55 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
              IR_INST_FLAG_B_REGISTER);
         return 1;
     }
+    if (strcmp(name, "configurar_h_modo") == 0 || strcmp(name, "configurar_h_mode") == 0) {
+        if (!ARG0) {
+            sistema_error_sin_argumentos(cg, name, "modo (0=lineal, 1=exp, 2=sigmoide, 3=paso)", cn->base.line, cn->base.col);
+            return 1;
+        }
+        int r_modo = visit_expression(cg, ARG0, dest_reg + 1);
+        emit(cg, OP_MEM_CONFIGURAR_H_PARAM, 0, 0, (uint8_t)r_modo, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_REGISTER);
+        return 1;
+    }
+    if (strcmp(name, "configurar_h_lambda") == 0) {
+        if (!ARG0) {
+            sistema_error_sin_argumentos(cg, name, "valor lambda (flotante)", cn->base.line, cn->base.col);
+            return 1;
+        }
+        int r_val = visit_expression(cg, ARG0, dest_reg + 1);
+        emit(cg, OP_MEM_CONFIGURAR_H_PARAM, 0, 1, (uint8_t)r_val, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_REGISTER);
+        return 1;
+    }
+    if (strcmp(name, "configurar_h_kappa") == 0) {
+        if (!ARG0) {
+            sistema_error_sin_argumentos(cg, name, "valor kappa (flotante)", cn->base.line, cn->base.col);
+            return 1;
+        }
+        int r_val = visit_expression(cg, ARG0, dest_reg + 1);
+        emit(cg, OP_MEM_CONFIGURAR_H_PARAM, 0, 2, (uint8_t)r_val, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_REGISTER);
+        return 1;
+    }
+    if (strcmp(name, "cargar_perfil_g_archivo") == 0 || strcmp(name, "cargar_perfil_g_file") == 0) {
+        if (!ARG0) {
+            sistema_error_sin_argumentos(cg, name, "ruta del archivo (texto)", cn->base.line, cn->base.col);
+            return 1;
+        }
+        int r_path = visit_expression(cg, ARG0, dest_reg + 1);
+        emit(cg, OP_MEM_CARGAR_PERFIL_G_FILE, 0, (uint8_t)r_path, 0, IR_INST_FLAG_B_REGISTER);
+        return 1;
+    }
+    if (strcmp(name, "configurar_auditoria_ia") == 0) {
+        if (!ARG0) {
+            sistema_error_sin_argumentos(cg, name, "modo (0=off, 1=resumen, 2=detallado)", cn->base.line, cn->base.col);
+            return 1;
+        }
+        int r_modo = visit_expression(cg, ARG0, dest_reg + 1);
+        emit(cg, OP_MEM_CONFIGURAR_AUDITORIA, 0, (uint8_t)r_modo, 0, IR_INST_FLAG_B_REGISTER);
+        return 1;
+    }
+    if (strcmp(name, "obtener_auditoria_ia_json") == 0) {
+        emit(cg, OP_MEM_OBTENER_AUDITORIA_JSON, (uint8_t)dest_reg, 0, 0, 0);
+        return 1;
+    }
     if (strcmp(name, "elegir_por_peso") == 0 || strcmp(name, "elegir_por_peso_segun") == 0) {
         if (cn->n_args < 2) {
             codegen_error_sistema_incorporada_arity(cg, cn, 2,
@@ -5064,7 +5115,7 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         if (!ARG0 || !ARG1) return 0;
         visit_expression(cg, ARG0, 1);
         visit_expression(cg, ARG1, 2);
-        emit(cg, OP_BYTES_ANEXAR, dest_reg, 1, 2, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+        emit(cg, OP_BYTES_CREAR, dest_reg, 1, 2, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
         return 1;
     }
     if (strcmp(name, "bytes_subbytes") == 0) {
@@ -5072,7 +5123,7 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         visit_expression(cg, ARG0, 1);
         visit_expression(cg, ARG1, 2);
         visit_expression(cg, ARG2, 3);
-        emit(cg, OP_BYTES_SUBBYTES, dest_reg, 1, 2, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+        emit(cg, OP_BYTES_SUBBYTES, dest_reg, 1, 2, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
         return 1;
     }
     if (strcmp(name, "bytes_desde_texto") == 0) {
@@ -6335,6 +6386,11 @@ static void emit_print(CodeGen *cg, ASTNode *expr, int stmt_line, int stmt_col) 
             emit_imprimir_lista_resumen(cg, expr);
         } else if (t && strcmp(t, "mapa") == 0) {
             emit_imprimir_mapa_resumen(cg, expr);
+        } else if (t && strcmp(t, "json") == 0) {
+            int reg = visit_expression(cg, expr, print_reg);
+            if (cg->has_error) return;
+            emit(cg, OP_JSON_A_TEXTO, (uint8_t)print_reg, (uint8_t)reg, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+            emit_imprimir_texto_reg_o_indefinido(cg, print_reg);
         } else {
             int reg = visit_expression(cg, expr, print_reg);
             if (cg->has_error) return;
@@ -6687,8 +6743,8 @@ static int visit_expression(CodeGen *cg, ASTNode *node, int dest_reg) {
         const char *op = bn->operator;
         const char *lt = get_expression_type(cg, bn->left);
         const char *rt = get_expression_type(cg, bn->right);
-        int is_texto = (lt && (strcmp(lt, "texto") == 0 || strcmp(lt, "concepto") == 0 || strcmp(lt, "caracter") == 0 || strcmp(lt, "elemento") == 0)) ||
-                       (rt && (strcmp(rt, "texto") == 0 || strcmp(rt, "concepto") == 0 || strcmp(rt, "caracter") == 0 || strcmp(rt, "elemento") == 0));
+        int is_texto = (lt && (strcmp(lt, "texto") == 0 || strcmp(lt, "texto?") == 0 || strcmp(lt, "concepto") == 0 || strcmp(lt, "caracter") == 0 || strcmp(lt, "elemento") == 0 || strcmp(lt, "mapa") == 0 || strcmp(lt, "mapa?") == 0 || strcmp(lt, "json") == 0 || strcmp(lt, "json?") == 0)) ||
+                       (rt && (strcmp(rt, "texto") == 0 || strcmp(rt, "texto?") == 0 || strcmp(rt, "concepto") == 0 || strcmp(rt, "caracter") == 0 || strcmp(rt, "elemento") == 0 || strcmp(rt, "mapa") == 0 || strcmp(rt, "mapa?") == 0 || strcmp(rt, "json") == 0 || strcmp(rt, "json?") == 0));
         int is_flt = (lt && strcmp(lt, "flotante") == 0) || (rt && strcmp(rt, "flotante") == 0) ||
                      expr_involves_float(cg, bn->left) || expr_involves_float(cg, bn->right);
 
@@ -6810,15 +6866,23 @@ static int visit_expression(CodeGen *cg, ASTNode *node, int dest_reg) {
             int rt_is_bool = (rt && (strcmp(rt, "booleano") == 0 || strcmp(rt, "bool") == 0));
             int lt_is_u32 = (lt && (strcmp(lt, "u32") == 0 || strcmp(lt, "u64") == 0));
             int rt_is_u32 = (rt && (strcmp(rt, "u32") == 0 || strcmp(rt, "u64") == 0));
+            int lt_is_json = (lt && (strcmp(lt, "json") == 0 || strcmp(lt, "json?") == 0 || strcmp(lt, "mapa") == 0 || strcmp(lt, "mapa?") == 0));
+            int rt_is_json = (rt && (strcmp(rt, "json") == 0 || strcmp(rt, "json?") == 0 || strcmp(rt, "mapa") == 0 || strcmp(rt, "mapa?") == 0));
             uint8_t lt_num_c = (uint8_t)(lt_is_bool ? 2 : ((lt_is_int || lt_is_u32) ? 1 : 0));
             uint8_t rt_num_c = (uint8_t)(rt_is_bool ? 2 : ((rt_is_int || rt_is_u32) ? 1 : 0));
 
-            if (lt && (lt_is_int || lt_is_flt || lt_is_car || lt_is_u32 || lt_is_bool) && !expr_already_yields_text_string_id(cg, bn->left))
-                emit(cg, lt_is_car ? OP_STR_DESDE_CODIGO : OP_STR_DESDE_NUMERO, rL, rL, lt_is_car ? 0 : lt_num_c,
-                     IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | (lt_is_car ? 0 : IR_INST_FLAG_C_IMMEDIATE));
-            if (rt && (rt_is_int || rt_is_flt || rt_is_car || rt_is_u32 || rt_is_bool) && !expr_already_yields_text_string_id(cg, bn->right))
-                emit(cg, rt_is_car ? OP_STR_DESDE_CODIGO : OP_STR_DESDE_NUMERO, rR_reg, rR_reg, rt_is_car ? 0 : rt_num_c,
-                     IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | (rt_is_car ? 0 : IR_INST_FLAG_C_IMMEDIATE));
+            fprintf(stderr, "[DEBUG] Concat: lt=%s (json=%d), rt=%s (json=%d)\n", lt?lt:"NULL", lt_is_json, rt?rt:"NULL", rt_is_json);
+
+            if (lt && (lt_is_int || lt_is_flt || lt_is_car || lt_is_u32 || lt_is_bool || lt_is_json) && !expr_already_yields_text_string_id(cg, bn->left)) {
+                if (lt_is_car) emit(cg, OP_STR_DESDE_CODIGO, rL, rL, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+                else if (lt_is_json) emit(cg, OP_JSON_A_TEXTO, rL, rL, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+                else emit(cg, OP_STR_DESDE_NUMERO, rL, rL, lt_num_c, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE);
+            }
+            if (rt && (rt_is_int || rt_is_flt || rt_is_car || rt_is_u32 || rt_is_bool || rt_is_json) && !expr_already_yields_text_string_id(cg, bn->right)) {
+                if (rt_is_car) emit(cg, OP_STR_DESDE_CODIGO, rR_reg, rR_reg, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+                else if (rt_is_json) emit(cg, OP_JSON_A_TEXTO, rR_reg, rR_reg, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+                else emit(cg, OP_STR_DESDE_NUMERO, rR_reg, rR_reg, rt_num_c, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE);
+            }
             emit(cg, OP_STR_CONCATENAR_REG, dest_reg, rL, rR_reg, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
             return dest_reg;
         }
@@ -7137,6 +7201,15 @@ static int visit_expression(CodeGen *cg, ASTNode *node, int dest_reg) {
         
         if (target_type && strcmp(target_type, "mapa") == 0)
             emit(cg, OP_MEM_MAPA_OBTENER, dest_reg, target_reg, index_reg, 0);
+        else if (target_type && strcmp(target_type, "json") == 0) {
+            const char *idx_t = get_expression_type(cg, ian->index);
+            if (idx_t && strcmp(idx_t, "entero") == 0) {
+                emit(cg, OP_JSON_LISTA_OBTENER, dest_reg, target_reg, index_reg, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
+            } else {
+                // Para 'texto' o 'json' (que puede ser string), usar objeto_obtener
+                emit(cg, OP_JSON_OBJETO_OBTENER, dest_reg, target_reg, index_reg, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
+            }
+        }
         else
             emit(cg, OP_MEM_LISTA_OBTENER, dest_reg, target_reg, index_reg, 0);
         return dest_reg;
@@ -8276,6 +8349,51 @@ static void visit_statement(CodeGen *cg, ASTNode *node) {
         }
 
         const char *coll_type = get_expression_type(cg, fe->collection);
+        if (coll_type && strcmp(coll_type, "json") == 0) {
+            SymResult src_tmp = sym_reserve_temp(&cg->sym, 8);
+            SymResult idx_tmp = sym_reserve_temp(&cg->sym, 8);
+            visit_expression(cg, fe->collection, 253);
+            if (cg->has_error) return;
+            emit_escribir_u24(cg, src_tmp.addr, 253, src_tmp.is_relative);
+            
+            // Usar registros temporales fuera del rango común de visit_expression
+            const int r_idx = 30;
+            const int r_coll = 31;
+            const int r_limit = 32;
+            const int r_cond = 33;
+            const int r_val = 34;
+
+            emit(cg, OP_MOVER, r_idx, 0, 0, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
+            emit_escribir_u24(cg, idx_tmp.addr, r_idx, idx_tmp.is_relative);
+            mark_label(cg, start_id);
+            emit_leer_u24(cg, r_coll, src_tmp.addr, src_tmp.is_relative);
+            emit(cg, OP_JSON_LISTA_TAMANO, r_limit, r_coll, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+            emit_leer_u24(cg, r_idx, idx_tmp.addr, idx_tmp.is_relative);
+            emit(cg, OP_CMP_LT, r_cond, r_idx, r_limit, 0);
+            emit(cg, OP_CMP_EQ, r_cond, r_cond, 0, IR_INST_FLAG_C_IMMEDIATE);
+            emit_jump_if_nonzero(cg, r_cond, end_id);
+
+            if (idx_var && idx_var[0]) {
+                emit_escribir_u24(cg, key_r.addr, r_idx, key_r.is_relative);
+            }
+
+            emit_leer_u24(cg, r_coll, src_tmp.addr, src_tmp.is_relative);
+            emit(cg, OP_JSON_LISTA_OBTENER, r_val, r_coll, r_idx, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
+            emit_escribir_u24(cg, iter_r.addr, r_val, iter_r.is_relative);
+            visit_block(cg, fe->body);
+            
+            emit_leer_u24(cg, r_idx, idx_tmp.addr, idx_tmp.is_relative);
+            emit(cg, OP_SUMAR, r_idx, r_idx, 1, IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE);
+            emit_escribir_u24(cg, idx_tmp.addr, r_idx, idx_tmp.is_relative);
+            
+            emit(cg, OP_IR, 0, 0, 0, 0);
+            add_patch(cg, start_id, PATCH_JUMP);
+            mark_label(cg, end_id);
+            sym_exit_scope(&cg->sym);
+            if (cg->loop_stack_n) cg->loop_stack_n--;
+            return;
+        }
+
         if (coll_type && strcmp(coll_type, "mapa") == 0) {
             SymResult src_tmp = sym_reserve_temp(&cg->sym, 8);
             SymResult keys_tmp = sym_reserve_temp(&cg->sym, 8);

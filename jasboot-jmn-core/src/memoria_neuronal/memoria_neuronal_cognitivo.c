@@ -2,6 +2,7 @@
 #include "jmn_interno.h"
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 int jmn_buscar_asociaciones(JMNMemoria* mem, uint32_t origen, uint32_t tipo_rel, float umbral,
     uint16_t profundidad, JMNBusquedaResultado* out, uint16_t max_out) {
@@ -124,6 +125,10 @@ void jmn_propagar_extra_init(JMNPropagarExtra* extra) {
     }
     extra->queue_mode = 0;
     extra->score_mode = 0;
+    extra->h_mode = 0;
+    extra->h_lambda = 0.7f;
+    extra->h_kappa = 0.15f;
+    extra->audit_mode = 0;
 }
 
 void jmn_propagar_extra_normalizar(JMNPropagarExtra* extra) {
@@ -256,22 +261,34 @@ static void jmn_propagar_merge_mask_env(float mask[JMN_RELACION_MAX + 1]) {
 }
 
 static void jmn_propagar_extra_resolve(const JMNPropagarExtra* opt, JMNPropagarExtra* out) {
-    for (int i = 0; i <= JMN_RELACION_MAX; i++) {
-        out->g_tau[i] = 1.f;
-        out->mask_tau[i] = 1.f;
-    }
-    out->queue_mode = 0;
-    out->score_mode = 0;
-    if (!opt) {
-        const char* q = getenv("JASBOOT_PROPAGAR_QUEUE");
-        if (q && (q[0] == 'd' || q[0] == 'D' || q[0] == '1')) out->queue_mode = 1;
-        const char* s = getenv("JASBOOT_PROPAGAR_SCORE");
-        if (s && (s[0] == 's' || s[0] == 'S' || s[0] == '1')) out->score_mode = 1;
-        jmn_propagar_merge_g_env(out->g_tau);
-        jmn_propagar_merge_mask_env(out->mask_tau);
-    } else {
+    if (opt) {
         *out = *opt;
+        return;
     }
+    
+    jmn_propagar_extra_init(out);
+    
+    /* Cargar desde variables de entorno si no se provee estructura (legacy/override global) */
+    const char* q = getenv("JASBOOT_PROPAGAR_QUEUE");
+    if (q && (q[0] == 'd' || q[0] == 'D' || q[0] == '1')) out->queue_mode = 1;
+    
+    const char* s = getenv("JASBOOT_PROPAGAR_SCORE");
+    if (s && (s[0] == 's' || s[0] == 'S' || s[0] == '1')) out->score_mode = 1;
+    
+    jmn_propagar_merge_g_env(out->g_tau);
+    jmn_propagar_merge_mask_env(out->mask_tau);
+
+    const char* hm = getenv("JASBOOT_PROPAGAR_H_MODE");
+    if (hm && *hm) out->h_mode = atoi(hm);
+    
+    const char* hl = getenv("JASBOOT_PROPAGAR_H_LAMBDA");
+    if (hl && *hl) out->h_lambda = (float)atof(hl);
+    
+    const char* hk = getenv("JASBOOT_PROPAGAR_H_KAPPA");
+    if (hk && *hk) out->h_kappa = (float)atof(hk);
+
+    const char* am = getenv("JASBOOT_PROPAGAR_AUDIT");
+    if (am && *am) out->audit_mode = atoi(am);
 }
 
 static float jmn_g_mul(const JMNPropagarExtra* ex, uint32_t tau) {
@@ -304,7 +321,6 @@ int jmn_propagar_activacion_semillas(JMNMemoria* mem, const uint32_t* semillas, 
 
     uint32_t sem_u[16];
     int n_sem_u = 0;
-    if (!semillas || n_sem < 1) return 0;
     for (int s = 0; s < n_sem && n_sem_u < 16; s++) {
         uint32_t id = semillas[s];
         if (id == 0) continue;
@@ -330,26 +346,18 @@ int jmn_propagar_activacion_semillas(JMNMemoria* mem, const uint32_t* semillas, 
 
     if (tipo_rel > JMN_RELACION_MAX) tipo_rel = 0;
 
-    int h_mode = 0;
-    const char* hm = getenv("JASBOOT_PROPAGAR_H_MODE");
-    if (hm && *hm && hm[0] != '0') h_mode = atoi(hm);
+    int h_mode = ex->h_mode;
     if (h_mode < 0 || h_mode > 3) h_mode = 0;
-    float h_lambda = 0.7f;
-    float h_kappa = 0.15f;
-    const char* hl = getenv("JASBOOT_PROPAGAR_H_LAMBDA");
-    if (hl && *hl) {
-        char* end = NULL;
-        double v = strtod(hl, &end);
-        if (end != hl) h_lambda = (float)v;
-    }
-    const char* hk = getenv("JASBOOT_PROPAGAR_H_KAPPA");
-    if (hk && *hk) {
-        char* end = NULL;
-        double v = strtod(hk, &end);
-        if (end != hk) h_kappa = (float)v;
-    }
+    float h_lambda = ex->h_lambda;
+    float h_kappa = ex->h_kappa;
+
     float Htab[33];
     jmn_propagar_precompute_h(Htab, max_prof, h_mode, h_lambda, h_kappa);
+
+    if (ex->audit_mode > 0) {
+        printf("[AUDIT] Iniciando propagacion: n_sem=%d, activacion=%.2f, max_prof=%d, h_mode=%d\n", 
+               n_sem_u, activacion, max_prof, h_mode);
+    }
 
     uint32_t vid[256];
     float vbest[256];
@@ -419,7 +427,16 @@ int jmn_propagar_activacion_semillas(JMNMemoria* mem, const uint32_t* semillas, 
             uint32_t tau = res[i].tipo_relacion;
             float gtr = jmn_g_mul(ex, tau);
             float na = cur.act * fac * res[i].fuerza * hd * gtr;
-            if (na < umb) continue;
+
+            if (ex->audit_mode >= 2) {
+                printf("[AUDIT] Arista: u=%u -> v=%u (tau=%u, w=%.2f) | g(tau)=%.2f, h(d)=%.2f, act_in=%.2f -> act_out=%.4f\n",
+                       cur.id, res[i].id, tau, res[i].fuerza, gtr, hd, cur.act, na);
+            }
+
+            if (na < umb) {
+                if (ex->audit_mode >= 2) printf("[AUDIT]   (Descartado por umbral %.4f)\n", umb);
+                continue;
+            }
             uint32_t nid = res[i].id;
             if (n_sem_u == 1 && nid == sem_u[0]) continue;
             int ix = jmn_vid_index(vid, vn, nid);

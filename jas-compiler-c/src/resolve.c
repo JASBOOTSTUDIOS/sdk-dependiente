@@ -36,7 +36,7 @@ static int type_is_foreach_collection(const char *type_name) {
     if (!type_name) return 0;
     return strcmp(type_name, "lista") == 0 || strcmp(type_name, "lista?") == 0 ||
            strcmp(type_name, "mapa") == 0 || strcmp(type_name, "mapa?") == 0 ||
-           strcmp(type_name, "elemento") == 0;
+           strcmp(type_name, "elemento") == 0 || strcmp(type_name, "json") == 0;
 }
 
 static void validate_foreach_types(ForEachNode *fe, SymbolTable *st, int *errs,
@@ -70,6 +70,9 @@ static void validate_foreach_types(ForEachNode *fe, SymbolTable *st, int *errs,
         return;
     }
 
+    if (strcmp(ct, "json") == 0)
+        return;
+
     const char *elem_t = sym_lookup_collection_elem_type(st, coll_name);
     if (!elem_t)
         return;
@@ -93,7 +96,7 @@ static size_t type_size(SymbolTable *st, const char *type_name) {
     if (s > 0) return s;
     if (strcmp(type_name, "u32") == 0 || strcmp(type_name, "u8") == 0 || strcmp(type_name, "byte") == 0) return 8;
     if (strcmp(type_name, "texto") == 0 || strcmp(type_name, "lista") == 0 || strcmp(type_name, "mapa") == 0 ||
-        strcmp(type_name, "objeto") == 0)
+        strcmp(type_name, "objeto") == 0 || strcmp(type_name, "json") == 0)
         return 8;
     if (strcmp(type_name, "bytes") == 0 || strcmp(type_name, "socket") == 0 || strcmp(type_name, "tls") == 0 ||
         strcmp(type_name, "http_solicitud") == 0 || strcmp(type_name, "http_respuesta") == 0 || strcmp(type_name, "http_servidor") == 0)

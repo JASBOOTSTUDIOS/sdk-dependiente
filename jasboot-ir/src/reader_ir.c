@@ -240,7 +240,7 @@ IRValidationInfo ir_validate_memory(IRFile* ir) {
             inst.opcode != OP_CLOSURE_CREAR && inst.opcode != OP_CLOSURE_CARGAR &&
             inst.opcode != OP_BYTES_CREAR && inst.opcode != OP_BYTES_TAMANO &&
             inst.opcode != OP_BYTES_OBTENER && inst.opcode != OP_BYTES_PONER &&
-            inst.opcode != OP_BYTES_ANEXAR && inst.opcode != OP_BYTES_PUNTERO && inst.opcode != OP_BYTES_SUBBYTES &&
+            inst.opcode != OP_BYTES_PUNTERO && inst.opcode != OP_BYTES_SUBBYTES &&
             inst.opcode != OP_BYTES_DESDE_TEXTO && inst.opcode != OP_BYTES_A_TEXTO &&
             inst.opcode != OP_DNS_RESOLVER &&
             inst.opcode != OP_TCP_CONECTAR && inst.opcode != OP_TCP_ESCUCHAR &&
@@ -301,7 +301,7 @@ IRValidationInfo ir_validate_memory(IRFile* ir) {
             inst.opcode != OP_MEM_MAPA_CONTIENE &&
             inst.opcode != OP_STR_MINUSCULAS &&
             inst.opcode != OP_STR_MAYUSCULAS &&
-            inst.opcode != OP_STR_COPIAR &&
+            inst.opcode != OP_MEM_CONFIGURAR_H_PARAM &&
             inst.opcode != OP_FS_ABRIR &&
             inst.opcode != OP_FS_ESCRIBIR &&
             inst.opcode != OP_FS_FIN_ARCHIVO &&
@@ -325,7 +325,7 @@ IRValidationInfo ir_validate_memory(IRFile* ir) {
             inst.opcode != OP_SYS_EXEC &&
             inst.opcode != OP_FS_ESCRIBIR_BYTE &&
             inst.opcode != OP_FS_LEER_BYTE &&
-            inst.opcode != OP_FS_ESCRIBIR_U32 &&
+            inst.opcode != OP_MEM_CARGAR_PERFIL_G_FILE &&
             inst.opcode != OP_FS_LEER_U32 &&
             inst.opcode != OP_MEM_MAPA_CREAR &&
             inst.opcode != OP_MEM_MAPA_PONER &&
@@ -346,6 +346,8 @@ IRValidationInfo ir_validate_memory(IRFile* ir) {
             inst.opcode != OP_MEM_CONFIGURAR_MASKS_G_LISTA &&
             inst.opcode != OP_MEM_DECAE_CONEXIONES &&
             inst.opcode != OP_MEM_OBTENER_TODOS &&
+            inst.opcode != OP_MEM_CONFIGURAR_AUDITORIA &&
+            inst.opcode != OP_MEM_OBTENER_AUDITORIA_JSON &&
             inst.opcode != OP_FS_LISTAR &&
             inst.opcode != OP_FS_BORRAR &&
             inst.opcode != OP_FS_COPIAR &&

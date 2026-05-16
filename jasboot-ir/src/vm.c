@@ -496,37 +496,98 @@ static void vm_jmn_rastro_cb(void* ud, uint32_t id, float act, uint16_t depth) {
 }
 
 /* Auditoria opcional de propagacion (stderr). Niveles: 0=off, 1=resumen, 2=+muestra rastro, 3=+pack IR */
+static uint32_t vm_json_new(VM* vm, VMJsonKind kind);
+static VMJsonValue* vm_json_get(VM* vm, uint32_t handle);
+static int vm_json_object_put(VMJsonValue* v, uint32_t key_id, uint32_t value_h);
+static int vm_json_push_item(uint32_t** arr, uint32_t* count, uint32_t* cap, uint32_t value);
+static uint32_t vm_json_store_text(VM* vm, const char* text);
+
+static uint32_t vm_json_create(VM* vm, uint8_t kind) {
+    return vm_json_new(vm, (VMJsonKind)kind);
+}
+
+static void vm_json_object_put_int(VM* vm, uint32_t obj_id, const char* key, int64_t val) {
+    uint32_t val_id = vm_json_new(vm, VM_JSON_INT);
+    VMJsonValue* v = vm_json_get(vm, val_id);
+    if (v) v->int_value = val;
+    uint32_t key_id = vm_json_store_text(vm, key);
+    vm_json_object_put(vm_json_get(vm, obj_id), key_id, val_id);
+}
+
+static void vm_json_object_put_float(VM* vm, uint32_t obj_id, const char* key, double val) {
+    uint32_t val_id = vm_json_new(vm, VM_JSON_FLOAT);
+    VMJsonValue* v = vm_json_get(vm, val_id);
+    if (v) v->float_value = val;
+    uint32_t key_id = vm_json_store_text(vm, key);
+    vm_json_object_put(vm_json_get(vm, obj_id), key_id, val_id);
+}
+
+static void vm_json_object_put_string(VM* vm, uint32_t obj_id, const char* key, const char* val) {
+    uint32_t val_id = vm_json_new(vm, VM_JSON_STRING);
+    VMJsonValue* v = vm_json_get(vm, val_id);
+    if (v) v->text_id = vm_json_store_text(vm, val ? val : "");
+    uint32_t key_id = vm_json_store_text(vm, key);
+    vm_json_object_put(vm_json_get(vm, obj_id), key_id, val_id);
+}
+
+static void vm_json_object_put_json(VM* vm, uint32_t obj_id, const char* key, uint32_t val_id) {
+    uint32_t key_id = vm_json_store_text(vm, key);
+    vm_json_object_put(vm_json_get(vm, obj_id), key_id, val_id);
+}
+
+static void vm_json_array_add(VM* vm, uint32_t array_id, uint32_t val_id) {
+    VMJsonValue* v = vm_json_get(vm, array_id);
+    if (v) vm_json_push_item(&v->items, &v->count, &v->cap, val_id);
+}
+
 static void vm_propagar_audit_maybe(VM* vm, int is_mai, uint32_t origen_id, uint32_t tipo_or_mask,
     uint32_t K, uint32_t d_max, uint64_t c_pack, int n_out, const JMNActivacionResultado* res) {
-    const char* ev = getenv("JASBOOT_PROPAGAR_AUDIT");
-    if (!ev || !ev[0] || ev[0] == '0') return;
-    int level = atoi(ev);
-    if (level < 1) return;
-    fprintf(stderr, "[PROPAGAR_AUDIT L1] mai=%d origen=%u d_max=%u K=%u tipo_mask=0x%x n_out=%d",
-        is_mai, (unsigned)origen_id, (unsigned)d_max, (unsigned)K, (unsigned)tipo_or_mask, n_out);
-    if (n_out > 0 && res && res[0].id != 0u)
-        fprintf(stderr, " best=%u act=%.6f", (unsigned)res[0].id, (double)res[0].activacion);
-    else
-        fprintf(stderr, " best=0");
-    if (level >= 3)
-        fprintf(stderr, " c_pack=%llu", (unsigned long long)c_pack);
-    fprintf(stderr, "\n");
-    if (level >= 2 && vm) {
+    
+    if (vm->g_extra.audit_mode == 0) return;
+
+    /* Nivel 1: Resumen (JSON simple) */
+    uint32_t obj_id = vm_json_create(vm, VM_JSON_OBJECT);
+    vm_json_object_put_int(vm, obj_id, "origen", (int64_t)origen_id);
+    vm_json_object_put_int(vm, obj_id, "d_max", (int64_t)d_max);
+    vm_json_object_put_int(vm, obj_id, "n_resultados", (int64_t)n_out);
+    
+    if (n_out > 0 && res) {
+        vm_json_object_put_int(vm, obj_id, "mejor_id", (int64_t)res[0].id);
+        vm_json_object_put_float(vm, obj_id, "mejor_act", (double)res[0].activacion);
+    }
+
+    /* Nivel 2: Detalle (Incluir rastro completo) */
+    if (vm->g_extra.audit_mode >= 2) {
+        uint32_t rastro_list = vm_json_create(vm, VM_JSON_ARRAY);
         uint32_t rc = vm->rastro_count;
-        uint32_t limit = rc < 64u ? rc : 64u;
-        const char* audit_limit = getenv("JASBOOT_PROPAGAR_AUDIT_LIMIT");
-        if (audit_limit && audit_limit[0]) {
-            int al = atoi(audit_limit);
-            if (al > 0) limit = (uint32_t)al;
-        }
-        fprintf(stderr, "[PROPAGAR_AUDIT L2] rastro_count=%u muestra=%u\n", (unsigned)rc, (unsigned)limit);
-        for (uint32_t i = 0; i < limit && i < rc; i++) {
+        for (uint32_t i = 0; i < rc; i++) {
+            uint32_t entry = vm_json_create(vm, VM_JSON_OBJECT);
             uint32_t rid = vm_rastro_id_at(vm, i);
+            vm_json_object_put_int(vm, entry, "id", (int64_t)rid);
+            vm_json_object_put_int(vm, entry, "d", (int64_t)vm_rastro_depth_at(vm, i));
+            vm_json_object_put_float(vm, entry, "act", (double)vm_rastro_peso_at(vm, i));
+            
             const char* txt = vm_text_cache_get(vm, rid);
-            if (!txt) txt = "???";
-            fprintf(stderr, "  r[%u] id=%u d=%u act=%.6f txt='%s'\n", (unsigned)i,
-                (unsigned)rid, (unsigned)vm_rastro_depth_at(vm, i), (double)vm_rastro_peso_at(vm, i), txt);
+            if (txt) vm_json_object_put_string(vm, entry, "txt", txt);
+            
+            vm_json_array_add(vm, rastro_list, entry);
         }
+        vm_json_object_put_json(vm, obj_id, "rastro", rastro_list);
+    }
+
+    /* Guardar en el buffer circular de auditoria de la VM (cap 32) */
+    if (!vm->audit_json_list) {
+        vm->audit_json_cap = 32;
+        vm->audit_json_list = (uint32_t*)malloc(sizeof(uint32_t) * vm->audit_json_cap);
+        vm->audit_json_count = 0;
+    }
+    
+    if (vm->audit_json_count < vm->audit_json_cap) {
+        vm->audit_json_list[vm->audit_json_count++] = obj_id;
+    } else {
+        /* Desplazar para mantener los 32 mas recientes */
+        memmove(vm->audit_json_list, vm->audit_json_list + 1, sizeof(uint32_t) * (vm->audit_json_cap - 1));
+        vm->audit_json_list[vm->audit_json_cap - 1] = obj_id;
     }
 }
 
@@ -1986,6 +2047,7 @@ void vm_destroy(VM* vm) {
     if (vm->context) free(vm->context);
     if (vm->ir_path) free(vm->ir_path);
     // No destruimos ir porque puede ser compartido, pero si lo vamos a destruir, ir_file_destroy(vm->ir)
+    if (vm->audit_json_list) free(vm->audit_json_list);
     free(vm);
 }
 
@@ -3745,9 +3807,10 @@ int vm_step(VM* vm) {
         }
 
         case OP_MEM_CONFIGURAR_PESO_G: {
-            uint32_t tau = (uint32_t)b_val;
+            uint32_t tau = (uint32_t)((inst.flags & IR_INST_FLAG_B_REGISTER) ? vm_get_register(vm, inst.operand_b) : b_val);
+            uint64_t val_raw = (inst.flags & IR_INST_FLAG_C_REGISTER) ? vm_get_register(vm, inst.operand_c) : c_val;
             union { uint64_t u64; float f32; } fp = {0};
-            fp.u64 = c_val & 0xFFFFFFFF;
+            fp.u64 = val_raw & 0xFFFFFFFF;
             if (tau <= JMN_RELACION_MAX) {
                 vm->g_extra.g_tau[tau] = fp.f32;
             }
@@ -3756,7 +3819,7 @@ int vm_step(VM* vm) {
         }
 
         case OP_MEM_CONFIGURAR_PESOS_G_LISTA: {
-            uint32_t lista_id = (uint32_t)b_val;
+            uint32_t lista_id = (uint32_t)((inst.flags & IR_INST_FLAG_B_REGISTER) ? vm_get_register(vm, inst.operand_b) : b_val);
             if (vm->mem_neuronal) {
                 uint32_t n = jmn_lista_tamano(vm->mem_neuronal, lista_id);
                 uint32_t cap_tau = (uint32_t)JMN_RELACION_MAX;
@@ -3776,7 +3839,7 @@ int vm_step(VM* vm) {
         }
 
         case OP_MEM_CARGAR_PERFIL_G: {
-            uint32_t txt_id = (uint32_t)b_val;
+            uint32_t txt_id = (uint32_t)((inst.flags & IR_INST_FLAG_B_REGISTER) ? vm_get_register(vm, inst.operand_b) : b_val);
             const char* name = vm_text_cache_get(vm, txt_id);
             if (name) {
                 jmn_propagar_extra_cargar_perfil(&vm->g_extra, name);
@@ -3791,9 +3854,10 @@ int vm_step(VM* vm) {
         }
 
         case OP_MEM_CONFIGURAR_MASK_G: {
-            uint32_t tau = (uint32_t)b_val;
+            uint32_t tau = (uint32_t)((inst.flags & IR_INST_FLAG_B_REGISTER) ? vm_get_register(vm, inst.operand_b) : b_val);
+            uint64_t val_raw = (inst.flags & IR_INST_FLAG_C_REGISTER) ? vm_get_register(vm, inst.operand_c) : c_val;
             union { uint64_t u64; float f32; } fp = {0};
-            fp.u64 = c_val & 0xFFFFFFFF;
+            fp.u64 = val_raw & 0xFFFFFFFF;
             if (tau <= JMN_RELACION_MAX) {
                 vm->g_extra.mask_tau[tau] = fp.f32;
             }
@@ -3802,7 +3866,7 @@ int vm_step(VM* vm) {
         }
 
         case OP_MEM_CONFIGURAR_MASKS_G_LISTA: {
-            uint32_t lista_id = (uint32_t)b_val;
+            uint32_t lista_id = (uint32_t)((inst.flags & IR_INST_FLAG_B_REGISTER) ? vm_get_register(vm, inst.operand_b) : b_val);
             if (vm->mem_neuronal) {
                 uint32_t n = jmn_lista_tamano(vm->mem_neuronal, lista_id);
                 uint32_t cap_tau = (uint32_t)JMN_RELACION_MAX;
@@ -3814,7 +3878,48 @@ int vm_step(VM* vm) {
             vm->pc += IR_INSTRUCTION_SIZE;
             break;
         }
+
+        case OP_MEM_CONFIGURAR_H_PARAM: {
+            uint32_t param = (uint32_t)b_val;
+            uint64_t val_raw = (inst.flags & IR_INST_FLAG_C_REGISTER) ? vm_get_register(vm, inst.operand_c) : c_val;
             
+            union { uint64_t u64; float f32; } fp = {0};
+            fp.u64 = val_raw & 0xFFFFFFFF;
+            
+            if (param == 0) vm->g_extra.h_mode = (int)val_raw;
+            else if (param == 1) vm->g_extra.h_lambda = fp.f32;
+            else if (param == 2) vm->g_extra.h_kappa = fp.f32;
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
+        case OP_MEM_CARGAR_PERFIL_G_FILE: {
+            uint32_t txt_id = (uint32_t)((inst.flags & IR_INST_FLAG_B_REGISTER) ? vm_get_register(vm, inst.operand_b) : b_val);
+            const char* path = vm_text_cache_get(vm, txt_id);
+            if (path) {
+                FILE* f = fopen(path, "r");
+                if (f) {
+                    char line[128];
+                    while (fgets(line, sizeof(line), f)) {
+                        int tau; float val;
+                        if (sscanf(line, "%d %f", &tau, &val) == 2) {
+                            if (tau >= 0 && tau <= JMN_RELACION_MAX)
+                                vm->g_extra.g_tau[tau] = val;
+                        }
+                    }
+                    fclose(f);
+                }
+            }
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
+        case OP_MEM_CONFIGURAR_AUDITORIA: {
+            vm->g_extra.audit_mode = (int)((inst.flags & IR_INST_FLAG_B_REGISTER) ? vm_get_register(vm, inst.operand_b) : b_val);
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
         case OP_Y:
             vm_set_register(vm, inst.operand_a, b_val & c_val);
             vm->pc += IR_INSTRUCTION_SIZE;
@@ -6743,17 +6848,39 @@ int vm_step(VM* vm) {
         }
 
         case OP_JSON_OBJETO_OBTENER: {
-            uint32_t json_h = (uint32_t)vm_get_register(vm, inst.operand_b);
-            uint32_t key_id = (uint32_t)vm_get_register(vm, inst.operand_c);
-            VMJsonValue* v = vm_json_get(vm, json_h);
+            uint32_t json_h = (uint32_t)b_val;
+            uint32_t key_val = (uint32_t)c_val;
             uint32_t found = 0;
+            uint32_t key_id = 0;
+
+            VMJsonValue* v = vm_json_get(vm, json_h);
             if (!v || v->kind != VM_JSON_OBJECT) {
                 if (vm_try_catch_or_abort(vm, "json_objeto_obtener: el valor no es un objeto JSON")) return 0;
-                fprintf(stderr, "Error de ejecucion (VM): json_objeto_obtener: el valor no es un objeto JSON\n");
+                fprintf(stderr, "Error de ejecucion (VM): json_objeto_obtener: el valor no es un objeto JSON (h=%u)\n", json_h);
                 vm->running = 0;
                 vm->exit_code = 1;
                 return 0;
             }
+
+            // Si key_val es un handle JSON, extraer su text_id si es string
+            VMJsonValue* kv = vm_json_get(vm, key_val);
+            if (kv) {
+                if (kv->kind == VM_JSON_STRING) {
+                    key_id = kv->text_id;
+                } else {
+                    if (vm_try_catch_or_abort(vm, "json_objeto_obtener: la clave JSON no es un string")) return 0;
+                    fprintf(stderr, "Error de ejecucion (VM): json_objeto_obtener: la clave JSON no es un string\n");
+                    vm->running = 0;
+                    vm->exit_code = 1;
+                    return 0;
+                }
+            } else {
+                key_id = key_val;
+            }
+
+            // Re-obtener v por si acaso kv o algo mas causo realloc (aunque vm_json_get no realloca, 
+            // pero es buena practica si el codigo crece)
+            v = vm_json_get(vm, json_h);
             for (uint32_t i = 0; i < v->count; i++) {
                 if (vm_text_ids_equal(vm, v->keys[i], key_id)) {
                     found = v->items[i];
@@ -6761,11 +6888,7 @@ int vm_step(VM* vm) {
                 }
             }
             if (!found) {
-                if (vm_try_catch_or_abort(vm, "json_objeto_obtener: clave JSON inexistente")) return 0;
-                fprintf(stderr, "Error de ejecucion (VM): json_objeto_obtener: clave JSON inexistente\n");
-                vm->running = 0;
-                vm->exit_code = 1;
-                return 0;
+                found = vm_json_new(vm, VM_JSON_NULL);
             }
             vm->registers[inst.operand_a] = (uint64_t)found;
             vm->pc += IR_INSTRUCTION_SIZE;
@@ -6773,81 +6896,101 @@ int vm_step(VM* vm) {
         }
 
         case OP_JSON_LISTA_OBTENER: {
-            uint32_t json_h = (uint32_t)vm_get_register(vm, inst.operand_b);
-            uint32_t idx = (uint32_t)vm_get_register(vm, inst.operand_c);
+            uint32_t json_h = (uint32_t)b_val;
+            uint32_t idx = (uint32_t)c_val;
             VMJsonValue* v = vm_json_get(vm, json_h);
-            if (!v || v->kind != VM_JSON_ARRAY || idx >= v->count) {
-                if (vm_try_catch_or_abort(vm, "json_lista_obtener: indice JSON invalido")) return 0;
-                fprintf(stderr, "Error de ejecucion (VM): json_lista_obtener: indice JSON invalido\n");
+            if (!v || idx >= v->count) {
+                if (vm_try_catch_or_abort(vm, "json_lista_obtener: handle o indice invalido")) return 0;
+                fprintf(stderr, "Error de ejecucion (VM): json_lista_obtener: handle o indice invalido (h=%u, idx=%u)\n", json_h, idx);
                 vm->running = 0;
                 vm->exit_code = 1;
                 return 0;
             }
-            vm->registers[inst.operand_a] = (uint64_t)v->items[idx];
+            if (v->kind == VM_JSON_ARRAY) {
+                vm->registers[inst.operand_a] = (uint64_t)v->items[idx];
+            } else if (v->kind == VM_JSON_OBJECT) {
+                // Iterar sobre un objeto devuelve sus LLAVES como strings JSON
+                uint32_t tid = v->keys[idx]; // Guardar antes de posible realloc
+                uint32_t key_h = vm_json_new(vm, VM_JSON_STRING);
+                if (key_h) {
+                    VMJsonValue* kv = vm_json_get(vm, key_h);
+                    kv->text_id = tid;
+                }
+                vm->registers[inst.operand_a] = (uint64_t)key_h;
+            } else {
+                if (vm_try_catch_or_abort(vm, "json_lista_obtener: el valor no es iterable (array/objeto)")) return 0;
+                fprintf(stderr, "Error de ejecucion (VM): json_lista_obtener: el valor no es iterable (kind=%u)\n", v->kind);
+                vm->running = 0;
+                vm->exit_code = 1;
+                return 0;
+            }
             vm->pc += IR_INSTRUCTION_SIZE;
             break;
         }
 
         case OP_JSON_LISTA_TAMANO: {
-            uint32_t json_h = (uint32_t)vm_get_register(vm, inst.operand_b);
+            uint32_t json_h = (uint32_t)b_val;
             VMJsonValue* v = vm_json_get(vm, json_h);
-            if (!v || v->kind != VM_JSON_ARRAY) {
-                if (vm_try_catch_or_abort(vm, "json_lista_tamano: el valor no es un array JSON")) return 0;
-                fprintf(stderr, "Error de ejecucion (VM): json_lista_tamano: el valor no es un array JSON\n");
+            if (!v) {
+                if (vm_try_catch_or_abort(vm, "json_lista_tamano: handle JSON invalido")) return 0;
+                fprintf(stderr, "Error de ejecucion (VM): json_lista_tamano: handle JSON invalido (h=%u)\n", json_h);
                 vm->running = 0;
                 vm->exit_code = 1;
                 return 0;
             }
-            vm->registers[inst.operand_a] = (uint64_t)v->count;
+            if (v->kind == VM_JSON_ARRAY || v->kind == VM_JSON_OBJECT) {
+                vm->registers[inst.operand_a] = (uint64_t)v->count;
+            } else {
+                // Para otros tipos, el tamaño es 0 o error? 
+                // En JS, object.length es undefined. Aquí devolvemos 0 para evitar crashes en bucles.
+                vm->registers[inst.operand_a] = 0;
+            }
             vm->pc += IR_INSTRUCTION_SIZE;
             break;
         }
 
         case OP_JSON_A_TEXTO: {
-            uint32_t json_h = (uint32_t)vm_get_register(vm, inst.operand_b);
+            uint32_t json_h = (uint32_t)b_val;
             VMJsonValue* v = vm_json_get(vm, json_h);
             char tmp[128];
             uint32_t text_id = 0;
+            
             if (!v) {
-                if (vm_try_catch_or_abort(vm, "json_a_texto: handle JSON invalido")) return 0;
-                fprintf(stderr, "Error de ejecucion (VM): json_a_texto: handle JSON invalido\n");
-                vm->running = 0;
-                vm->exit_code = 1;
-                return 0;
-            }
-            switch (v->kind) {
-                case VM_JSON_STRING:
-                    text_id = v->text_id;
-                    break;
-                case VM_JSON_INT:
-                    snprintf(tmp, sizeof(tmp), "%" PRId64, v->int_value);
-                    text_id = vm_json_store_text(vm, tmp);
-                    break;
-                case VM_JSON_FLOAT:
-                    snprintf(tmp, sizeof(tmp), "%.15g", v->float_value);
-                    text_id = vm_json_store_text(vm, tmp);
-                    break;
-                case VM_JSON_BOOL:
-                    text_id = vm_json_store_text(vm, v->bool_value ? "true" : "false");
-                    break;
-                case VM_JSON_NULL:
-                    text_id = vm_json_store_text(vm, "null");
-                    break;
-                default: {
-                    VMJsonBuf out = {0};
-                    if (!vm_json_stringify_value(vm, json_h, &out)) {
-                        free(out.data);
-                        if (vm_try_catch_or_abort(vm, "json_a_texto: no se pudo serializar el valor")) return 0;
-                        fprintf(stderr, "Error de ejecucion (VM): json_a_texto: no se pudo serializar el valor\n");
-                        vm->running = 0;
-                        vm->exit_code = 1;
-                        return 0;
+                fprintf(stderr, "[DEBUG] A_TEXTO: handle %u not found\n", json_h);
+                if (json_h > 1000) text_id = json_h;
+                else text_id = 0;
+            } else {
+                switch (v->kind) {
+                    case VM_JSON_STRING:
+                        text_id = v->text_id;
+                        break;
+                    case VM_JSON_INT:
+                        snprintf(tmp, sizeof(tmp), "%" PRId64, v->int_value);
+                        text_id = vm_json_store_text(vm, tmp);
+                        break;
+                    case VM_JSON_FLOAT:
+                        snprintf(tmp, sizeof(tmp), "%.15g", v->float_value);
+                        text_id = vm_json_store_text(vm, tmp);
+                        break;
+                    case VM_JSON_BOOL:
+                        text_id = vm_json_store_text(vm, v->bool_value ? "true" : "false");
+                        break;
+                    case VM_JSON_NULL:
+                        text_id = vm_json_store_text(vm, "null");
+                        break;
+                    default: {
+                        VMJsonBuf out = {0};
+                        if (!vm_json_stringify_value(vm, json_h, &out)) {
+                            text_id = 0;
+                        } else {
+                            text_id = vm_json_store_text(vm, out.data ? out.data : "");
+                        }
+                        if (out.data) free(out.data);
+                        break;
                     }
-                    text_id = vm_json_store_text(vm, out.data ? out.data : "");
-                    free(out.data);
-                    break;
                 }
             }
+            fprintf(stderr, "[DEBUG] A_TEXTO: handle %u -> text_id %u\n", json_h, text_id);
             vm->registers[inst.operand_a] = (uint64_t)text_id;
             vm->pc += IR_INSTRUCTION_SIZE;
             break;
@@ -6944,43 +7087,6 @@ int vm_step(VM* vm) {
             break;
         }
 
-        case OP_BYTES_ANEXAR: {
-            VMBytesEntry* left = vm_bytes_get(vm, (uint32_t)vm_get_register(vm, inst.operand_b));
-            uint32_t right_h = (uint32_t)vm_get_register(vm, inst.operand_c);
-            VMBytesEntry* right_bytes = vm_bytes_get(vm, right_h);
-            const char* right_text = NULL;
-            uint32_t right_len = 0;
-            uint32_t out_h;
-            VMBytesEntry* out;
-            if (!left) {
-                if (vm_try_catch_or_abort(vm, "bytes_anexar: bytes origen invalidos")) return 0;
-                fprintf(stderr, "Error de ejecucion (VM): bytes_anexar: bytes origen invalidos\n");
-                vm->running = 0;
-                vm->exit_code = 1;
-                return 0;
-            }
-            if (right_bytes) right_len = right_bytes->len;
-            else {
-                right_text = vm_text_cache_get(vm, right_h);
-                right_len = right_text ? (uint32_t)strlen(right_text) : 0u;
-            }
-            out_h = vm_bytes_new(vm, left->len + right_len);
-            out = vm_bytes_get(vm, out_h);
-            if (!out) {
-                vm->registers[inst.operand_a] = 0;
-                vm->pc += IR_INSTRUCTION_SIZE;
-                break;
-            }
-            if (left->len) memcpy(out->data, left->data, left->len);
-            if (right_len) {
-                if (right_bytes) memcpy(out->data + left->len, right_bytes->data, right_len);
-                else memcpy(out->data + left->len, right_text, right_len);
-            }
-            vm->registers[inst.operand_a] = (uint64_t)out_h;
-            vm->pc += IR_INSTRUCTION_SIZE;
-            break;
-        }
-
         case OP_BYTES_SUBBYTES: {
             VMBytesEntry* entry = vm_bytes_get(vm, (uint32_t)vm_get_register(vm, inst.operand_b));
             uint32_t start = (uint32_t)vm_get_register(vm, inst.operand_c);
@@ -7002,15 +7108,6 @@ int vm_step(VM* vm) {
             break;
         }
 
-        case OP_BYTES_DESDE_TEXTO: {
-            size_t text_len = 0;
-            char* text = vm_text_materialize_owned(vm, (uint32_t)vm_get_register(vm, inst.operand_b), &text_len);
-            vm->registers[inst.operand_a] = (uint64_t)vm_bytes_from_raw(vm, (const uint8_t*)(text ? text : ""), (uint32_t)text_len);
-            free(text);
-            vm->pc += IR_INSTRUCTION_SIZE;
-            break;
-        }
-
         case OP_BYTES_A_TEXTO: {
             VMBytesEntry* entry = vm_bytes_get(vm, (uint32_t)vm_get_register(vm, inst.operand_b));
             uint32_t text_id = 5381;
@@ -7026,6 +7123,15 @@ int vm_step(VM* vm) {
                 }
             }
             vm->registers[inst.operand_a] = (uint64_t)text_id;
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
+        case OP_BYTES_DESDE_TEXTO: {
+            size_t text_len = 0;
+            char* text = vm_text_materialize_owned(vm, (uint32_t)vm_get_register(vm, inst.operand_b), &text_len);
+            vm->registers[inst.operand_a] = (uint64_t)vm_bytes_from_raw(vm, (const uint8_t*)(text ? text : ""), (uint32_t)text_len);
+            free(text);
             vm->pc += IR_INSTRUCTION_SIZE;
             break;
         }
@@ -8600,10 +8706,7 @@ int vm_step(VM* vm) {
             break;
         }
 
-        case OP_NOP:
-            vm->pc += IR_INSTRUCTION_SIZE;
-            break;
-            
+
         // === NUEVOS OPCODES FASE 0 (solo los que no existen) ===
         
         case OP_STR_MINUSCULAS: {
@@ -8959,15 +9062,18 @@ int vm_step(VM* vm) {
     }
 
     case OP_MEM_OBTENER_TODOS: {
-        uint32_t lista_id = 0xA11C04CE; // "ALL CONCEPTS"
-#ifdef JASBOOT_LANG_INTEGRATION
-        if (vm->mem_neuronal) {
-            JMNMemoria* mem = vm->mem_neuronal;
-            jmn_crear_lista(mem, lista_id);
-            jmn_iterar_nodos(mem, jmn_callback_recolectar_ids, mem);
+        vm->pc += IR_INSTRUCTION_SIZE;
+        break;
+    }
+
+    case OP_MEM_OBTENER_AUDITORIA_JSON: {
+        uint32_t list_id = vm_json_create(vm, VM_JSON_ARRAY);
+        if (vm->audit_json_list) {
+            for (uint32_t i = 0; i < vm->audit_json_count; i++) {
+                vm_json_array_add(vm, list_id, vm->audit_json_list[i]);
+            }
         }
-#endif
-        vm_set_register(vm, inst.operand_a, (uint64_t)lista_id);
+        vm_set_register(vm, inst.operand_a, (uint64_t)list_id);
         vm->pc += IR_INSTRUCTION_SIZE;
         break;
     }

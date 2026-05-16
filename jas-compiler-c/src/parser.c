@@ -293,7 +293,7 @@ static int is_decl_type_token(const Token *t) {
             strcmp(s, "socket") == 0 || strcmp(s, "tls") == 0 ||
             strcmp(s, "http_solicitud") == 0 || strcmp(s, "http_respuesta") == 0 ||
             strcmp(s, "http_servidor") == 0 ||
-            strcmp(s, "objeto") == 0 || strcmp(s, "elemento") == 0);
+            strcmp(s, "objeto") == 0 || strcmp(s, "json") == 0 || strcmp(s, "elemento") == 0);
 }
 
 /* Tras consumir el token `lista`: si sigue `<T>`, lo parsea (obligatorio cerrar bien). Si no hay `<`, devuelve NULL. */
@@ -309,7 +309,7 @@ static char *parse_optional_lista_element_type(Parser *p) {
                        "En `lista/mapa<T>` se esperaba un tipo T despues de '<'.");
         return NULL;
     }
-    static const char *ok[] = {"entero", "flotante", "texto", "bool", "byte", "bytes", "mapa", "lista", "elemento", NULL};
+    static const char *ok[] = {"entero", "flotante", "texto", "bool", "byte", "bytes", "mapa", "lista", "json", "elemento", NULL};
     int good = 0;
     for (int i = 0; ok[i]; i++)
         if (strcmp(inner->value.str, ok[i]) == 0) good = 1;
@@ -2765,6 +2765,7 @@ static void parser_synchronize(Parser *p) {
                 strcmp(kw, "byte") == 0 || strcmp(kw, "vec2") == 0 ||
                 strcmp(kw, "vec3") == 0 || strcmp(kw, "vec4") == 0 ||
                 strcmp(kw, "mat4") == 0 || strcmp(kw, "mat3") == 0 ||
+                strcmp(kw, "json") == 0 ||
                 strcmp(kw, "si") == 0 || strcmp(kw, "mientras") == 0 ||
                 strcmp(kw, "para_cada") == 0 || strcmp(kw, "cada") == 0 ||
                 strcmp(kw, "hacer") == 0 || strcmp(kw, "para") == 0 ||
@@ -2986,7 +2987,7 @@ static ASTNode *parse_para_cada_statement(Parser *p) {
         return NULL;
 
     const Token *ity = peek(p, 0);
-    static const char *ok_it[] = {"entero", "flotante", "texto", "bool", "caracter", "elemento", NULL};
+    static const char *ok_it[] = {"entero", "flotante", "texto", "bool", "caracter", "json", "elemento", NULL};
     int it_ok = 0;
     if (ity && ity->type == TOK_KEYWORD && ity->value.str) {
         for (int i = 0; ok_it[i]; i++) {
@@ -3407,7 +3408,7 @@ static ASTNode *parse_statement(Parser *p) {
             strcmp(t->value.str, "vec3") == 0 || strcmp(t->value.str, "vec4") == 0 || strcmp(t->value.str, "mat4") == 0 || strcmp(t->value.str, "mat3") == 0 ||
             strcmp(t->value.str, "bytes") == 0 || strcmp(t->value.str, "socket") == 0 || strcmp(t->value.str, "tls") == 0 ||
             strcmp(t->value.str, "http_solicitud") == 0 || strcmp(t->value.str, "http_respuesta") == 0 || strcmp(t->value.str, "http_servidor") == 0 ||
-            strcmp(t->value.str, "elemento") == 0 || strcmp(t->value.str, "objeto") == 0) {
+            strcmp(t->value.str, "elemento") == 0 || strcmp(t->value.str, "objeto") == 0 || strcmp(t->value.str, "json") == 0) {
             char *ty = strdup(t->value.str);
             advance(p);
 
@@ -3816,7 +3817,7 @@ static ASTNode *parse_statement(Parser *p) {
                 char *iter_ty = NULL;
                 
                 // El tipo es opcional, si no está usamos "elemento"
-                static const char *ok_it[] = {"entero", "flotante", "texto", "bool", "lista", "mapa", "elemento", NULL};
+                static const char *ok_it[] = {"entero", "flotante", "texto", "bool", "lista", "mapa", "json", "elemento", NULL};
                 int it_ok = 0;
                 if (ity && ity->type == TOK_KEYWORD && ity->value.str) {
                     // Si el siguiente token es 'en', entonces 'ity' es el nombre de la variable, no el tipo.

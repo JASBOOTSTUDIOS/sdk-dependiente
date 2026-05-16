@@ -92,6 +92,10 @@ typedef struct JMNPropagarExtra {
     int score_mode; /* 0 = mejor aportación por profundidad (legacy), 1 = suma de na en aristas exploradas */
     float g_tau[JMN_RELACION_MAX + 1]; /* multiplicador por tipo de relación τ (índice 0 = defecto si τ fuera de rango) */
     float mask_tau[JMN_RELACION_MAX + 1]; /* Máscara contextual mask(C, τ) en [0,1]. Por defecto 1.0 */
+    int h_mode;    /* 0=lineal, 1=exponencial, 2=sigmoide, 3=paso_unico */
+    float h_lambda; /* Factor de decaimiento (0.1 - 1.0) */
+    float h_kappa;  /* Factor de saturación/forma */
+    int audit_mode; /* 0=off, 1=resumen, 2=detallado (por arista) */
 } JMNPropagarExtra;
 
 /** Inicializa extra con valores por defecto (1.0). */
