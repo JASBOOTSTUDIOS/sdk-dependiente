@@ -1,0 +1,25 @@
+# Percepción + MAI ligeros: activar el grafo sin `buscar` (buscar exige clave recordada; falla en "pero", "ok", etc.).
+# propagar_activacion alimenta rastro/MAI aunque el token solo aparezca en aristas.
+
+usar { es_token_funcional } de "procesamiento.jasb"
+
+enviar funcion percepcionar_tokens_rapido(lista tokens) retorna bool
+    entero n = lista_tamano(tokens)
+    entero lim = n
+    si lim > 6 entonces
+        lim = 6
+    fin_si
+    entero i = 0
+    mientras i < lim hacer
+        texto t = lista_obtener(tokens, i)
+        si longitud_texto(t) > 1 y no es_token_funcional(t) entonces
+            lista prueba = buscar_asociados_lista(t, 1, 0)
+            si lista_tamano(prueba) >= 1 entonces
+                # d_max=1 para percepción rápida (solo vecinos inmediatos), K=8
+                propagar_activacion(t, 1, 8)
+            fin_si
+        fin_si
+        i = i + 1
+    fin_mientras
+    retornar verdadero
+fin_funcion

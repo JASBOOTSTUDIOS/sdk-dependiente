@@ -1,0 +1,19 @@
+# Módulo de Contexto - Neurixis ARA
+# Objetivo: Gestionar buffer de corto plazo y persistencia de estado
+
+usar { normalizar_entrada } de "normalizador.jasb"
+
+enviar funcion aprender_de_interaccion(texto txt, texto respuesta) retorna bool
+    # Reforzamiento Hebbiano simple
+    # Si el usuario dice algo, y nosotros respondemos, asociamos la entrada con la respuesta
+    lista tokens = normalizar_entrada(txt)
+    lista respuesta_tokens = normalizar_entrada(respuesta)
+    
+    para cada texto t indice i sobre tokens hacer
+        para cada texto r indice j sobre respuesta_tokens hacer
+            asociar_relacion(t, r, 1, 0.0050) # Asociación débil inicial
+        fin_para_cada
+    fin_para_cada
+    
+    retornar verdadero
+fin_funcion

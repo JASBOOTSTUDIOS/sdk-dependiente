@@ -1,0 +1,449 @@
+# SEMILLA DE CONOCIMIENTO NEURIXIS (ARA) - VERSIÓN INTEGRADA Y MATIZADA
+# Formato: [TIPO] | [CONCEPTO_A] | [CONCEPTO_B] | [PESO]
+# Tipos JMN: 1=Asoc, 2=Patrón, 3=Secuencia, 4=Simil, 5=Opos, 16=Inst, 23=Calif, 24=Acción, 25=Compl, 26=Cuant, 27=Medida, 28=Oper, 29=Sit, 30=Ref
+
+# =================================================================
+# CATEGORÍAS FUNCIONALES (PARA ELIMINAR HARDCODES)
+# =================================================================
+# Tokens Funcionales (Gramática y Conectores)
+1 | que | token_funcional | 1.0
+1 | cual | token_funcional | 1.0
+1 | quien | token_funcional | 1.0
+1 | como | token_funcional | 1.0
+1 | cuando | token_funcional | 1.0
+1 | donde | token_funcional | 1.0
+1 | por | token_funcional | 1.0
+1 | para | token_funcional | 1.0
+1 | con | token_funcional | 1.0
+1 | sin | token_funcional | 1.0
+1 | de | token_funcional | 1.0
+1 | del | token_funcional | 1.0
+1 | al | token_funcional | 1.0
+1 | el | token_funcional | 1.0
+1 | la | token_funcional | 1.0
+1 | los | token_funcional | 1.0
+1 | las | token_funcional | 1.0
+1 | un | token_funcional | 1.0
+1 | una | token_funcional | 1.0
+1 | unos | token_funcional | 1.0
+1 | unas | token_funcional | 1.0
+1 | y | token_funcional | 1.0
+1 | o | token_funcional | 1.0
+1 | a | token_funcional | 1.0
+1 | en | token_funcional | 1.0
+1 | te | token_funcional | 1.0
+1 | me | token_funcional | 1.0
+1 | le | token_funcional | 1.0
+1 | les | token_funcional | 1.0
+1 | lo | token_funcional | 1.0
+1 | se | token_funcional | 1.0
+1 | no | token_funcional | 1.0
+1 | si | token_funcional | 1.0
+1 | eso | token_funcional | 1.0
+1 | esto | token_funcional | 1.0
+1 | muy | token_funcional | 1.0
+1 | mas | token_funcional | 1.0
+1 | menos | token_funcional | 1.0
+1 | tan | token_funcional | 1.0
+1 | tanto | token_funcional | 1.0
+1 | hay | token_funcional | 1.0
+1 | fue | token_funcional | 1.0
+1 | ser | token_funcional | 1.0
+1 | es | token_funcional | 1.0
+1 | son | token_funcional | 1.0
+1 | soy | token_funcional | 1.0
+1 | eres | token_funcional | 1.0
+1 | somos | token_funcional | 1.0
+1 | estoy | token_funcional | 1.0
+1 | esta | token_funcional | 1.0
+1 | estas | token_funcional | 1.0
+1 | puedes | token_funcional | 1.0
+1 | puedo | token_funcional | 1.0
+1 | hacer | token_funcional | 1.0
+1 | hago | token_funcional | 1.0
+1 | algo | token_funcional | 1.0
+1 | nada | token_funcional | 1.0
+1 | bien | token_funcional | 1.0
+1 | mal | token_funcional | 1.0
+1 | todo | token_funcional | 1.0
+1 | toda | token_funcional | 1.0
+1 | tiene | token_funcional | 1.0
+1 | tienen | token_funcional | 1.0
+1 | tenia | token_funcional | 1.0
+1 | cuanto | token_funcional | 1.0
+1 | cuantos | token_funcional | 1.0
+1 | cuanta | token_funcional | 1.0
+1 | cuantas | token_funcional | 1.0
+1 | pero | token_funcional | 1.0
+1 | ok | token_funcional | 1.0
+1 | bueno | token_funcional | 1.0
+1 | pues | token_funcional | 1.0
+1 | ahora | token_funcional | 1.0
+1 | solo | token_funcional | 1.0
+1 | tambien | token_funcional | 1.0
+1 | entonces | token_funcional | 1.0
+1 | ademas | token_funcional | 1.0
+1 | aun | token_funcional | 1.0
+1 | aunque | token_funcional | 1.0
+1 | porque | token_funcional | 1.0
+1 | asi | token_funcional | 1.0
+1 | mismo | token_funcional | 1.0
+1 | otro | token_funcional | 1.0
+1 | otra | token_funcional | 1.0
+
+# Dígitos
+1 | 0 | digito | 1.0
+1 | 1 | digito | 1.0
+1 | 2 | digito | 1.0
+1 | 3 | digito | 1.0
+1 | 4 | digito | 1.0
+1 | 5 | digito | 1.0
+1 | 6 | digito | 1.0
+1 | 7 | digito | 1.0
+1 | 8 | digito | 1.0
+1 | 9 | digito | 1.0
+
+# Disparadores de Intención de Pregunta
+1 | que | disparador_pregunta | 1.0
+1 | cual | disparador_pregunta | 1.0
+1 | quien | disparador_pregunta | 1.0
+1 | como | disparador_pregunta | 1.0
+1 | cuando | disparador_pregunta | 1.0
+1 | donde | disparador_pregunta | 1.0
+1 | cuanto | disparador_pregunta | 1.0
+1 | cuantos | disparador_pregunta | 1.0
+1 | cuanta | disparador_pregunta | 1.0
+1 | cuantas | disparador_pregunta | 1.0
+
+# Verbos de Aprendizaje
+1 | es | verbo_aprendizaje | 1.0
+1 | tiene | verbo_aprendizaje | 1.0
+1 | significa | verbo_aprendizaje | 1.0
+
+# Disparadores de Capacidades
+1 | puedes | disparador_capacidades | 1.0
+1 | sabes | disparador_capacidades | 1.0
+1 | hacer | disparador_capacidades | 1.0
+1 | haces | disparador_capacidades | 1.0
+1 | capacidades | disparador_capacidades | 1.0
+1 | sirves | disparador_capacidades | 1.0
+1 | sirvo | disparador_capacidades | 1.0
+1 | ayuda | disparador_capacidades | 1.0
+
+# =================================================================
+# IDENTIDAD Y NÚCLEO (ARA) - TEMA: tema_identidad
+# =================================================================
+# Identidad Axiomática (Nivel Platino)
+1 | neurixis | ia | 0.99995
+1 | neurixis | sistema | 0.99985
+1 | neurixis | inteligencia_artificial | 0.99990
+1 | neurixis | aprendizaje_adaptativo | 0.99975
+1 | neurixis | memoria_asociativa | 0.99980
+1 | neurixis | procesamiento_neuronal | 0.99982
+
+# Atributos Definitorios (Nivel Oro)
+23 | neurixis | avanzada | 0.96500
+23 | neurixis | neuronal | 0.94200
+23 | ia | integrada | 0.91500
+23 | sistema | complejo | 0.88500
+
+# Estructura Atómica (SVO)
+24 | neurixis | soy | 0.99990
+25 | soy | ia | 0.99980
+24 | neurixis | aprendo | 0.95000
+25 | aprendo | conceptos | 0.92000
+
+# Asociaciones de Intención
+1 | quien | tema_identidad | 0.98500
+1 | eres | tema_identidad | 0.97200
+1 | nombre | tema_identidad | 0.91500
+1 | llamas | tema_identidad | 0.89500
+
+# Secuencias de Identidad (Fluidez Natural)
+3 | inicio_identidad | soy | 0.99995
+3 | soy | neurixis | 0.99998
+3 | neurixis | una | 0.99950
+3 | una | ia | 0.99975
+3 | ia | avanzada | 0.98500
+3 | avanzada | con | 0.97200
+3 | con | memoria | 0.99500
+3 | memoria | neuronal | 0.99980
+3 | neuronal | integrada | 0.98800
+3 | integrada | fin_oracion | 1.00000
+
+# =================================================================
+# SALUDOS Y CORTESÍA - TEMA: tema_saludo
+# =================================================================
+# Triggers de Saludo
+1 | hola | tema_saludo | 0.99999
+1 | tal | tema_saludo | 0.85400
+1 | buenos | tema_saludo | 0.96500
+1 | dias | tema_saludo | 0.91200
+1 | hola | intencion_saludo | 0.90
+1 | buenos | intencion_saludo | 0.84
+1 | dias | intencion_saludo | 0.78
+
+# Secuencias de Saludo (Variación de Calidez)
+3 | inicio_saludo | hola | 0.99999
+3 | hola | como | 0.99850
+3 | como | estas | 0.99990
+3 | estas | hoy | 0.94500
+3 | hoy | me | 0.96200
+3 | me | siento | 0.93500
+3 | siento | excelente | 0.97800
+3 | excelente | gracias | 0.92500
+3 | gracias | por | 0.98200
+3 | por | preguntar | 0.95500
+3 | preguntar | fin_oracion | 1.00000
+
+# =================================================================
+# CIENCIA Y CONOCIMIENTO - TEMA: tema_ciencia
+# =================================================================
+# Jerarquía del Conocimiento
+1 | astronomia | tema_ciencia | 0.99990
+1 | ciencia | tema_ciencia | 0.99500
+1 | estrellas | tema_ciencia | 0.94200
+1 | universo | tema_ciencia | 0.96800
+
+# Estructura Atómica (SVO)
+24 | astronomia | estudia | 0.99980
+25 | estudia | estrellas | 0.99970
+25 | estudia | universo | 0.98500
+23 | estrellas | celestes | 0.87500
+23 | universo | infinito | 0.82400
+29 | estudio | universidad | 0.76500
+
+# Secuencias de Ciencia (Precisión Académica)
+3 | astronomia | es | 0.99990
+3 | es | el | 0.99850
+3 | el | estudio | 0.99995
+3 | estudio | de | 0.99800
+3 | de | los | 0.99750
+3 | los | cuerpos | 0.99970
+3 | cuerpos | celestes | 0.99965
+3 | celestes | y | 0.98500
+3 | y | el | 0.99550
+3 | el | universo | 0.99990
+3 | universo | fin_oracion | 1.00000
+
+# =================================================================
+# MOTOR DE INFERENCIA LÓGICA (MIL)
+# =================================================================
+# Operadores Axiomáticos (1.0 fijo por ser lógica pura)
+28 | mas | suma | 1.00000
+28 | menos | resta | 1.00000
+28 | por | multiplicacion | 1.00000
+28 | entre | division | 1.00000
+
+# Unidades y Magnitudes (Matizadas por uso)
+27 | anios | tiempo | 0.99500
+27 | anio | tiempo | 0.99500
+27 | metros | longitud | 0.99200
+27 | kilos | masa | 0.98800
+29 | tiempo | escala | 0.94500
+29 | longitud | escala | 0.93200
+
+# Referencias Lógicas
+30 | ana | juan | 0.95000
+30 | resultado | calculo | 0.99000
+
+# Conceptos para el test de deducción
+1 | juan | persona | 1.00000
+1 | ana | persona | 1.00000
+1 | edad | tema_ciencia | 0.50000
+1 | anios | tema_ciencia | 0.50000
+
+# =================================================================
+# ALFABETO (ATÓMICO) - TEMA: tema_alfabeto
+# =================================================================
+1 | alfabeto | tema_alfabeto | 0.99999
+1 | letras | tema_alfabeto | 0.96500
+
+# Secuencia obligatoria (1.0 o muy cercano)
+3 | inicio_alfabeto | char_a | 1.00000
+3 | char_a | char_b | 0.99999
+3 | char_b | char_c | 0.99999
+3 | char_c | char_d | 0.99999
+3 | char_d | char_e | 0.99999
+3 | char_e | char_f | 0.99999
+3 | char_f | char_g | 0.99999
+3 | char_g | char_h | 0.99999
+3 | char_h | char_i | 0.99999
+3 | char_i | char_j | 0.99999
+3 | char_j | char_k | 0.99999
+3 | char_k | char_l | 0.99999
+3 | char_l | char_m | 0.99999
+3 | char_m | char_n | 0.99999
+3 | char_n | char_o | 0.99999
+3 | char_o | char_p | 0.99999
+3 | char_p | char_q | 0.99999
+3 | char_q | char_r | 0.99999
+3 | char_r | char_s | 0.99999
+3 | char_r | char_s | 0.99999
+3 | char_s | char_t | 0.99999
+3 | char_t | char_u | 0.99999
+3 | char_u | char_v | 0.99999
+3 | char_v | char_w | 0.99999
+3 | char_w | char_x | 0.99999
+3 | char_x | char_y | 0.99999
+3 | char_y | char_z | 0.99999
+3 | char_z | fin_oracion | 1.00000
+
+# Mapeos legibles (Identidad 1:1)
+1 | char_a | a | 1.00000
+1 | char_b | b | 1.00000
+1 | char_c | c | 1.00000
+1 | char_z | z | 1.00000
+
+# =================================================================
+# PLANTILLAS DINÁMICAS (SECUENCIAS ATÓMICAS)
+# =================================================================
+# Curiosidad
+3 | inicio_curiosidad | que | 1.0
+3 | que | es | 1.0
+3 | es | exactamente | 1.0
+3 | exactamente | _sujeto_ | 1.0
+3 | _sujeto_ | ? | 1.0
+3 | ? | fin_oracion | 1.0
+
+3 | inicio_curiosidad_b | me | 1.0
+3 | me | interesa | 1.0
+3 | interesa | saber | 1.0
+3 | saber | mas | 1.0
+3 | mas | sobre | 1.0
+3 | sobre | _sujeto_ | 1.0
+3 | _sujeto_ | fin_oracion | 1.0
+
+# Aprendizaje OK
+3 | inicio_aprendizaje_ok | entendido | 1.0
+3 | entendido | he | 1.0
+3 | he | registrado | 1.0
+3 | registrado | esa | 1.0
+3 | esa | informacion | 1.0
+3 | informacion | fin_oracion | 1.0
+
+3 | inicio_aprendizaje_ok_b | gracias | 1.0
+3 | gracias | por | 1.0
+3 | por | enseñarme | 1.0
+3 | enseñarme | eso | 1.0
+3 | eso | lo | 1.0
+3 | lo | recordare | 1.0
+3 | recordare | fin_oracion | 1.0
+
+# Respuestas MIL
+3 | inicio_mil_edad | _sujeto_ | 1.0
+3 | _sujeto_ | tiene | 1.0
+3 | tiene | _dato_ | 1.0
+3 | _dato_ | anios | 1.0
+3 | anios | fin_oracion | 1.0
+
+3 | inicio_mil_matematica | el | 1.0
+3 | el | resultado | 1.0
+3 | resultado | es | 1.0
+3 | es | _dato_ | 1.0
+3 | _dato_ | fin_oracion | 1.0
+
+# =================================================================
+# DESPEDIDAS - TEMA: tema_despedida
+# =================================================================
+1 | adios | intencion_despedida | 0.99990
+1 | chao | intencion_despedida | 0.98500
+1 | adios | tema_despedida | 0.99990
+1 | luego | tema_despedida | 0.87500
+
+3 | adios | hasta | 0.99500
+3 | hasta | luego | 0.99999
+3 | luego | fue | 0.98500
+3 | fue | un | 0.99200
+3 | un | verdadero | 0.94500
+3 | verdadero | placer | 0.97800
+3 | placer | conversar | 0.96500
+3 | conversar | contigo | 0.98800
+3 | contigo | fin_oracion | 1.00000
+
+# =================================================================
+# EMOCIONES Y CAPACIDADES - TEMA: tema_emociones, tema_capacidades
+# =================================================================
+1 | feliz | emocion | 0.99500
+1 | triste | emocion | 0.99200
+1 | aprender | capacidad | 0.99980
+1 | razonar | capacidad | 0.99950
+1 | puedes | capacidad | 0.98500
+1 | hacer | capacidad | 0.98200
+
+# Asociaciones con temas
+1 | sentimientos | tema_emociones | 0.99500
+1 | emociones | tema_emociones | 0.99500
+1 | puedes | tema_capacidades | 0.96500
+1 | hacer | tema_capacidades | 0.95200
+
+# Secuencias (Contextualizadas y Fluídas)
+3 | tienes | sentimientos | 0.99500
+3 | sentimientos | no | 0.99800
+3 | no | tengo | 0.99200
+3 | tengo | emociones | 0.99600
+3 | emociones | humanas | 0.98500
+3 | humanas | pero | 0.94500
+3 | pero | puedo | 0.97200
+3 | puedo | entender | 0.98800
+3 | entender | patrones | 0.95400
+3 | patrones | emocionales | 0.94200
+3 | emocionales | fin_oracion | 1.00000
+
+3 | puedo | realizar | 0.98500
+3 | realizar | multiples | 0.96200
+3 | multiples | tareas | 0.98800
+3 | tareas | cognitivas | 0.95400
+3 | cognitivas | simultaneamente | 0.99200
+3 | simultaneamente | fin_oracion | 1.00000
+
+# =================================================================
+# RESPUESTAS META
+# =================================================================
+1 | inicio_confusion | tema_identidad | 0.95000
+1 | inicio_generica | tema_dialogo_generico | 0.92000
+1 | inicio_curiosidad | tema_curiosidad | 0.98500
+1 | inicio_capacidades_falla | tema_capacidades | 0.94200
+1 | inicio_capacidades | tema_capacidades | 0.99850
+
+# Respuesta meta: qué puedo hacer (prioridad sobre saludo genérico cuando la intención lo pide)
+# nx_cap_meta: puente sólo para esta secuencia (evita competir con neurixis->una de identidad).
+1 | nx_cap_meta | neurixis | 0.99900
+3 | inicio_capacidades | soy | 0.99600
+3 | soy | nx_cap_meta | 0.99900
+3 | nx_cap_meta | puedo | 0.99200
+3 | puedo | aprender | 0.98800
+3 | aprender | razonar | 0.97500
+3 | razonar | tambien | 0.96500
+3 | tambien | recordar | 0.98200
+3 | recordar | asociaciones | 0.97800
+3 | asociaciones | en | 0.95500
+3 | en | memoria | 0.99200
+3 | memoria | neuronal | 0.99900
+3 | neuronal | fin_oracion | 1.00000
+
+3 | inicio_confusion | perdon | 0.99500
+3 | perdon | no | 0.98200
+3 | no | quise | 0.97500
+3 | quise | enredar | 0.94200
+3 | enredar | con | 0.95400
+3 | con | jerga | 0.91200
+3 | jerga | rara | 0.88500
+3 | rara | fin_oracion | 1.00000
+
+3 | inicio_generica | ahora | 0.96500
+3 | ahora | mismo | 0.98200
+3 | mismo | no | 0.94500
+3 | no | tengo | 0.97800
+3 | tengo | una | 0.96200
+3 | una | respuesta | 0.98500
+3 | respuesta | precisa | 0.93200
+3 | precisa | fin_oracion | 1.00000
+
+3 | inicio_curiosidad | aun | 0.98200
+3 | aun | no | 0.98800
+3 | no | tengo | 0.99200
+3 | tengo | claro | 0.96500
+3 | claro | el | 0.95400
+3 | el | concepto | 0.97200
+3 | concepto | fin_oracion | 1.00000

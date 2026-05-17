@@ -1,0 +1,11 @@
+# Regresión: aprender_relacion_logica_usuario debe crear clave *_mod_* para buscar (MIL)
+usar { aprender_relacion_logica_usuario } de "../modulos/aprendizaje.jasb"
+
+principal
+    crear_memoria("memoria/jmn/test_mil_recordar_clave.jmn")
+    aprender_relacion_logica_usuario("ana tiene 6 anios mas que juan")
+    buscar "ana_mod_juan"
+    imprimir "VALOR=" + resultado
+    consolidar_memoria()
+    cerrar_memoria()
+fin_principal

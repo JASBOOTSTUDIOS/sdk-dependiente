@@ -1,0 +1,16 @@
+principal
+    crear_memoria("test_bug.jmn")
+    # Concepto sin asociaciones
+    recordar "nada" con valor "v"
+    
+    lista l = buscar_asociados_lista("nada", 5, 4)
+    imprimir "Tamano: " + texto_desde_numero(lista_tamano(l))
+    
+    imprimir "Iniciando bucle..."
+    para cada texto s indice i sobre l hacer
+        imprimir "Elemento: " + s
+    fin_para_cada
+    imprimir "Fin."
+    
+    cerrar_memoria()
+fin_principal

@@ -1,0 +1,38 @@
+# PLANTILLA: una fila de ejemplo por tipo JMN (1-30) para semillas Neurixis.
+# Mismo formato que semilla_conocimiento.txt: TIPO | CONCEPTO_A | CONCEPTO_B | PESO
+# Copia filas a semilla_conocimiento.txt y ajusta conceptos/pesos; evita saturar todo a 1.0.
+# Referencia de nombres: docs/LENGUAJE/TIPOS_RELACION_JMN.md
+#
+# Rango sugerido por tau (orientativo, no obligatorio):
+#   1-5,9,12-14,18-20,24-25,29-30 -> 0.55-0.95  |  6-8,10-11,15-17,21-23,26-28 -> 0.7-1.0
+
+1 | ejemplo_asoc_a | ejemplo_asoc_b | 0.75
+2 | patron_oracion | oracion_valida | 0.85
+3 | inicio_ejemplo | siguiente_palabra | 0.88
+4 | feliz | contento | 0.92
+5 | luz | oscuridad | 0.95
+6 | gato | mamifero | 0.90
+7 | fuego | calor | 0.85
+8 | desayuno | almuerzo | 0.72
+9 | estudiar | aprender | 0.88
+10 | ayudar | preferible | 0.82
+11 | torre_eiffel | paris | 0.95
+12 | cielo | azul | 0.75
+13 | rueda | coche | 0.95
+14 | delito | carcel | 0.78
+15 | llave | abrir_puerta | 0.95
+16 | pelusa | gato | 0.90
+17 | usuario | datos | 0.70
+18 | martillo | clavar | 0.95
+19 | hecho_ciencia | revision_pares | 0.85
+20 | elefante | raton_mas_pequeno | 0.80
+21 | invierno | frio_habitual | 0.78
+22 | ana | madre_de_pedro | 0.90
+23 | hecho | cientifico | 0.92
+24 | sol | brilla | 0.88
+25 | come | manzana | 0.87
+26 | manzanas | cinco | 0.95
+27 | cinco | kilometros | 0.95
+28 | mas | suma | 0.98
+29 | cena | restaurante | 0.80
+30 | ana | referencia_edad_juan | 0.75

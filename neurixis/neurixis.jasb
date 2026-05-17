@@ -1,0 +1,81 @@
+# NEURIXIS IA - Flujo Principal ARQUITECTURA DE RESONANCIA ASOCIATIVA (ARA)
+# Basado en pesos y asociaciones conceptuales contextuales
+
+usar { normalizar_entrada } de "modulos/normalizador.jasb"
+usar { detectar_intencion_neuronal } de "modulos/procesamiento.jasb"
+usar { 
+    generar_respuesta_por_secuencia, 
+    activar_propagacion_contextual,
+    neurixis_pipeline_g_tau_ara
+} de "modulos/generador.jasb"
+usar { aprender_de_interaccion, gestionar_ciclo_vida_memoria } de "modulos/aprendizaje.jasb"
+usar { 
+    cargar_semilla_desde_archivo, 
+    entrenar_nodos_control 
+} de "modulos/entrenamiento.jasb"
+usar { percepcionar_tokens_rapido } de "modulos/cortex_mai.jasb"
+
+# --- Inicialización de Memoria ---
+funcion inicializar_memoria_maestra() retorna bool
+    imprimir "🧠 Cargando núcleos JMN..."
+    crear_memoria("memoria/jmn/neurixis_core.jmn")
+    
+    # g(tau): pasos 1-2 de flujo_model_IA/03_g_tau.md (perfil + normalizar).
+    neurixis_pipeline_g_tau_ara()
+    
+    ventana_percepcion(128)
+    flujo_temporal(256)
+    retornar verdadero
+fin_funcion
+
+principal
+    imprimir "🤖 NEURIXIS IA (ARA): Iniciando sistema neuronal..."
+    
+    bool ok = inicializar_memoria_maestra()
+    si ok entonces
+        cargar_semilla_desde_archivo("datos/semilla_conocimiento.txt")
+        entrenar_nodos_control()
+        
+        imprimir "✅ Sistema listo. Puedes hablar conmigo (escribe 'salir' para terminar)."
+        
+        entero turno_sess = 0
+        mientras verdadero hacer
+            imprimir_sin_salto "\nUsuario: "
+            texto t_usuario = leer_entrada()
+            
+            si t_usuario == "salir" entonces romper fin_si
+            
+            # 1. Normalización
+            lista tokens = normalizar_entrada(t_usuario)
+            
+            # 2. Detección de intención (antes de calentar el grafo con percepción/propagación).
+            mapa m_intencion = detectar_intencion_neuronal(t_usuario, tokens)
+            texto tid = m_intencion["tipo"]
+            
+            # 3. Percepción MAI + propagación contextual (omitir en "capacidades": evita desvío de pensar_siguiente).
+            rastro_activacion_limpiar()
+            si tid != "intencion_capacidades" entonces
+                percepcionar_tokens_rapido(tokens)
+                activar_propagacion_contextual(tokens, tid)
+            fin_si
+            
+            texto respuesta = generar_respuesta_por_secuencia(m_intencion)
+            
+            imprimir "Neurixis: " + respuesta
+            
+            # 4. Aprendizaje (sin consolidar cada turno: evita reescribir todo el .jmn en disco por mensaje)
+            aprender_de_interaccion(t_usuario, respuesta, m_intencion, tokens)
+            
+            turno_sess = turno_sess + 1
+            si turno_sess % 12 == 0 y turno_sess > 0 entonces
+                consolidar_memoria()
+            fin_si
+        fin_mientras
+        consolidar_memoria()
+    sino
+        imprimir "No se pudo iniciar la IA."
+    fin_si
+    
+    cerrar_memoria()
+    imprimir "🤖 NEURIXIS IA: Memoria consolidada. Adiós."
+fin_principal

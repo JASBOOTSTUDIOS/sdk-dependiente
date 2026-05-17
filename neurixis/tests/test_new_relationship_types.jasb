@@ -1,0 +1,40 @@
+principal
+    crear_memoria("test_new_types.jmn")
+    
+    # Asegurar que los conceptos existen
+    recordar "pelusa" con valor "gato_mascota"
+    recordar "gato" con valor "animal_felino"
+    recordar "tierra_redonda" con valor "hecho_cientifico"
+    recordar "ciencia" con valor "fuente_verdad"
+    
+    # Probar tipos por número
+    asociar_relacion("pelusa", "gato", 16, 1.0) # Instancia
+    asociar_relacion("juan", "llaves", 17, 1.0) # Posesión
+    asociar_relacion("martillo", "clavar", 18, 1.0) # Funcionalidad
+    
+    # Probar tipos por texto (alias)
+    asociar_relacion("tierra_redonda", "ciencia", "evidencia", 1.0)
+    asociar_relacion("elefante", "raton", "magnitud", 0.9)
+    asociar_relacion("invierno", "frio", "frecuencia", 0.8)
+    asociar_relacion("ana", "pedro", "parentesco", 1.0)
+    
+    imprimir "Relaciones creadas exitosamente."
+    
+    # Verificar algunas fuerzas
+    # buscar_peso devuelve el peso del NODO, no de la conexion.
+    # Para la conexion usamos buscar_asociados_lista o similar.
+    
+    lista l1 = buscar_asociados_lista("pelusa", 5, 16)
+    imprimir "Asociados de pelusa (Tipo 16): " + texto_desde_numero(lista_tamano(l1))
+    si lista_tamano(l1) > 0 entonces
+        imprimir "  - " + lista_obtener(l1, 0)
+    fin_si
+    
+    lista l2 = buscar_asociados_lista("tierra_redonda", 5, 19)
+    imprimir "Asociados de tierra_redonda (Tipo 19): " + texto_desde_numero(lista_tamano(l2))
+    si lista_tamano(l2) > 0 entonces
+        imprimir "  - " + lista_obtener(l2, 0)
+    fin_si
+    
+    cerrar_memoria()
+fin_principal

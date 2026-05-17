@@ -1,0 +1,31 @@
+funcion recortar(texto s) retorna texto
+    entero n = longitud_texto(s)
+    si n == 0 entonces retornar "" fin_si
+    
+    entero inicio = 0
+    mientras inicio < n y str_extraer_caracter(s, inicio) == " " hacer
+        inicio = inicio + 1
+    fin_mientras
+    
+    si inicio == n entonces retornar "" fin_si
+    
+    entero fin = n - 1
+    mientras fin > inicio y str_extraer_caracter(s, fin) == " " hacer
+        fin = fin - 1
+    fin_mientras
+    
+    retornar extraer_subtexto(s, inicio, fin - inicio + 1)
+fin_funcion
+
+principal
+    texto s = "  hola  "
+    texto r = recortar(s)
+    imprimir "Original: [" + s + "]"
+    imprimir "Recortado: [" + r + "]"
+    
+    si r == "hola" entonces
+        imprimir "Prueba exitosa."
+    sino
+        imprimir "Prueba fallida."
+    fin_si
+fin_principal

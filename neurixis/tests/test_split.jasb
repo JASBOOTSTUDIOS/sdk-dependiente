@@ -1,0 +1,12 @@
+principal
+    imprimir "Prueba de dividir_texto..."
+    texto linea = "1 | hola | mundo | 0.5000"
+    lista partes = dividir_texto(linea, "|")
+    imprimir "Partes: " + texto_desde_numero(lista_tamano(partes))
+    
+    para cada texto p indice i sobre partes hacer
+        imprimir "  P" + texto_desde_numero(i) + ": [" + p + "]"
+    fin_para_cada
+    
+    imprimir "Fin."
+fin_principal

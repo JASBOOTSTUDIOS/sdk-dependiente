@@ -1,0 +1,16 @@
+# Regresion: Neurixis usa tokenizar_L (modo 394243) en normalizar_entrada.
+usar { normalizar_entrada } de "../modulos/normalizador.jasb"
+
+principal
+    crear_memoria("tmp_neurixis_norm_L.jmn")
+    lista t1 = normalizar_entrada("  HOLA , mundo  ")
+    entero n1 = lista_tamano(t1)
+    si n1 < 2 entonces
+        imprimir "FALLA n1="
+        imprimir n1
+    sino
+        imprimir "OK_NEURIXIS_NORM_L"
+    fin_si
+    consolidar_memoria()
+    cerrar_memoria()
+fin_principal

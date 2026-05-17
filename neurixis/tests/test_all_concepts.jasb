@@ -1,0 +1,16 @@
+principal
+    crear_memoria("test_concepts.jmn")
+    recordar "palabra1" con valor "v1"
+    recordar "palabra2" con valor "v2"
+    
+    imprimir "Obteniendo conceptos..."
+    lista todos = obtener_todos_conceptos()
+    imprimir "Total: " + texto_desde_numero(lista_tamano(todos))
+    
+    para cada elemento id_c indice i sobre todos hacer
+        texto txt = obtener_nombre_concepto(id_c)
+        imprimir "Concepto " + texto_desde_numero(i) + ": " + txt
+    fin_para_cada
+    
+    cerrar_memoria()
+fin_principal

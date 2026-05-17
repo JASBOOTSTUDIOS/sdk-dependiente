@@ -1,0 +1,14 @@
+principal
+    crear_memoria("memoria/jmn/neurixis_core.jmn")
+    # Cargar semilla para asegurar que los conceptos estan ahi
+    
+    texto t = "tiene"
+    lista asocs = buscar_asociados_lista(t, 1, 0)
+    imprimir "Concepto '" + t + "' existe? " + texto_desde_numero(lista_tamano(asocs) > 0)
+    
+    texto t2 = "es"
+    lista asocs2 = buscar_asociados_lista(t2, 1, 0)
+    imprimir "Concepto '" + t2 + "' existe? " + texto_desde_numero(lista_tamano(asocs2) > 0)
+    
+    cerrar_memoria()
+fin_principal

@@ -1,0 +1,13 @@
+# Regresión: detección de aprendizaje (tiene / mas) sin depender de la semilla completa
+usar { detectar_intencion_neuronal } de "../modulos/procesamiento.jasb"
+
+principal
+    crear_memoria("memoria/jmn/test_detectar_aprend.jmn")
+    lista tokens = ["juan", "tiene", "4", "anios"]
+    texto f = "juan tiene 4 anios"
+    mapa m = detectar_intencion_neuronal(f, tokens)
+    texto tipo = m["tipo"]
+    imprimir "TIPO=" + tipo
+    consolidar_memoria()
+    cerrar_memoria()
+fin_principal

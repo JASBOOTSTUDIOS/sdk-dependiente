@@ -1,0 +1,24 @@
+principal
+    crear_memoria("test_SVO.jmn")
+    
+    # Sujeto-Verbo-Objeto Atómico
+    asociar_relacion("juan", "corre", "accion", 1.0)
+    asociar_relacion("corre", "rapido", "calificacion", 0.9)
+    asociar_relacion("juan", "come", "accion", 1.0)
+    asociar_relacion("come", "manzana", "complemento", 1.0)
+    asociar_relacion("manzana", "roja", "calificacion", 0.8)
+    
+    imprimir "Estructura SVO creada exitosamente."
+    
+    # Verificar navegación
+    lista l1 = buscar_asociados_lista("juan", 5, "accion")
+    imprimir "Juan realiza acciones: " + texto_desde_numero(lista_tamano(l1))
+    
+    lista l2 = buscar_asociados_lista("come", 5, "complemento")
+    imprimir "Comer tiene como objeto: " + texto_desde_numero(lista_tamano(l2))
+    si lista_tamano(l2) > 0 entonces
+        imprimir "  - " + lista_obtener(l2, 0)
+    fin_si
+    
+    cerrar_memoria()
+fin_principal

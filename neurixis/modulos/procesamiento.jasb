@@ -1,0 +1,258 @@
+# Módulo de Procesamiento - Neurixis ARA
+# Objetivo: Detectar intenciones, temas y puente MIL avanzado
+
+enviar funcion es_token_funcional(texto t) retorna bool
+    # Todo basado en JMN, nada hardcodeado
+    si buscar_peso(t, "token_funcional") > 0.5 entonces
+        retornar verdadero
+    fin_si
+    retornar falso
+fin_funcion
+
+enviar funcion detectar_intencion_capacidades(texto f, lista tokens) retorna bool
+    # Análisis dinámico por asociaciones
+    si contiene_texto(f, "que haces") entonces retornar verdadero fin_si
+    si contiene_texto(f, "haces aqui") o contiene_texto(f, "haces aqu") entonces retornar verdadero fin_si
+    si contiene_texto(f, "memoria") y (contiene_texto(f, "que") o contiene_texto(f, "?")) entonces retornar verdadero fin_si
+    para cada texto t indice i sobre tokens hacer
+        si buscar_peso(t, "disparador_capacidades") > 0.6 entonces
+            retornar verdadero
+        fin_si
+    fin_para_cada
+    
+    si contiene_texto(f, "ayuda") y longitud_texto(f) < 120 entonces retornar verdadero fin_si
+    retornar falso
+fin_funcion
+
+enviar funcion analizar_pregunta(lista tokens) retorna bool
+    si lista_tamano(tokens) == 0 entonces retornar falso fin_si
+    texto t0 = lista_obtener(tokens, 0)
+    
+    # Lógica funcional desde la semilla
+    si buscar_peso(t0, "disparador_pregunta") > 0.7 entonces
+        retornar verdadero
+    fin_si
+    retornar falso
+fin_funcion
+
+enviar funcion detectar_patron_aprendizaje(lista tokens, bool es_pregunta) retorna bool
+    # Basado en tipos de relación y pesos en JMN
+    si lista_tamano(tokens) < 3 entonces retornar falso fin_si
+    
+    para cada texto tk indice ik sobre tokens hacer
+        si buscar_peso(tk, "verbo_aprendizaje") > 0.8 y no es_pregunta entonces
+            retornar verdadero
+        fin_si
+    fin_para_cada
+    
+    retornar falso
+fin_funcion
+
+enviar funcion detectar_intencion_neuronal(texto frase_usuario, lista tokens) retorna elemento
+    mapa intencion = {}
+    intencion["tipo"] = "conversacion_general"
+    intencion["confianza"] = 0.0
+    intencion["tokens_pregunta"] = tokens
+    intencion["frase"] = frase_usuario
+    
+    texto f = minusculas(frase_usuario)
+    
+    si detectar_intencion_capacidades(f, tokens) entonces
+        intencion["tipo"] = "intencion_capacidades"
+        intencion["confianza"] = 0.9800
+        retornar intencion
+    fin_si
+    
+    # Saludo de una sola palabra (evita conversacion_general + inicio_generica frio)
+    si lista_tamano(tokens) == 1 entonces
+        texto t0 = lista_obtener(tokens, 0)
+        si buscar_peso(t0, "tema_saludo") > 0.8000 entonces
+            intencion["tipo"] = "intencion_saludo"
+            intencion["confianza"] = 0.9200
+            intencion["tema"] = "tema_saludo"
+            retornar intencion
+        fin_si
+    fin_si
+    
+    # 1. Detectar Tema Dominante
+    texto tema_dominante = detectar_tema_dominante(tokens)
+    intencion["tema"] = tema_dominante
+    
+    # 2. Detectar Aprendizaje (prioridad sobre MIL). No usar subcadena "cuanto" en toda la frase (falsos positivos).
+    bool es_pregunta = analizar_pregunta(tokens)
+    si no es_pregunta y contiene_texto(f, "?") entonces es_pregunta = verdadero fin_si
+    
+    texto aprend_tipo = ""
+    si detectar_patron_aprendizaje(tokens, es_pregunta) entonces
+        si contiene_texto(f, " mas ") o contiene_texto(f, " menos ") entonces
+            aprend_tipo = "accion_aprender_relacion_logica"
+        sino
+            aprend_tipo = "accion_aprender_definicion"
+        fin_si
+    fin_si
+    
+    si longitud_texto(aprend_tipo) > 0 entonces
+        intencion["tipo"] = aprend_tipo
+        intencion["confianza"] = 1.0000
+        retornar intencion
+    fin_si
+
+    # 3. Motor de Inferencia Lógica (MIL)
+    si detectar_operacion_matematica(tokens) entonces
+        intencion["tipo"] = "accion_matematica"
+        intencion["confianza"] = 1.0000
+        retornar intencion
+    fin_si
+    
+    # 4. Lista de intenciones maestras
+    lista intenciones = [
+        "intencion_saludo", 
+        "intencion_identidad", 
+        "intencion_pregunta_informacion", 
+        "intencion_alfabeto",
+        "intencion_despedida",
+        "intencion_capacidades"
+    ]
+    
+    texto mejor_intencion = "conversacion_general"
+    flotante mejor_pa = 0.0
+    
+    para cada texto i indice idx sobre intenciones hacer
+        flotante pa = calcular_potencial_activacion(i, tokens)
+        si pa > mejor_pa entonces
+            mejor_pa = pa
+            mejor_intencion = i
+        fin_si
+    fin_para_cada
+    
+    # Pregunta larga o con signo: inhibir saludo/conversacion vaga frente a intencion_pregunta_informacion
+    si (mejor_intencion == "conversacion_general" o mejor_intencion == "intencion_saludo") y es_pregunta entonces
+        si longitud_texto(f) > 8 o contiene_texto(f, "?") entonces
+            mejor_intencion = "intencion_pregunta_informacion"
+            mejor_pa = 0.8600
+        fin_si
+    fin_si
+    
+    intencion["tipo"] = mejor_intencion
+    intencion["confianza"] = mejor_pa
+    
+    si mejor_intencion == "conversacion_general" y es_pregunta entonces
+        bool menciona_verbo_ap = falso
+        para cada texto wt indice wi sobre tokens hacer
+            si buscar_peso(wt, "verbo_aprendizaje") > 0.8 entonces
+                menciona_verbo_ap = verdadero
+            fin_si
+        fin_para_cada
+        si menciona_verbo_ap entonces
+            intencion["tipo"] = "intencion_pregunta_informacion"
+            intencion["confianza"] = 0.9000
+        fin_si
+    fin_si
+
+    # Detección de Corrección / Negación del Usuario
+    si contiene_texto(f, "no fue eso") o contiene_texto(f, "no es") o contiene_texto(f, "te pregunte") entonces
+        intencion["tipo"] = "intencion_confusion"
+        intencion["confianza"] = 1.0
+        retornar intencion
+    fin_si
+    
+    # 5. Detectar conceptos desconocidos (Curiosidad)
+    flotante conf = intencion["confianza"]
+    si conf < 0.1500 entonces
+        lista desconocidos = detectar_conceptos_desconocidos(tokens)
+        si lista_tamano(desconocidos) > 0 entonces
+            intencion["tipo"] = "estado_curiosidad"
+            intencion["termino_desconocido"] = lista_obtener(desconocidos, 0)
+            intencion["confianza"] = 0.9000
+        fin_si
+    fin_si
+    
+    # 6. Capacidades / ayuda: prioridad final (misma frase `f` y tokens; evita fallos al leer el mapa).
+    si detectar_intencion_capacidades(f, tokens) entonces
+        intencion["tipo"] = "intencion_capacidades"
+        intencion["confianza"] = 0.9800
+    fin_si
+    
+    retornar intencion
+fin_funcion
+
+enviar funcion detectar_tema_dominante(lista tokens) retorna texto
+    lista temas = ["tema_identidad", "tema_saludo", "tema_ciencia", "tema_alfabeto", "tema_despedida", "tema_capacidades", "tema_emociones"]
+    texto mejor_tema = ""
+    flotante max_pa = 0.0
+    para cada texto t indice idx sobre temas hacer
+        flotante pa = calcular_potencial_activacion(t, tokens)
+        si pa > max_pa entonces
+            max_pa = pa
+            mejor_tema = t
+        fin_si
+    fin_para_cada
+    retornar mejor_tema
+fin_funcion
+
+enviar funcion detectar_operacion_matematica(lista tokens) retorna bool
+    entero numeros = 0
+    entero ops = 0
+    para cada texto t indice i sobre tokens hacer
+        lista asocs = buscar_asociados_lista(t, 1, 28)
+        si lista_tamano(asocs) > 0 entonces ops = ops + 1 fin_si
+        si es_numero(t) entonces numeros = numeros + 1 fin_si
+    fin_para_cada
+    retornar numeros >= 2 y ops >= 1
+fin_funcion
+
+enviar funcion es_numero(texto t) retorna bool
+    si longitud_texto(t) == 0 entonces retornar falso fin_si
+    
+    # Análisis dinámico desde JMN con bucle mientras (para cada es para colecciones)
+    entero i = 0
+    entero n = longitud_texto(t)
+    mientras i < n hacer
+        texto c = str_extraer_caracter(t, i)
+        si buscar_peso(c, "digito") < 0.9 entonces
+            retornar falso
+        fin_si
+        i = i + 1
+    fin_mientras
+    retornar verdadero
+fin_funcion
+
+enviar funcion detectar_conceptos_desconocidos(lista tokens) retorna lista
+    lista desconocidos = []
+    para cada texto t indice i sobre tokens hacer
+        si no es_token_funcional(t) y no es_numero(t) entonces
+            # Buscar CUALQUIER asociación (tipo 0 o tipo 1 para aprendizaje)
+            lista asocs = buscar_asociados_lista(t, 1, 1) # Tipo 1: Asociación General
+            si lista_tamano(asocs) == 0 entonces
+                asocs = buscar_asociados_lista(t, 1, 0) # Tipo 0: Cualquier tipo
+            fin_si
+
+            si lista_tamano(asocs) == 0 entonces
+                si longitud_texto(t) > 4 entonces
+                    lista sinonimos = buscar_asociados_lista(t, 5, 4)
+                    si lista_tamano(sinonimos) == 0 entonces
+                        lista_agregar(desconocidos, t)
+                    fin_si
+                fin_si
+            fin_si
+        fin_si
+    fin_para_cada
+    retornar desconocidos
+fin_funcion
+
+enviar funcion calcular_potencial_activacion(texto nodo_objetivo, lista tokens) retorna flotante
+    flotante pa = 0.0
+    para cada texto t indice idx sobre tokens hacer
+        flotante val_peso = buscar_peso(t, nodo_objetivo)
+        si val_peso == 0.0000 entonces
+            lista sinonimos = buscar_asociados_lista(t, 5, 4)
+            para cada texto s indice s_idx sobre sinonimos hacer
+                flotante p_s = buscar_peso(s, nodo_objetivo)
+                pa = pa + (p_s * 0.8000)
+            fin_para_cada
+        sino
+            pa = pa + val_peso
+        fin_si
+    fin_para_cada
+    retornar pa
+fin_funcion

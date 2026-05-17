@@ -1,0 +1,4 @@
+﻿juan tiene 4 anios
+ana tiene 6 anios mas que juan
+cuantos anios tiene ana
+salir

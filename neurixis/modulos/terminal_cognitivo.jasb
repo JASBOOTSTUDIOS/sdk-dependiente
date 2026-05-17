@@ -1,0 +1,69 @@
+# Terminal cognitivo — percepción sin bloqueo (`percibir_teclado`) y lectura de línea con prefijo.
+# `percibir_teclado` usa consola real (p. ej. `_kbhit` en Windows); sin TTY no hay teclas parciales.
+
+enviar funcion drenar_teclado_no_bloqueante(texto bur, entero max_ops) retorna texto
+    texto ac = bur
+    entero k = 0
+    mientras k < max_ops hacer
+        texto ch = percibir_teclado()
+        si ch == "" entonces
+            romper
+        fin_si
+        entero code = codigo_caracter(ch)
+        si code == 13 o code == 10 entonces
+            romper
+        fin_si
+        si code == 8 o code == 127 entonces
+            entero ln = longitud_texto(ac)
+            si ln > 0 entonces
+                ac = extraer_subtexto(ac, 0, ln - 1)
+                imprimir_sin_salto "\b \b"
+            fin_si
+            k = k + 1
+            continuar
+        fin_si
+        si code < 32 entonces
+            k = k + 1
+            continuar
+        fin_si
+        ac = ac + ch
+        imprimir_sin_salto ch
+        k = k + 1
+    fin_mientras
+    retornar ac
+fin_funcion
+
+# Lectura bloqueante línea a línea con eco; respeta borrador capturado durante la respuesta en vivo.
+enviar funcion leer_linea_usuario(texto prefijo) retorna texto
+    imprimir_sin_salto "\nUsuario: "
+    texto acu = prefijo
+    si longitud_texto(prefijo) > 0 entonces
+        imprimir_sin_salto prefijo
+    fin_si
+    mientras verdadero hacer
+        texto ch = percibir_teclado()
+        si ch == "" entonces
+            pausa_milisegundos(5)
+            continuar
+        fin_si
+        entero cdc = codigo_caracter(ch)
+        si cdc == 13 o cdc == 10 entonces
+            imprimir ""
+            romper
+        fin_si
+        si cdc == 8 o cdc == 127 entonces
+            entero ln2 = longitud_texto(acu)
+            si ln2 > 0 entonces
+                acu = extraer_subtexto(acu, 0, ln2 - 1)
+                imprimir_sin_salto "\b \b"
+            fin_si
+            continuar
+        fin_si
+        si cdc < 32 entonces
+            continuar
+        fin_si
+        acu = acu + ch
+        imprimir_sin_salto ch
+    fin_mientras
+    retornar acu
+fin_funcion

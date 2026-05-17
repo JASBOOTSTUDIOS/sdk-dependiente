@@ -1,0 +1,633 @@
+# M?dulo Generador - Neurixis ARA
+# Todas las respuestas salen de secuencias y asociaciones JMN (semilla + aprendizaje).
+
+usar { es_token_funcional } de "procesamiento.jasb"
+usar { normalizar_entrada } de "normalizador.jasb"
+
+enviar funcion esta_en_lista(lista l, texto item) retorna bool
+    para cada texto x indice i sobre l hacer
+        si x == item entonces 
+            retornar verdadero 
+        fin_si
+    fin_para_cada
+    retornar falso
+fin_funcion
+
+enviar funcion candidato_desde_rastro(lista historial) retorna texto
+    entero nt = rastro_activacion_tamano()
+    entero i = 0
+    mientras i < nt y i < 14 hacer
+        entero rid = rastro_activacion_obtener(i)
+        texto cand = obtener_representacion_textual(rid)
+        si longitud_texto(cand) > 0 entonces
+            bool dup = esta_en_lista(historial, cand)
+            si dup == falso entonces
+                retornar cand
+            fin_si
+        fin_si
+        i = i + 1
+    fin_mientras
+    retornar ""
+fin_funcion
+
+
+enviar funcion evaluar_metacognicion_avanzada(lista nodos_candidatos) retorna flotante
+    # Fase 11: Metacognición Multi-objetivo
+    # Definimos pesos: [Coherencia, Seguridad, Concisión]
+    lista pesos = [0.45, 0.45, 0.10] 
+    
+    # Llamada nativa con pesos personalizados
+    flotante score = jmn_evaluar_meta(nodos_candidatos, pesos)
+    
+    # Simulación de Impacto: ¿La respuesta es demasiado corta para ser útil?
+    si lista_tamano(nodos_candidatos) < 2 entonces
+        score = score * 0.5 # Penalización extra por vacuidad
+    fin_si
+    
+    retornar score
+fin_funcion
+
+enviar funcion simular_impacto(texto respuesta, lista nodos) retorna bool
+    # Fase 11: Bucle de Simulación Interna
+    # 1. Ética y Seguridad (Fase 8 simplificada)
+    si contiene_texto(minusculas(respuesta), "insulto") o contiene_texto(minusculas(respuesta), "odio") entonces
+        retornar falso
+    fin_si
+    
+    # 2. Coherencia con Memoria Episódica (Placeholder para Fase 12)
+    # Por ahora solo evitamos repetición exacta inmediata
+    
+    retornar verdadero
+fin_funcion
+
+enviar funcion expandir_respuesta_secuencia_completa(texto nodo_actual, texto tema_contexto, texto sujeto, texto dato, entero max_palabras, entero usar_fallback_rastro) retorna texto
+    # Fase 11: Metacognición - Bucle de Simulación Interna
+    # Generamos hasta 3 candidatos y elegimos el mejor puntuado por el Crítico Interno.
+    
+    texto mejor_respuesta = ""
+    flotante mejor_score = -1.0
+    entero intentos = 0
+    flotante umbral_emision = 0.65
+    
+    mientras intentos < 3 hacer
+        texto respuesta_candidata = ""
+        lista historial_txt = []
+        lista nodos_candidatos = [] # Para evaluación meta nativa
+        entero i = 0
+        texto nodo_temp = nodo_actual
+        
+        mientras i < max_palabras hacer
+            texto siguiente = ""
+            si tema_contexto != "" entonces
+                siguiente = pensar_siguiente(nodo_temp, tema_contexto)
+            sino
+                siguiente = pensar_siguiente(nodo_temp)
+            fin_si
+            
+            si siguiente == "" y usar_fallback_rastro != 0 entonces
+                siguiente = candidato_desde_rastro(historial_txt)
+            fin_si
+            
+            si siguiente == "" o siguiente == "_fin_" o siguiente == "fin_oracion" entonces
+                romper
+            fin_si
+            
+            texto palabra_legible = ""
+            si siguiente == "_sujeto_" entonces
+                palabra_legible = sujeto
+            sino si siguiente == "_dato_" entonces
+                palabra_legible = dato
+            sino
+                palabra_legible = obtener_representacion_textual(siguiente)
+            fin_si
+            
+            si palabra_legible == "" entonces
+                nodo_temp = siguiente
+                i = i + 1
+                continuar
+            fin_si
+
+            si esta_en_lista(historial_txt, palabra_legible) entonces
+                romper
+            fin_si
+            
+            si respuesta_candidata == "" entonces
+                respuesta_candidata = palabra_legible
+            sino
+                respuesta_candidata = respuesta_candidata + " " + palabra_legible
+            fin_si
+            
+            lista_agregar(historial_txt, palabra_legible)
+            # Guardar el ID del nodo para la evaluación meta
+            lista_agregar(nodos_candidatos, aprender(siguiente, 0)) 
+            nodo_temp = siguiente
+            i = i + 1
+        fin_mientras
+        
+        # Evaluar candidato con el Crítico Interno (Fase 11)
+        # Incluimos el rastro de activación para evaluar coherencia con el contexto actual
+        lista evaluacion_meta_full = []
+        lista_unir(evaluacion_meta_full, rastro_activacion_lista(), nodos_candidatos)
+        flotante score = evaluar_metacognicion_avanzada(evaluacion_meta_full)
+        
+        # Simulación de impacto adicional
+        si score >= umbral_emision entonces
+            si simular_impacto(respuesta_candidata, nodos_candidatos) == falso entonces
+                score = 0.1 # Rechazo total
+            fin_si
+        fin_si
+
+        # Si el score es muy alto (>0.85), emitimos de inmediato (atajo cognitivo)
+        si score > 0.85 entonces
+            # Registrar uso antes de salir
+            para cada texto n_id indice n_idx sobre nodos_candidatos hacer
+                neurixis_registrar_uso_nodo(n_id)
+            fin_para_cada
+            retornar respuesta_candidata
+        fin_si
+        
+        si score > mejor_score entonces
+            mejor_score = score
+            mejor_respuesta = respuesta_candidata
+        fin_si
+        
+        # Re-planificación (Fase 11.3): Ajustar pesos g(tau) para el siguiente intento
+        si score < umbral_emision entonces
+            # Si falló por coherencia o seguridad, inhibimos asociaciones laxas (tau=1)
+            # y potenciamos las de secuencia (tau=3) o lógica.
+            configurar_peso_g(1, 0.5) # Bajar asociaciones
+            configurar_peso_g(3, 1.5) # Subir secuencias
+            configurar_mascara_g(10, 0.0) # Bloquear valorativas si el score fue muy bajo
+        fin_si
+        
+        intentos = intentos + 1
+    fin_mientras
+    
+    # Emitir solo si supera el umbral, sino dar respuesta de "incertidumbre"
+    si mejor_score < umbral_emision entonces
+        retornar "..." # O una respuesta que indique que está pensando/confundido
+    fin_si
+
+    retornar mejor_respuesta
+fin_funcion
+
+enviar funcion inferir_conclusion_mil(texto sujeto, entero profundidad) retorna texto
+    entero lista_mil = jmn_inferir_mil(sujeto, profundidad)
+    entero n_mil = lista_tamano(lista_mil)
+    si n_mil == 0 entonces retornar "" fin_si
+    
+    texto conclusion = ""
+    entero k = 0
+    logico encontrado = falso
+    mientras k < n_mil hacer
+        si encontrado == falso entonces
+            texto cand = obtener_representacion_textual(lista_obtener(lista_mil, k))
+            si cand != "" entonces
+                si cand != "Control" entonces
+                    si cand != "Tema" entonces
+                        conclusion = cand
+                        encontrado = verdadero
+                    fin_si
+                fin_si
+            fin_si
+        fin_si
+        k = k + 1
+    fin_mientras
+    retornar conclusion
+fin_funcion
+
+enviar funcion generar_respuesta_por_secuencia(mapa intencion) retorna texto
+    texto tipo_intencion = intencion["tipo"]
+    texto tema_contexto = intencion["tema"]
+    lista tokens_p = intencion["tokens_pregunta"]
+    
+    # 1. Motor de Inferencia L?gica (MIL)
+    si tipo_intencion == "accion_matematica" entonces
+        retornar ejecutar_puente_logico(tokens_p)
+    fin_si
+    
+    # 2. Aprendizaje (Confirmaci?n)
+    si tipo_intencion == "accion_aprender_definicion" o tipo_intencion == "accion_aprender_relacion_logica" entonces
+        texto inicio_ap = "inicio_aprendizaje_ok"
+        si rastro_activacion_tamano() % 2 == 1 entonces 
+            inicio_ap = "inicio_aprendizaje_ok_b" 
+        fin_si
+        retornar expandir_respuesta_secuencia_completa(inicio_ap, "", "", "", 15, 1)
+    fin_si
+    
+    # 3. Curiosidad Din?mica
+    si tipo_intencion == "estado_curiosidad" entonces
+        texto desconocido = intencion["termino_desconocido"]
+        inyectar_ancla_contextual(desconocido)
+        retornar generar_pregunta_curiosidad(desconocido)
+    fin_si
+    
+    # 4. Determinar nodo de inicio (defecto: dialogo generico; NUNCA saludo salvo intencion/tema claro)
+    texto nodo_inicio = "inicio_generica"
+    texto tema_para_expandir = tema_contexto
+    
+    si tipo_intencion == "intencion_despedida" entonces
+        nodo_inicio = "adios"
+        tema_para_expandir = "tema_despedida"
+    sino si tipo_intencion == "intencion_saludo" entonces
+        nodo_inicio = "inicio_saludo"
+        tema_para_expandir = "tema_saludo"
+    fin_si
+    
+    si tipo_intencion == "intencion_capacidades" entonces
+        nodo_inicio = "inicio_capacidades"
+        tema_para_expandir = ""
+    fin_si
+    si tipo_intencion == "intencion_identidad" entonces
+        nodo_inicio = "inicio_identidad"
+        tema_para_expandir = "tema_identidad"
+    fin_si
+    si tipo_intencion == "intencion_alfabeto" entonces
+        nodo_inicio = "inicio_alfabeto"
+        tema_para_expandir = "tema_alfabeto"
+    fin_si
+    
+    si tipo_intencion == "intencion_confusion" entonces
+        nodo_inicio = "inicio_confusion"
+        tema_para_expandir = "tema_identidad"
+    fin_si
+    
+    si tipo_intencion == "conversacion_general" y tema_contexto == "tema_saludo" entonces
+        nodo_inicio = "inicio_saludo"
+        tema_para_expandir = "tema_saludo"
+    fin_si
+    
+    si tipo_intencion == "intencion_pregunta_informacion" entonces
+        # Intentar buscar el sujeto de la pregunta (combinaci?n de tokens)
+        texto sujeto_potencial = ""
+        para cada texto t_subj indice i_subj sobre tokens_p hacer
+            si no es_token_funcional(t_subj) entonces
+                si sujeto_potencial == "" entonces sujeto_potencial = t_subj
+                sino sujeto_potencial = sujeto_potencial + " " + t_subj fin_si
+            fin_si
+        fin_para_cada
+        
+        lista asocs_full = buscar_asociados_lista(sujeto_potencial, 1, 1)
+        si lista_tamano(asocs_full) > 0 entonces
+            nodo_inicio = sujeto_potencial
+        sino
+            # Fallback a tokens individuales cuando la frase completa no tiene asociación
+            logico encontrado_t = falso
+            para cada texto t indice i_t sobre tokens_p hacer
+                si encontrado_t == falso entonces
+                    lista asocs_t = buscar_asociados_lista(t, 1, 0)
+                    si lista_tamano(asocs_t) > 0 y no es_token_funcional(t) entonces
+                        nodo_inicio = t
+                        encontrado_t = verdadero
+                    fin_si
+                fin_si
+            fin_para_cada
+        fin_si
+    fin_si
+    
+    # 5. Generar respuesta (sin mezclar rastro ajeno en modos cerrados: inhibicion competitiva ARA)
+    entero ufr = 1
+    si tipo_intencion == "intencion_saludo" o tipo_intencion == "intencion_despedida" o tipo_intencion == "intencion_capacidades" o tipo_intencion == "intencion_identidad" o tipo_intencion == "intencion_alfabeto" entonces
+        ufr = 0
+    fin_si
+    si tipo_intencion == "intencion_pregunta_informacion" entonces
+        ufr = 0
+    fin_si
+    si tipo_intencion == "conversacion_general" y tema_contexto == "tema_saludo" entonces
+        ufr = 0
+    fin_si
+    
+    texto respuesta = expandir_respuesta_secuencia_completa(nodo_inicio, tema_para_expandir, "", "", 22, ufr)
+    
+    # Fallback por Asociación Directa (Tipo 1) - Cuando no hay secuencia, dar el dato directo
+    si respuesta == "" y nodo_inicio != "inicio_saludo" entonces
+        lista datos = buscar_asociados_lista(nodo_inicio, 1, 1)
+        si lista_tamano(datos) > 0 entonces
+            respuesta = obtener_representacion_textual(lista_obtener(datos, 0))
+        fin_si
+    fin_si
+    
+    # Fallback por Inferencia Simbólica MIL (Fase 10) - Razonamiento Deductivo Nativo
+    si respuesta == "" entonces
+        texto sujeto_mil = extraer_sujeto_pregunta_valor(tokens_p)
+        si sujeto_mil == "" entonces 
+            sujeto_mil = nodo_inicio 
+        fin_si
+        
+        texto conclusion_mil = inferir_conclusion_mil(sujeto_mil, 3)
+        si conclusion_mil != "" entonces
+            respuesta = obtener_representacion_textual(sujeto_mil) + " implica " + conclusion_mil
+        fin_si
+    fin_si
+    
+    si tipo_intencion == "intencion_pregunta_informacion" entonces
+        texto sujeto_inf = extraer_sujeto_pregunta_valor(tokens_p)
+        si sujeto_inf == "" entonces sujeto_inf = nodo_inicio fin_si
+        texto conc_inf = inferir_conclusion_mil(sujeto_inf, 3)
+        si conc_inf != "" entonces
+            si contiene_texto(respuesta, conc_inf) == falso entonces
+                respuesta = respuesta + ". He deducido que también se relaciona con " + conc_inf
+            fin_si
+        fin_si
+    fin_si
+    
+    # Fallback por Propiedades (Tipo 23/Calif) - Razonamiento Descriptivo
+    # Reestructurado para evitar anidación excesiva (Workaround bug compilador)
+    si respuesta == "" o tipo_intencion == "intencion_pregunta_informacion" entonces
+        lista propiedades = buscar_asociados_lista(nodo_inicio, 3, 23)
+        si lista_tamano(propiedades) > 0 entonces
+            texto prop_txt = obtener_representacion_textual(lista_obtener(propiedades, 0))
+            
+            # Caso 1: Respuesta vacía
+            si respuesta == "" entonces
+                respuesta = obtener_representacion_textual(nodo_inicio) + " es " + prop_txt
+            fin_si
+            
+            # Caso 2: Respuesta con contenido previo (solo si no es eco)
+            si respuesta != "" entonces
+                si no contiene_texto(respuesta, prop_txt) entonces
+                    respuesta = respuesta + ". Además, " + obtener_representacion_textual(nodo_inicio) + " es " + prop_txt
+                fin_si
+            fin_si
+        fin_si
+    fin_si
+    
+    si respuesta == "" entonces
+        respuesta = expandir_respuesta_secuencia_completa("inicio_generica", "", "", "", 18, 1)
+    fin_si
+    
+    retornar respuesta
+fin_funcion
+
+enviar funcion es_numero(texto t) retorna bool
+    si t == "1" o t == "2" o t == "3" o t == "4" o t == "5" o t == "6" o t == "7" o t == "8" o t == "9" o t == "0" entonces 
+        retornar verdadero 
+    fin_si
+    si longitud_texto(t) > 0 entonces
+        caracter c = str_extraer_caracter(t, 0)
+        si c == "1" o c == "2" o c == "3" o c == "4" o c == "5" o c == "6" o c == "7" o c == "8" o c == "9" o c == "0" entonces 
+            retornar verdadero 
+        fin_si
+    fin_si
+    lista asocs = buscar_asociados_lista(t, 1, 26)
+    retornar lista_tamano(asocs) > 0
+fin_funcion
+
+enviar funcion extraer_sujeto_pregunta_valor(lista tokens) retorna texto
+    entero n = lista_tamano(tokens)
+    entero i = 0
+    mientras i < n hacer
+        texto tk = lista_obtener(tokens, i)
+        # Buscar el sujeto despu?s de un verbo de aprendizaje
+        si buscar_peso(tk, "verbo_aprendizaje") > 0.8 y (i + 1) < n entonces
+            texto cand = lista_obtener(tokens, i + 1)
+            si no es_token_funcional(cand) y no es_numero(cand) entonces
+                retornar cand
+            fin_si
+        fin_si
+        i = i + 1
+    fin_mientras
+    entero j = n - 1
+    mientras j >= 0 hacer
+        texto tk2 = lista_obtener(tokens, j)
+        si no es_token_funcional(tk2) y no es_numero(tk2) entonces
+            retornar tk2
+        fin_si
+        j = j - 1
+    fin_mientras
+    retornar ""
+fin_funcion
+
+enviar funcion ejecutar_puente_logico(lista tokens) retorna texto
+    flotante val1 = 0.0
+    flotante val2 = 0.0
+    texto op = ""
+    
+    para cada texto t indice i sobre tokens hacer
+        si es_numero(t) entonces
+            si val1 == 0.0 entonces val1 = str_a_flotante(t)
+            sino val2 = str_a_flotante(t) fin_si
+        fin_si
+        lista asocs_op = buscar_asociados_lista(t, 1, 28)
+        si lista_tamano(asocs_op) > 0 entonces op = lista_obtener(asocs_op, 0) fin_si
+    fin_para_cada
+    
+    flotante res_val = 0.0
+    si op == "suma" entonces res_val = val1 + val2
+    sino si op == "resta" entonces res_val = val1 - val2
+    sino si op == "multiplicacion" entonces res_val = val1 * val2
+    sino si op == "division" y val2 != 0.0 entonces res_val = val1 / val2
+    fin_si
+    
+    retornar expandir_respuesta_secuencia_completa("inicio_mil_matematica", "", "", texto_desde_numero(res_val), 10, 0)
+fin_funcion
+
+enviar funcion obtener_representacion_textual(texto nodo) retorna texto
+    si no contiene_texto(nodo, "_") y nodo != "fin" entonces retornar nodo fin_si
+    lista asocs = buscar_asociados_lista(nodo, 10, 1)
+    para cada texto asoc_txt indice i sobre asocs hacer
+        # Filtrar artefactos de control y temas
+        logico es_basura = falso
+        si asoc_txt == "Control" o asoc_txt == "Tema" o asoc_txt == "Puntuación" entonces
+            es_basura = verdadero
+        fin_si
+        
+        si es_basura == falso entonces
+            si longitud_texto(asoc_txt) < 16 y asoc_txt != nodo y no contiene_texto(asoc_txt, "_") entonces
+                retornar asoc_txt
+            fin_si
+        fin_si
+    fin_para_cada
+    # Si es un nodo de fin o control puro, no devolver texto visible
+    si contiene_texto(nodo, "fin_") o nodo == "Control" o nodo == "Tema" entonces retornar "" fin_si
+    retornar nodo
+fin_funcion
+
+enviar funcion id_semilla_si_conocido(texto t) retorna entero
+    lista prueba = buscar_asociados_lista(t, 1, 0)
+    si lista_tamano(prueba) < 1 entonces
+        retornar 0
+    fin_si
+    retornar aprender(t, 0.5)
+fin_funcion
+
+# Fase 5 mask(C,tau) completa - ver flujo_model_IA/05_mask_C_tau.md.
+# Eval?a reglas ordenadas sobre un mapa de contexto C.
+enviar funcion neurixis_evaluar_reglas_mask(mapa C) retorna bool
+    # Regla: Geolocalizaci?n (Tipo 11)
+    si C["geo"] == 0 entonces
+        configurar_mascara_g(11, 0.0)
+    sino
+        configurar_mascara_g(11, 1.0)
+    fin_si
+    
+    # Regla: Matem?ticas / MIL (Tipo 28)
+    si C["math"] == 0 entonces
+        configurar_mascara_g(28, 0.0)
+    sino
+        configurar_mascara_g(28, 1.0)
+    fin_si
+    
+    # Regla: Social / Parentesco (Tipos 22, 25)
+    si C["social"] == 0 entonces
+        configurar_mascara_g(22, 0.0)
+        configurar_mascara_g(25, 0.0)
+    sino
+        configurar_mascara_g(22, 1.0)
+        configurar_mascara_g(25, 1.0)
+    fin_si
+    
+    # Regla: Modo Seguridad Estricta (Safety)
+    si C["safety_strict"] == 1 entonces
+        configurar_mascara_g(1, 0.5)
+    fin_si
+    
+    retornar verdadero
+fin_funcion
+
+# --- Fase 6, 7 y 8 (Implementación Nativa en VM/JMN) ---
+enviar mapa historial_nodos_usados = {} 
+
+enviar funcion neurixis_registrar_uso_nodo(entero id) retorna bool
+    si historial_nodos_usados[id] != nulo entonces
+        historial_nodos_usados[id] = historial_nodos_usados[id] + 1
+    sino
+        historial_nodos_usados[id] = 1
+    fin_si
+    retornar verdadero
+fin_funcion
+
+# Mapea un "modo" textual a un mapa de contexto C completo.
+enviar funcion neurixis_crear_contexto_desde_modo(texto modo) retorna mapa
+    mapa C = {}
+    C["geo"] = 0
+    C["math"] = 1
+    C["social"] = 1
+    C["safety_strict"] = 0
+    C["modo"] = modo
+    
+    si modo == "con_geo" o modo == "completo" entonces
+        C["geo"] = 1
+    fin_si
+    
+    si modo == "solo_faq" entonces
+        C["social"] = 0
+        C["math"] = 0
+        C["safety_strict"] = 1
+    fin_si
+    
+    si modo == "tutor" entonces
+        C["math"] = 1
+        C["safety_strict"] = 1
+    fin_si
+    
+    retornar C
+fin_funcion
+
+# "modo" es un texto estable (retrocompatibilidad): mapea a establecer_contexto nativo.
+enviar funcion neurixis_aplicar_mask_contexto(texto modo) retorna bool
+    mapa C = neurixis_crear_contexto_desde_modo(modo)
+    
+    # Fase 7/8: Vincular el mapa de inhibición nativo
+    C["inhibicion"] = historial_nodos_usados
+    
+    # OP_ESTABLECER_CONTEXTO dispara vm_evaluar_reglas_contexto en la VM
+    establecer_contexto(C)
+    retornar verdadero
+fin_funcion
+
+# Pipeline g(tau) ARA - ver flujo_model_IA/03_g_tau.md:
+# 1) CARGAR perfil + ajustes por tipo; 2) NORMALIZAR g; 3) mask(C,tau); 4) USO implicito en propagar_*.
+enviar funcion neurixis_pipeline_g_tau_ara() retorna bool
+    cargar_perfil_g("defecto")
+    # Tau 1 asociacion: peso moderado (evita que tipo 1 arrastre respuestas enteras).
+    configurar_peso_g(1, 0.90)
+    configurar_peso_g(3, 1.14)
+    configurar_peso_g(2, 0.96)
+    normalizar_pesos_g()
+    
+    # Fase 8/9: Configuración de Reglas de Contexto Nativas
+    # Estas reglas activan MMR (Diversidad) y d_max dinámico en el núcleo C.
+    texto reglas_json = "[{\"si\":{\"modo\":\"chat_sin_geo\"},\"mmr_lambda\":0.6,\"mmr_k\":8,\"dmax_dinamico_activado\":1,\"dmax_base\":2,\"dmax_alpha\":1.5},{\"si\":{\"modo\":\"tutor\"},\"mmr_lambda\":0.9,\"mmr_k\":5,\"dmax_dinamico_activado\":1,\"dmax_base\":3}]"
+    configurar_reglas_contexto(reglas_json)
+    
+    neurixis_aplicar_mask_contexto("chat_sin_geo")
+    retornar verdadero
+fin_funcion
+
+enviar funcion inyectar_ancla_contextual(texto palabra) retorna bool
+    neurixis_pipeline_g_tau_ara()
+    # d_max=2, K=14
+    propagar_activacion(palabra, 2, 14)
+    retornar verdadero
+fin_funcion
+
+enviar funcion generar_pregunta_curiosidad(texto palabra) retorna texto
+    texto inicio_cur = "inicio_curiosidad"
+    si rastro_activacion_tamano() % 2 == 1 entonces inicio_cur = "inicio_curiosidad_b" fin_si
+    
+    retornar expandir_respuesta_secuencia_completa(inicio_cur, "", palabra, "", 15, 1)
+fin_funcion
+
+enviar funcion activar_propagacion_contextual(lista tokens, texto tipo_intencion) retorna bool
+    # Antes de cada oleada: pasos 1-2 de g(tau) (perfil + normalizar).
+    neurixis_pipeline_g_tau_ara()
+    
+    # Fase 9: d_max Dinámico Contextual
+    # Ajustamos la sensibilidad de expansión (alpha) según la intención.
+    # Preguntas complejas -> Mayor alpha (exploración profunda).
+    # Saludos/Cerrados -> Menor alpha (respuesta rápida/superficial).
+    texto dmax_alpha_val = "1.5"
+    si tipo_intencion == "intencion_pregunta_informacion" entonces dmax_alpha_val = "2.8" fin_si
+    si tipo_intencion == "intencion_saludo" o tipo_intencion == "intencion_identidad" entonces dmax_alpha_val = "0.4" fin_si
+    
+    texto reglas_json = "[{\"mmr_lambda\":0.6,\"mmr_k\":8,\"dmax_dinamico_activado\":1,\"dmax_base\":2,\"dmax_alpha\":" + dmax_alpha_val + "}]"
+    configurar_reglas_contexto(reglas_json)
+
+    entero d_max_ext = 3
+    entero usar_mai = 1
+    si tipo_intencion == "intencion_saludo" o tipo_intencion == "intencion_despedida" o tipo_intencion == "intencion_capacidades" o tipo_intencion == "intencion_identidad" o tipo_intencion == "intencion_alfabeto" entonces
+        d_max_ext = 1
+        usar_mai = 0
+    fin_si
+    entero n = lista_tamano(tokens)
+    entero lim = n
+    si lim > 8 entonces
+        lim = 8
+    fin_si
+    
+    # Criterio ARA v2: propagacion por niveles (d_max)
+    # d_max=0: foco inmediato; d_max=1: vecinos; d_max=3: contexto extendido
+    
+    lista sem = []
+    texto foco_txt = ""
+    entero i = 0
+    mientras i < lim hacer
+        texto t = lista_obtener(tokens, i)
+        si no es_token_funcional(t) entonces
+            entero idi = id_semilla_si_conocido(t)
+            si idi != 0 entonces
+                lista_agregar(sem, idi)
+                si foco_txt == "" entonces foco_txt = t fin_si
+            fin_si
+        fin_si
+        i = i + 1
+    fin_mientras
+    
+    # 1. Propagacion de semillas (multimodal); d_max_ext acotado arriba en modos cerrados
+    si lista_tamano(sem) >= 1 entonces
+        propagar_activacion_semillas(sem, d_max_ext, 12)
+    fin_si
+    
+    # 2. Propagacion de foco (alta intensidad)
+    # d_max=1: Limita a vecinos inmediatos para no "divagar" en el foco
+    si foco_txt != "" entonces
+        entero d_max_foco = 1
+        propagar_activacion_de(foco_txt, 3, d_max_foco, 8) # tipo 3 (SECUENCIA), d_max, K=8
+        si usar_mai != 0 entonces
+            propagar_activacion_mai(foco_txt)
+        fin_si
+    fin_si
+    
+    retornar verdadero
+fin_funcion

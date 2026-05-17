@@ -1,0 +1,31 @@
+principal
+    imprimir "Prueba de lectura de archivo..."
+    
+    texto ruta = "test_lectura.txt"
+    # Crear archivo de prueba
+    escribir_archivo(ruta, "1 | hola | mundo | 0.5000\n2 | perro | gato | 0.8000")
+    
+    si no existe_archivo(ruta) entonces
+        imprimir "Error: El archivo no se creo."
+        # finalizar(1)
+    fin_si
+    
+    abrir_archivo(ruta)
+    
+    mientras no fin_archivo() hacer
+        texto linea = leer_linea_archivo()
+        imprimir "Linea: " + linea
+        
+        si longitud_texto(linea) > 0 entonces
+            lista partes = dividir_texto(linea, "|")
+            imprimir "Partes: " + texto_desde_numero(lista_tamano(partes))
+            
+            para cada texto p indice i sobre partes hacer
+                imprimir "  P" + texto_desde_numero(i) + ": [" + p + "]"
+            fin_para_cada
+        fin_si
+    fin_mientras
+    
+    cerrar_archivo()
+    imprimir "Prueba finalizada."
+fin_principal

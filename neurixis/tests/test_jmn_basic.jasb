@@ -1,0 +1,31 @@
+# Test básico de primitivas JMN para Neurixis
+principal
+    imprimir "Prueba de JMN..."
+    
+    si existe_archivo("test_temp.jmn") entonces
+        imprimir "Limpiando archivo previo..."
+        # No hay borrar_archivo directo en stdlib basico, pero podemos sobreescribirlo
+    fin_si
+
+    crear_memoria("test_temp.jmn")
+    
+    imprimir "Asociando conceptos..."
+    asociar_relacion("hola", "saludo", 1, 0.9000)
+    asociar_relacion("hola", "mundo", 2, 0.8000)
+    
+    imprimir "Buscando peso..."
+    flotante p = buscar_peso("hola", "saludo")
+    imprimir "Peso hola->saludo: " + texto_desde_numero(p)
+    
+    imprimir "Buscando asociados..."
+    lista asocs = buscar_asociados_lista("hola", 5)
+    imprimir "Cantidad encontrados: " + texto_desde_numero(lista_tamano(asocs))
+    
+    para cada texto asoc indice i sobre asocs hacer
+        imprimir "Asociado " + texto_desde_numero(i) + ": " + asoc
+    fin_para_cada
+    
+    consolidar_memoria()
+    cerrar_memoria()
+    imprimir "Prueba finalizada."
+fin_principal

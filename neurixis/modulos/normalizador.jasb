@@ -1,0 +1,161 @@
+# Módulo Normalizador - Neurixis ARA
+# Objetivo: Limpiar y tokenizar la entrada
+
+# --- Utilidades ---
+
+# Pipeline L: NFKC+case+collapse (1027) + colapso WS Unicode (131072) + puntuacion -> espacio (262144).
+# Sin bit So (524288): menos trabajo por token; suficiente para chat. Ver TOKENIZAR_L_PIPELINE_NATIVE.md.
+# Valor: 1027 + 131072 + 262144 = 394243
+
+enviar funcion normalizar_entrada(texto txt) retorna lista
+    entero modo_L = 394243
+    lista tokens_sucios = tokenizar_L(txt, "", modo_L)
+    lista tokens_limpios = []
+    
+    para cada texto t indice i sobre tokens_sucios hacer
+        texto limpio = t
+        si longitud_texto(limpio) > 0 entonces
+            texto corregido = intentar_corregir_palabra(limpio)
+            texto raiz = extraer_raiz_concepto(corregido)
+            lista_agregar(tokens_limpios, raiz)
+        fin_si
+    fin_para_cada
+    
+    lista tokens = convertir_palabras_a_cifras(tokens_limpios)
+    retornar tokens
+fin_funcion
+
+enviar funcion normalizar_acentos(texto txt) retorna texto
+    texto res = txt
+    res = reemplazar_texto(res, "á", "a")
+    res = reemplazar_texto(res, "é", "e")
+    res = reemplazar_texto(res, "í", "i")
+    res = reemplazar_texto(res, "ó", "o")
+    res = reemplazar_texto(res, "ú", "u")
+    res = reemplazar_texto(res, "Á", "a")
+    res = reemplazar_texto(res, "É", "e")
+    res = reemplazar_texto(res, "Í", "i")
+    res = reemplazar_texto(res, "Ó", "o")
+    res = reemplazar_texto(res, "Ú", "u")
+    retornar res
+fin_funcion
+
+enviar funcion intentar_corregir_palabra(texto p) retorna texto
+    # Si la palabra ya existe como concepto, no corregir
+    # Buscamos cualquier asociación (Tipo 0) para ver si el nodo es conocido
+    lista asocs = buscar_asociados_lista(p, 1, 0)
+    si lista_tamano(asocs) > 0 entonces retornar p fin_si
+    
+    # Buscar si tiene un sinónimo o variante directa (Tipo 4)
+    lista sinonimos = buscar_asociados_lista(p, 5, 4)
+    si lista_tamano(sinonimos) > 0 entonces
+        retornar obtener_nombre_concepto(lista_obtener(sinonimos, 0))
+    fin_si
+
+    # Sin barrido global O(N) sobre el grafo (era el mayor coste por mensaje).
+    retornar p
+fin_funcion
+
+enviar funcion convertir_palabras_a_cifras(lista tokens_in) retorna lista
+    lista lista_res = []
+    
+    para cada texto t indice i sobre tokens_in hacer
+        # Buscar si el token tiene un valor numérico asociado en la JMN (Tipo 26)
+        lista asocs_val = buscar_asociados_lista(t, 1, 26)
+        si lista_tamano(asocs_val) > 0 entonces
+            lista_agregar(lista_res, obtener_representacion_textual(lista_obtener(asocs_val, 0)))
+        sino
+            lista_agregar(lista_res, t)
+        fin_si
+    fin_para_cada
+    
+    retornar lista_res
+fin_funcion
+
+enviar funcion limpiar_puntuacion(texto txt) retorna texto
+    texto res = txt
+    res = reemplazar_texto(res, ",", " ")
+    res = reemplazar_texto(res, ".", " ")
+    res = reemplazar_texto(res, "!", " ")
+    res = reemplazar_texto(res, "?", " ")
+    res = reemplazar_texto(res, "¿", " ")
+    res = reemplazar_texto(res, "¡", " ")
+    res = reemplazar_texto(res, "(", " ")
+    res = reemplazar_texto(res, ")", " ")
+    
+    # Separar emojis comunes
+    res = reemplazar_texto(res, "😊", " 😊 ")
+    res = reemplazar_texto(res, "🍕", " 🍕 ")
+    res = reemplazar_texto(res, "👋", " 👋 ")
+    
+    retornar res
+fin_funcion
+
+enviar funcion calcular_distancia_lexica(texto s1, texto s2) retorna entero
+    entero n1 = longitud_texto(s1)
+    entero n2 = longitud_texto(s2)
+    
+    si n1 == 0 entonces retornar n2 fin_si
+    si n2 == 0 entonces retornar n1 fin_si
+    
+    entero distancia = 0
+    entero i = 0
+    mientras i < n1 y i < n2 hacer
+        si str_extraer_caracter(s1, i) != str_extraer_caracter(s2, i) entonces
+            distancia = distancia + 1
+        fin_si
+        i = i + 1
+    fin_mientras
+    
+    si n1 > n2 entonces
+        distancia = distancia + (n1 - n2)
+    sino
+        distancia = distancia + (n2 - n1)
+    fin_si
+    
+    retornar distancia
+fin_funcion
+
+enviar funcion es_entidad_protegida(texto palabra) retorna bool
+    # 1. Si es muy corta, proteger por defecto
+    si longitud_texto(palabra) < 5 entonces retornar verdadero fin_si
+    
+    # 2. Consultar JMN: ¿Es una instancia conocida (Tipo 16) o tiene categoría especial?
+    # Buscamos si el nodo tiene alguna relación de Instancia (16) o Propiedad (23)
+    # que indique que es un nombre propio o concepto atómico.
+    lista asocs = buscar_asociados_lista(palabra, 1, 16)
+    si lista_tamano(asocs) > 0 entonces retornar verdadero fin_si
+    
+    # También protegemos si tiene el tag "protegido" o "nombre" en sus metadatos (asociación tipo 1)
+    lista tags = buscar_asociados_lista(palabra, 5, 1)
+    para cada texto t indice i sobre tags hacer
+        si t == "nombre" o t == "entidad" o t == "saludo" o t == "despedida" entonces
+            retornar verdadero
+        fin_si
+    fin_para_cada
+    
+    retornar falso
+fin_funcion
+
+enviar funcion extraer_raiz_concepto(texto palabra) retorna texto
+    entero n = longitud_texto(palabra)
+    
+    # Reemplazo de hardcodeo por verificación dinámica en la JMN
+    si es_entidad_protegida(palabra) entonces retornar palabra fin_si
+    
+    # Plural "-es": solo en palabras largas (p. ej. "clases"), no en verbos "puedes", "tienes"
+    si termina_con(palabra, "es") y n >= 8 entonces
+        retornar extraer_subtexto(palabra, 0, n - 2)
+    fin_si
+    # Plural "-s": solo palabras largas (evita cortar "hola", "adios", "gracias")
+    si termina_con(palabra, "s") y n >= 7 entonces
+        retornar extraer_subtexto(palabra, 0, n - 1)
+    fin_si
+    
+    # Suffixes comunes
+    si termina_con(palabra, "iendo") entonces retornar extraer_subtexto(palabra, 0, n - 5) fin_si
+    si termina_con(palabra, "ando") entonces retornar extraer_subtexto(palabra, 0, n - 4) fin_si
+    si termina_con(palabra, "mente") entonces retornar extraer_subtexto(palabra, 0, n - 5) fin_si
+    
+    retornar palabra
+fin_funcion

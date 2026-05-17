@@ -1,0 +1,78 @@
+# Módulo de Entrenamiento - Neurixis ARA
+# Objetivo: Poblar la JMN con la semilla de conocimiento
+
+# --- Utilidades ---
+
+enviar funcion recortar(texto s) retorna texto
+    entero n = longitud_texto(s)
+    si n == 0 entonces retornar "" fin_si
+    
+    entero inicio = 0
+    mientras inicio < n y str_extraer_caracter(s, inicio) == " " hacer
+        inicio = inicio + 1
+    fin_mientras
+    
+    si inicio == n entonces retornar "" fin_si
+    
+    entero fin = n - 1
+    mientras fin > inicio y str_extraer_caracter(s, fin) == " " hacer
+        fin = fin - 1
+    fin_mientras
+    
+    retornar extraer_subtexto(s, inicio, fin - inicio + 1)
+fin_funcion
+
+# --- Entrenamiento ---
+
+enviar funcion cargar_semilla_desde_archivo(texto ruta) retorna bool
+    imprimir "🌱 Sembrando conocimiento desde: " + ruta
+    
+    si no existe_archivo(ruta) entonces
+        imprimir "❌ Error: El archivo de semilla no existe."
+        retornar falso
+    fin_si
+    
+    abrir_archivo(ruta, "r")
+    
+    mientras no fin_archivo() hacer
+        texto linea = leer_linea_archivo()
+        
+        # Ignorar comentarios y lineas vacias
+        si longitud_texto(linea) > 0 y str_extraer_caracter(linea, 0) != "#" entonces
+            lista partes = dividir_texto(linea, "|")
+            si lista_tamano(partes) == 4 entonces
+                texto tipo_str = recortar(lista_obtener(partes, 0))
+                texto txt_a = recortar(lista_obtener(partes, 1))
+                texto txt_b = recortar(lista_obtener(partes, 2))
+                texto peso_str = recortar(lista_obtener(partes, 3))
+                
+                entero tipo = str_a_entero(tipo_str)
+                flotante val_peso = str_a_flotante(peso_str)
+                
+                asociar_relacion(txt_a, txt_b, tipo, val_peso)
+            fin_si
+        fin_si
+    fin_mientras
+    
+    cerrar_archivo()
+    imprimir "✅ Semilla cargada exitosamente."
+    retornar verdadero
+fin_funcion
+
+enviar funcion entrenar_nodos_control() retorna bool
+    imprimir "🏗️ Configurando infraestructura de control..."
+    recordar "inicio_saludo" con valor "Control"
+    recordar "fin_oracion" con valor "Control"
+    recordar "nodo_punto" con valor "Puntuación"
+    recordar "inicio_confusion" con valor "Control"
+    recordar "inicio_generica" con valor "Control"
+    recordar "inicio_curiosidad" con valor "Control"
+    recordar "inicio_capacidades_falla" con valor "Control"
+    recordar "inicio_capacidades" con valor "Control"
+    recordar "nx_cap_meta" con valor "Control"
+    recordar "tema_dialogo_generico" con valor "Tema"
+    recordar "tema_curiosidad" con valor "Tema"
+    recordar "inicio_gracias" con valor "Control"
+    imprimir "✅ Nodos maestros listos."
+    retornar verdadero
+fin_funcion

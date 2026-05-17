@@ -1,0 +1,160 @@
+# Módulo de Aprendizaje - Neurixis ARA
+# Objetivo: Mejorar con cada interacción usando modulación emocional
+
+usar { normalizar_entrada } de "normalizador.jasb"
+
+enviar funcion aprender_de_interaccion(texto txt, texto respuesta, mapa intencion, lista tokens_in_precalculo) retorna bool
+    texto t_int = intencion["tipo"]
+    
+    si t_int == "accion_aprender_definicion" entonces
+        aprender_definicion_usuario(txt)
+    sino si t_int == "accion_aprender_relacion_logica" entonces
+        aprender_relacion_logica_usuario(txt)
+    fin_si
+
+    flotante intensidad = detectar_intensidad(txt)
+    
+    lista tokens_in = tokens_in_precalculo
+    si lista_tamano(tokens_in) < 1 entonces
+        tokens_in = normalizar_entrada(txt)
+    fin_si
+    lista tokens_out = normalizar_entrada(respuesta)
+    
+    entero ni = lista_tamano(tokens_in)
+    entero nout = lista_tamano(tokens_out)
+    entero max_i = ni
+    entero max_o = nout
+    si max_i > 8 entonces max_i = 8 fin_si
+    si max_o > 10 entonces max_o = 10 fin_si
+    
+    entero ii = 0
+    mientras ii < max_i hacer
+        texto t = lista_obtener(tokens_in, ii)
+        entero jj = 0
+        mientras jj < max_o hacer
+            texto r = lista_obtener(tokens_out, jj)
+            flotante delta_base = 0.0040
+            flotante delta = delta_base * intensidad
+            flotante peso_actual = buscar_peso(t, r)
+            
+            si peso_actual < 0.9999 entonces
+                flotante delta_real = (1.0000 - peso_actual) * delta
+                asociar_relacion(t, r, 1, peso_actual + delta_real)
+            fin_si
+            
+            si intensidad > 1.9000 y peso_actual < 0.8000 entonces
+                asociar_relacion(t, r, 1, 0.8000)
+            fin_si
+            jj = jj + 1
+        fin_mientras
+        ii = ii + 1
+    fin_mientras
+    
+    entero hk = 0
+    mientras hk < max_i hacer
+        aplicar_homeostasis_nodo(lista_obtener(tokens_in, hk))
+        hk = hk + 1
+    fin_mientras
+    
+    retornar verdadero
+fin_funcion
+
+enviar funcion aprender_definicion_usuario(texto txt) retorna bool
+    lista partes = []
+    texto f = minusculas(txt)
+    si contiene_texto(f, " es ") entonces partes = dividir_texto(f, " es ")
+    sino si contiene_texto(f, " significa ") entonces partes = dividir_texto(f, " significa ")
+    sino si contiene_texto(f, " tiene ") entonces partes = dividir_texto(f, " tiene ") fin_si
+    
+    si lista_tamano(partes) >= 2 entonces
+        texto t_sujeto = lista_obtener(partes, 0)
+        texto t_resto = lista_obtener(partes, 1)
+        
+        # Si el resto contiene un número, guardarlo como cantidad
+        lista tokens_resto = normalizar_entrada(t_resto)
+        para cada texto tr indice ir sobre tokens_resto hacer
+            si es_numero_literal(tr) entonces
+                asociar_relacion(t_sujeto, tr, 26, 1.0000) # Cuantificación
+                imprimir "[MIL] Aprendida cantidad: " + t_sujeto + " = " + tr
+            fin_si
+        fin_para_cada
+        
+        asociar_relacion(t_sujeto, t_resto, 1, 0.8500)
+        imprimir "[SISTEMA INMUNE] Aprendido: " + t_sujeto + " -> " + t_resto
+    fin_si
+    retornar verdadero
+fin_funcion
+
+enviar funcion es_numero_literal(texto t) retorna bool
+    si longitud_texto(t) == 0 entonces retornar falso fin_si
+    caracter c = str_extraer_caracter(t, 0)
+    retornar (c == "1" o c == "2" o c == "3" o c == "4" o c == "5" o c == "6" o c == "7" o c == "8" o c == "9" o c == "0")
+fin_funcion
+
+enviar funcion aprender_relacion_logica_usuario(texto txt) retorna bool
+    lista tokens = normalizar_entrada(txt)
+    texto sujeto = lista_obtener(tokens, 0)
+    texto referencia = ""
+    flotante modificador = 0.0
+    
+    para cada texto t indice i sobre tokens hacer
+        si t == "mas" o t == "menos" entonces
+            # Buscar el número en los tokens anteriores
+            entero k = i - 1
+            mientras k >= 0 hacer
+                texto tk = lista_obtener(tokens, k)
+                si es_numero_literal(tk) entonces
+                    modificador = str_a_flotante(tk)
+                    si t == "menos" entonces modificador = 0.0 - modificador fin_si
+                    romper
+                fin_si
+                k = k - 1
+            fin_mientras
+            
+            # Buscar la referencia después de "que"
+            # Usar i + 2 < n (evita resta lista_tamano - 2 mal parseada o underflow en el VM)
+            si i + 2 < lista_tamano(tokens) entonces
+                referencia = lista_obtener(tokens, i + 2)
+            fin_si
+        fin_si
+    fin_para_cada
+    
+    si sujeto != "" y referencia != "" y modificador != 0.0 entonces
+        asociar_relacion(sujeto, referencia, 30, 1.0000)
+        texto clave_mod = sujeto + "_mod_" + referencia
+        recordar clave_mod con valor texto_desde_numero(modificador)
+        imprimir "[MIL] Relacion Logica Aprendida: " + sujeto + " = " + referencia + " + " + texto_desde_numero(modificador)
+    fin_si
+    
+    retornar verdadero
+fin_funcion
+
+enviar funcion detectar_intensidad(texto txt) retorna flotante
+    flotante intensidad = 1.0000
+    si contiene_texto(txt, "!") entonces intensidad = 2.0000 fin_si
+    si longitud_texto(txt) < 5 entonces intensidad = 1.5000 fin_si
+    retornar intensidad
+fin_funcion
+
+enviar funcion gestionar_ciclo_vida_memoria() retorna bool
+    decaer_conexiones(0.0005, 1, 0.3000)
+    retornar verdadero
+fin_funcion
+
+enviar funcion aplicar_homeostasis_nodo(texto origen_id) retorna bool
+    lista asociados = buscar_asociados_lista(origen_id, 18, 1)
+    entero n = lista_tamano(asociados)
+    si n == 0 entonces retornar verdadero fin_si
+    flotante suma = 0.0
+    para cada texto asoc_txt indice i sobre asociados hacer
+        suma = suma + buscar_peso(origen_id, asoc_txt)
+    fin_para_cada
+    si suma > 1.0000 entonces
+        para cada texto asoc2 indice i sobre asociados hacer
+            flotante p = buscar_peso(origen_id, asoc2)
+            flotante p_norm = p / suma
+            asociar_relacion(origen_id, asoc2, 1, p_norm)
+        fin_para_cada
+    fin_si
+    retornar verdadero
+fin_funcion
