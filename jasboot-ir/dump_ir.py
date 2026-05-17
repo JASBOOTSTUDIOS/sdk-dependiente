@@ -24,5 +24,11 @@ with open(sys.argv[1], 'rb') as f:
     for i in range(0, len(code), 5):
         inst = code[i:i+5]
         if len(inst) < 5: break
-        pc = offset + i
-        print(f"PC={pc:04d} | Op={inst[0]:02X} Flags={inst[1]:02X} A={inst[2]:02X} B={inst[3]:02X} C={inst[4]:02X}")
+        pc_file = offset + i
+        pc_vm = i
+        print(f"PC_FILE={pc_file:04d} PC_VM={pc_vm:04d} | Op={inst[0]:02X} Flags={inst[1]:02X} A={inst[2]:02X} B={inst[3]:02X} C={inst[4]:02X}")
+
+    print(f"Data starts at offset {offset + code_size}")
+    data = f.read(data_size)
+    import binascii
+    print(binascii.hexlify(data))

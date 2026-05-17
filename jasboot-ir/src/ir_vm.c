@@ -11,6 +11,13 @@ static VM* g_vm_for_atexit = NULL;
 // Manejador de señales para errores claros
 void manejador_segmentacion(int sig) {
     fprintf(stderr, "\n[ERROR CRITICO VM] Violacion de acceso (Segmentation Fault).\n");
+    if (g_vm_for_atexit) {
+        fprintf(stderr, "PC de la VM en el momento del fallo: %llu (0x%08llX)\n", 
+                (unsigned long long)g_vm_for_atexit->pc, (unsigned long long)g_vm_for_atexit->pc);
+        if (g_vm_for_atexit->ir) {
+             fprintf(stderr, "Ultima instruccion probable en PC %llu\n", (unsigned long long)g_vm_for_atexit->pc);
+        }
+    }
     fprintf(stderr, "Causa probable: Acceso a objeto nulo o memoria corrompida en el script Jasboot.\n");
     exit(sig);
 }

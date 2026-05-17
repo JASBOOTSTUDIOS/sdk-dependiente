@@ -13,6 +13,8 @@
 #include "memoria_neuronal.h"
 #include <stdint.h>
 #include <stddef.h>
+#include <stdio.h>
+#include <stdbool.h>
 
 typedef enum VMTextKind {
     VM_TEXT_RAW = 0,
@@ -219,6 +221,9 @@ typedef struct {
     uint32_t* audit_json_list;
     uint32_t audit_json_count;
     uint32_t audit_json_cap;
+    /** Contexto rico para evaluación de máscaras (Fase 5). */
+    uint32_t context_json_id;
+    uint32_t context_rules_json_id;
 } VM;
 
 // Crear y destruir VM

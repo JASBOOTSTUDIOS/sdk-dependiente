@@ -14,11 +14,21 @@
 static int jmn_journal_replay_depth;
 
 static void jmn_journal_make_path(const JMNMemoria* mem, char* out, size_t outsz) {
-    if (!mem || !mem->ruta_archivo[0]) {
+    if (!mem || !mem->ruta_archivo[0] || outsz < 8) {
         if (outsz) out[0] = '\0';
         return;
     }
-    snprintf(out, outsz, "%s.jwl", mem->ruta_archivo);
+    /* Asegurar que cabe el path + ".jwl" (4 chars) + null */
+    size_t len = strlen(mem->ruta_archivo);
+    if (len + 5 > outsz) {
+        /* Truncar el nombre base para que quepa el sufijo .jwl */
+        size_t max_base = outsz - 5;
+        memcpy(out, mem->ruta_archivo, max_base);
+        out[max_base] = '\0';
+        strcat(out, ".jwl");
+    } else {
+        snprintf(out, outsz, "%s.jwl", mem->ruta_archivo);
+    }
 }
 
 void jmn_journal_release(JMNMemoria* mem) {

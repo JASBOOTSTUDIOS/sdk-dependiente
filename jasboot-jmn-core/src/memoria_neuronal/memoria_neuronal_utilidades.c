@@ -293,3 +293,42 @@ int jmn_mapa_existe(JMNMemoria* mem, uint32_t map_id) {
     uint32_t slot = map_id % 10000u;
     return mem->mapas[slot].keys != NULL;
 }
+
+#include <math.h>
+
+float jmn_similitud_coseno(JMNMemoria* mem, uint32_t id1, uint32_t id2) {
+    if (!mem || id1 == 0 || id2 == 0) return 0.0f;
+    if (id1 == id2) return 1.0f;
+
+    uint32_t count1 = 0, count2 = 0;
+    JMNNodo* n1 = jmn_obtener_nodo(mem, id1);
+    JMNNodo* n2 = jmn_obtener_nodo(mem, id2);
+    if (!n1 || !n2) return 0.0f;
+
+    JMNConexion* c1 = jmn_obtener_conexiones(mem, n1, &count1);
+    JMNConexion* c2 = jmn_obtener_conexiones(mem, n2, &count2);
+    if (count1 == 0 || count2 == 0) return 0.0f;
+
+    double dot = 0.0, norm1 = 0.0, norm2 = 0.0;
+
+    // Calcular norma 1
+    for (uint32_t i = 0; i < count1; i++) {
+        norm1 += (double)c1[i].fuerza.f * (double)c1[i].fuerza.f;
+    }
+
+    // Calcular norma 2 y producto punto
+    for (uint32_t j = 0; j < count2; j++) {
+        norm2 += (double)c2[j].fuerza.f * (double)c2[j].fuerza.f;
+        
+        // Buscar si este destino de n2 también es destino de n1
+        for (uint32_t i = 0; i < count1; i++) {
+            if (c1[i].destino_id == c2[j].destino_id && c1[i].key_id == c2[j].key_id) {
+                dot += (double)c1[i].fuerza.f * (double)c2[j].fuerza.f;
+                break;
+            }
+        }
+    }
+
+    if (norm1 <= 0.0 || norm2 <= 0.0) return 0.0f;
+    return (float)(dot / (sqrt(norm1) * sqrt(norm2)));
+}

@@ -347,6 +347,14 @@ typedef struct {
 /* Asignación (x = expr) */
 typedef struct {
     ASTNode base;
+    ASTNode **keys;
+    ASTNode **values;
+    size_t n;
+    int is_object;
+} JSONLiteralNode;
+
+typedef struct {
+    ASTNode base;
     ASTNode *target;
     ASTNode *expression;
 } AssignmentNode;

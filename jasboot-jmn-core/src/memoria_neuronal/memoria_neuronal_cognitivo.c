@@ -122,9 +122,20 @@ void jmn_propagar_extra_init(JMNPropagarExtra* extra) {
     for (int i = 0; i <= JMN_RELACION_MAX; i++) {
         extra->g_tau[i] = 1.0f;
         extra->mask_tau[i] = 1.0f;
+        extra->alpha_tau[i] = 1.0f;
     }
     extra->queue_mode = 0;
     extra->score_mode = 0;
+    extra->inhibition_map_id = 0;
+    extra->tau10_reject_threshold = -1e9f; /* Desactivado por defecto */
+    extra->tau10_rewrite_threshold = -1e9f;
+    extra->mmr_lambda = 1.0f; /* 1.0 = deshabilitado (solo relevancia) */
+    extra->mmr_k = 0;
+    extra->dmax_dinamico_activado = 0;
+    extra->dmax_base = 2;
+    extra->dmax_alpha = 0.5f;
+    extra->dmax_beta = 1.0f;
+    extra->dmax_gamma = 0.3f;
     extra->h_mode = 0;
     extra->h_lambda = 0.7f;
     extra->h_kappa = 0.15f;
@@ -164,10 +175,12 @@ void jmn_propagar_extra_merge(JMNPropagarExtra* dest, const JMNPropagarExtra* sr
          * suele ser ralo. */
         if (src->g_tau[i] != 1.0f) dest->g_tau[i] = src->g_tau[i];
         if (src->mask_tau[i] != 1.0f) dest->mask_tau[i] = src->mask_tau[i];
+        if (src->alpha_tau[i] != 1.0f) dest->alpha_tau[i] = src->alpha_tau[i];
     }
     /* El modo de cola y puntuación se hereda si src lo especifica (no 0) */
     if (src->queue_mode != 0) dest->queue_mode = src->queue_mode;
     if (src->score_mode != 0) dest->score_mode = src->score_mode;
+    if (src->inhibition_map_id != 0) dest->inhibition_map_id = src->inhibition_map_id;
 }
 
 void jmn_propagar_extra_construir(const JMNPropagarExtra* g_default, const JMNPropagarExtra* p_override,
@@ -362,6 +375,10 @@ int jmn_propagar_activacion_semillas(JMNMemoria* mem, const uint32_t* semillas, 
     uint32_t vid[256];
     float vbest[256];
     uint16_t vdepth[256];
+    /* Fase 6: Matriz de evidencia multi-canal E[v,τ]. 31 canales (0=default). 
+     * Reservamos en el heap para evitar stack overflow en recursiones de JMN. */
+    float (*E)[JMN_RELACION_MAX + 1] = (float (*)[JMN_RELACION_MAX + 1])calloc(256, sizeof(float) * (JMN_RELACION_MAX + 1));
+    if (!E) return 0;
     int vn = 0;
 
     JmnBfsItem buf[JMN_BFS_Q_CAP];
@@ -377,6 +394,7 @@ int jmn_propagar_activacion_semillas(JMNMemoria* mem, const uint32_t* semillas, 
             vid[vn] = sid;
             vbest[vn] = activacion;
             vdepth[vn] = 0;
+            /* Las semillas no tienen canal τ de entrada, inicializamos E a 0 */
             vn++;
             if (qt < JMN_BFS_Q_CAP)
                 buf[qt++] = (JmnBfsItem){ sid, 0, activacion };
@@ -389,6 +407,7 @@ int jmn_propagar_activacion_semillas(JMNMemoria* mem, const uint32_t* semillas, 
             vid[vn] = sid;
             vbest[vn] = activacion;
             vdepth[vn] = 0;
+            /* Las semillas no tienen canal τ de entrada, inicializamos E a 0 */
             vn++;
             if (sp < JMN_BFS_Q_CAP)
                 buf[sp++] = (JmnBfsItem){ sid, 0, activacion };
@@ -426,10 +445,28 @@ int jmn_propagar_activacion_semillas(JMNMemoria* mem, const uint32_t* semillas, 
             float hd = (nd < 33) ? Htab[nd] : 0.f;
             uint32_t tau = res[i].tipo_relacion;
             float gtr = jmn_g_mul(ex, tau);
+            /* Fase 6: Separamos g y alpha. Alpha se aplica en la fusión final post-BFS. */
             float na = cur.act * fac * res[i].fuerza * hd * gtr;
 
+            /* Aplicar inhibición si hay un mapa de inhibición configurado (Fase 7/8) */
+            if (ex->inhibition_map_id != 0) {
+                JMNValor val_inh;
+                if (jmn_mapa_obtener_si_existe(mem, ex->inhibition_map_id, res[i].id, &val_inh)) {
+                    /* El valor en el mapa se asume como un contador de usos (entero)
+                     * o un factor de penalización (flotante < 1.0). 
+                     * Como JMNValor no tiene tipo, aplicamos heurística: si > 0 y < 1.0 es float factor. */
+                    float factor_inh = 1.0f;
+                    if (val_inh.f > 0.0f && val_inh.f < 1.0f) {
+                        factor_inh = val_inh.f;
+                    } else if (val_inh.u > 0) {
+                        factor_inh = 1.0f / (1.0f + (float)val_inh.u * 2.0f);
+                    }
+                    na *= factor_inh;
+                }
+            }
+
             if (ex->audit_mode >= 2) {
-                printf("[AUDIT] Arista: u=%u -> v=%u (tau=%u, w=%.2f) | g(tau)=%.2f, h(d)=%.2f, act_in=%.2f -> act_out=%.4f\n",
+                printf("[AUDIT] Arista: u=%u -> v=%u (tau=%u, w=%.2f) | g=%.2f, h=%.2f, act_in=%.2f -> act_out=%.4f\n",
                        cur.id, res[i].id, tau, res[i].fuerza, gtr, hd, cur.act, na);
             }
 
@@ -445,6 +482,8 @@ int jmn_propagar_activacion_semillas(JMNMemoria* mem, const uint32_t* semillas, 
                 vid[vn] = nid;
                 vbest[vn] = na;
                 vdepth[vn] = nd;
+                /* Acumular evidencia en el canal tau */
+                if (tau <= JMN_RELACION_MAX) E[vn][tau] = na;
                 vn++;
                 if (rastro_fn) rastro_fn(rastro_ud, nid, na, nd);
                 if (use_dfs) {
@@ -452,58 +491,179 @@ int jmn_propagar_activacion_semillas(JMNMemoria* mem, const uint32_t* semillas, 
                 } else {
                     if (qt < JMN_BFS_Q_CAP) buf[qt++] = (JmnBfsItem){ nid, nd, na };
                 }
-            } else if (sum_mode) {
-                vbest[ix] += na;
-                if (nd < vdepth[ix]) {
+            } else {
+                /* Actualizar evidencia por canal. */
+                if (tau <= JMN_RELACION_MAX) {
+                    if (sum_mode) E[ix][tau] += na;
+                    else if (na > E[ix][tau]) E[ix][tau] = na;
+                }
+
+                if (sum_mode) {
+                    vbest[ix] += na;
+                    if (nd < vdepth[ix]) {
+                        vdepth[ix] = nd;
+                        if (rastro_fn) rastro_fn(rastro_ud, nid, na, nd);
+                        if (use_dfs) {
+                            if (sp < JMN_BFS_Q_CAP) buf[sp++] = (JmnBfsItem){ nid, nd, na };
+                        } else {
+                            if (qt < JMN_BFS_Q_CAP) buf[qt++] = (JmnBfsItem){ nid, nd, na };
+                        }
+                    }
+                } else if (nd < vdepth[ix]) {
                     vdepth[ix] = nd;
+                    vbest[ix] = na;
                     if (rastro_fn) rastro_fn(rastro_ud, nid, na, nd);
                     if (use_dfs) {
                         if (sp < JMN_BFS_Q_CAP) buf[sp++] = (JmnBfsItem){ nid, nd, na };
                     } else {
                         if (qt < JMN_BFS_Q_CAP) buf[qt++] = (JmnBfsItem){ nid, nd, na };
                     }
-                }
-            } else if (nd < vdepth[ix]) {
-                vdepth[ix] = nd;
-                vbest[ix] = na;
-                if (rastro_fn) rastro_fn(rastro_ud, nid, na, nd);
-                if (use_dfs) {
-                    if (sp < JMN_BFS_Q_CAP) buf[sp++] = (JmnBfsItem){ nid, nd, na };
-                } else {
-                    if (qt < JMN_BFS_Q_CAP) buf[qt++] = (JmnBfsItem){ nid, nd, na };
-                }
-            } else if (nd == vdepth[ix] && na > vbest[ix]) {
-                vbest[ix] = na;
-                if (rastro_fn) rastro_fn(rastro_ud, nid, na, nd);
-                if (!sum_mode && same_depth_requeue_budget > 0) {
-                    same_depth_requeue_budget--;
-                    if (use_dfs) {
-                        if (sp < JMN_BFS_Q_CAP) buf[sp++] = (JmnBfsItem){ nid, nd, na };
-                    } else {
-                        if (qt < JMN_BFS_Q_CAP) buf[qt++] = (JmnBfsItem){ nid, nd, na };
+                } else if (nd == vdepth[ix] && na > vbest[ix]) {
+                    vbest[ix] = na;
+                    if (rastro_fn) rastro_fn(rastro_ud, nid, na, nd);
+                    if (!sum_mode && same_depth_requeue_budget > 0) {
+                        same_depth_requeue_budget--;
+                        if (use_dfs) {
+                            if (sp < JMN_BFS_Q_CAP) buf[sp++] = (JmnBfsItem){ nid, nd, na };
+                        } else {
+                            if (qt < JMN_BFS_Q_CAP) buf[qt++] = (JmnBfsItem){ nid, nd, na };
+                        }
                     }
                 }
             }
         }
     }
 
+    /* Fase 6: Fusión final φ(α · E). Implementamos Score(v) = φ(x) con x_τ = α_τ · E[v,τ]. */
+    for (int i = 0; i < vn; i++) {
+        float fused_score = 0.0f;
+        int has_evidence = 0;
+        if (sum_mode) {
+            /* φ lineal (ponderada): Score(v) = Σ α_τ · E[v,τ] */
+            for (int t = 1; t <= JMN_RELACION_MAX; t++) {
+                if (E[i][t] > 0.0f) {
+                    fused_score += ex->alpha_tau[t] * E[i][t];
+                    has_evidence = 1;
+                }
+            }
+        } else {
+            /* φ max (canal dominante): Score(v) = max_τ (α_τ · E[v,τ]) */
+            for (int t = 1; t <= JMN_RELACION_MAX; t++) {
+                if (E[i][t] > 0.0f) {
+                    float val = ex->alpha_tau[t] * E[i][t];
+                    if (val > fused_score) fused_score = val;
+                    has_evidence = 1;
+                }
+            }
+        }
+        /* Si hay evidencia por canales, actualizamos vbest con el score fusionado.
+         * Las semillas (depth 0) no tienen evidencia por canales y conservan su activación inicial. */
+        if (has_evidence) {
+            vbest[i] = fused_score;
+        }
+
+        /* Fase 7: Política τ=10 (Valorativa). Si la señal valorativa es insuficiente, bloqueamos. */
+        if (ex->tau10_reject_threshold > -1e6f) {
+            float signal_10 = E[i][10];
+            if (signal_10 < ex->tau10_reject_threshold) {
+                vbest[i] = -1.0f; /* Marcar como bloqueado */
+                if (ex->audit_mode >= 1) printf("[AUDIT] Nodo %u BLOQUEADO por política tau=10 (señal=%.4f < umbral=%.4f)\n", vid[i], signal_10, ex->tau10_reject_threshold);
+            }
+        }
+    }
+
+    free(E);
+
+    /* Filtrar y ordenar candidatos */
     uint32_t cand_id[256];
     float cand_sc[256];
     int nc = 0;
     for (int i = 0; i < vn; i++) {
         if (jmn_id_en_lista(vid[i], sem_u, n_sem_u)) continue;
+        if (vbest[i] < 0.0f) continue; /* Bloqueados por política */
         cand_id[nc] = vid[i];
         cand_sc[nc] = vbest[i];
         nc++;
     }
     jmn_sort_pairs_desc(cand_id, cand_sc, nc);
 
-    int nfill = nc < (int)max_out ? nc : (int)max_out;
+    int n_results = nc;
+    JMNActivacionResultado temp_in[256];
+    for (int i = 0; i < nc; i++) {
+        temp_in[i].id = cand_id[i];
+        temp_in[i].activacion = cand_sc[i];
+    }
+
+    if (ex->mmr_lambda < 1.0f && ex->mmr_k > 0 && nc > 1) {
+        JMNActivacionResultado temp_out[256];
+        int k = ex->mmr_k;
+        if (k > 256) k = 256;
+        n_results = jmn_diversificar_candidatos_mmr(mem, temp_in, nc, ex->mmr_lambda, k, temp_out);
+        memcpy(temp_in, temp_out, n_results * sizeof(JMNActivacionResultado));
+    }
+
+    int nfill = n_results < (int)max_out ? n_results : (int)max_out;
     for (int i = 0; i < nfill; i++) {
-        out[i].id = cand_id[i];
-        out[i].activacion = cand_sc[i];
+        out[i] = temp_in[i];
     }
     return nfill;
+}
+
+int jmn_diversificar_candidatos_mmr(JMNMemoria* mem, JMNActivacionResultado* in, int n_in,
+    float lambda, int K, JMNActivacionResultado* out) {
+    if (!mem || !in || n_in <= 0 || K <= 0 || !out) return 0;
+
+    int n_sel = 0;
+    int remaining = n_in;
+    int used[256];
+    memset(used, 0, sizeof(used));
+    if (n_in > 256) n_in = 256;
+
+    // Paso 0: Normalizar relevancia (asumiendo que in ya viene ordenado por score desc)
+    float max_rel = in[0].activacion;
+    if (max_rel <= 0.0f) max_rel = 1.0f;
+
+    // Paso 1: El primero es siempre el de mayor score
+    out[n_sel] = in[0];
+    used[0] = 1;
+    n_sel++;
+    remaining--;
+
+    // Paso 2: Selección iterativa MMR
+    while (n_sel < K && remaining > 0) {
+        float best_mmr = -1e9f;
+        int best_idx = -1;
+
+        for (int i = 0; i < n_in; i++) {
+            if (used[i]) continue;
+
+            float rel = in[i].activacion / max_rel;
+            float max_sim = 0.0f;
+
+            // Calcular similitud máxima con los ya seleccionados
+            for (int j = 0; j < n_sel; j++) {
+                float sim = jmn_similitud_coseno(mem, in[i].id, out[j].id);
+                if (sim > max_sim) max_sim = sim;
+            }
+
+            float mmr_score = lambda * rel - (1.0f - lambda) * max_sim;
+            if (mmr_score > best_mmr) {
+                best_mmr = mmr_score;
+                best_idx = i;
+            }
+        }
+
+        if (best_idx >= 0) {
+            out[n_sel] = in[best_idx];
+            used[best_idx] = 1;
+            n_sel++;
+            remaining--;
+        } else {
+            break;
+        }
+    }
+
+    return n_sel;
 }
 
 int jmn_propagar_activacion(JMNMemoria* mem, uint32_t origen, float activacion, float factor,
@@ -527,4 +687,105 @@ void jmn_resolver_conflictos(JMNMemoria* mem, uint32_t origen, uint32_t tipo_rel
         out->id_ganador = resultados[0].id;
         out->confianza = resultados[0].fuerza;
     }
+}
+
+int jmn_inferir_relaciones_mil(JMNMemoria* mem, uint32_t origen, uint16_t d_max, 
+    const float* factor_delta, JMNInferenciaResultado* out, int max_out) {
+    if (!mem || origen == 0 || !out || max_out <= 0) return 0;
+    
+    /* BFS para encontrar caminos lógicos */
+    typedef struct {
+        uint32_t id;
+        float confianza;
+        uint16_t depth;
+        uint32_t path[8];
+    } QNode;
+    
+    QNode queue[256];
+    int head = 0, tail = 0;
+    
+    queue[tail].id = origen;
+    queue[tail].confianza = 1.0f;
+    queue[tail].depth = 0;
+    queue[tail].path[0] = origen;
+    tail++;
+    
+    int n_out = 0;
+
+    while (head < tail && head < 256) {
+        QNode curr = queue[head++];
+        
+        if (curr.depth >= d_max || curr.depth >= 7) continue;
+        
+        /* Explorar conexiones salientes */
+        uint32_t bucket = curr.id % (mem->cap_nodos + 1);
+        if (bucket > mem->cap_nodos) bucket = mem->cap_nodos;
+        uint32_t c_idx = mem->cabeza_origen[bucket];
+        
+        while (c_idx != 0xFFFFFFFF && c_idx < mem->cap_conexiones) {
+            JMNEntradaConexion* c = &mem->conexiones[c_idx];
+            if (c->used && c->origen_id == curr.id) {
+                uint32_t tau = c->key_id;
+                /* Factor delta: por defecto 0.3 si no se especifica. */
+                float delta = (factor_delta && tau <= JMN_RELACION_MAX) ? factor_delta[tau] : 0.3f;
+                float new_conf = curr.confianza * c->fuerza.f * delta;
+                
+                if (new_conf > 0.05f) {
+                    uint32_t dest = c->destino_id;
+                    
+                    /* Evitar ciclos en el camino actual */
+                    int in_path = 0;
+                    for(int p=0; p<=curr.depth; p++) if(curr.path[p] == dest) in_path = 1;
+                    
+                    if (!in_path) {
+                        /* Filtrar Contradicción (Tipo 5) desde el ORIGEN al DESTINO actual */
+                        int contradiccion = 0;
+                        uint32_t b_neg = origen % (mem->cap_nodos + 1);
+                        if (b_neg > mem->cap_nodos) b_neg = mem->cap_nodos;
+                        uint32_t c_neg = mem->cabeza_origen[b_neg];
+                        while(c_neg != 0xFFFFFFFF && c_neg < mem->cap_conexiones) {
+                            JMNEntradaConexion* cn = &mem->conexiones[c_neg];
+                            if (cn->used && cn->origen_id == origen && cn->destino_id == dest && cn->key_id == JMN_RELACION_OPOSICION) {
+                                if (cn->fuerza.f > new_conf) contradiccion = 1;
+                                break;
+                            }
+                            c_neg = cn->next_origen;
+                        }
+                        
+                        if (!contradiccion) {
+                            /* Guardar resultado si es un salto (no el origen) */
+                            if (curr.depth >= 1 && n_out < max_out) {
+                                /* Comprobar si ya tenemos este destino con mejor confianza */
+                                int exists = -1;
+                                for(int k=0; k<n_out; k++) if(out[k].id_conclusion == dest) { exists = k; break; }
+                                
+                                if (exists == -1 || new_conf > out[exists].confianza) {
+                                    int target = (exists == -1) ? n_out : exists;
+                                    out[target].id_conclusion = dest;
+                                    out[target].confianza = new_conf;
+                                    out[target].path_len = curr.depth + 2;
+                                    memcpy(out[target].path, curr.path, (curr.depth + 1) * sizeof(uint32_t));
+                                    out[target].path[curr.depth + 1] = dest;
+                                    if (exists == -1) n_out++;
+                                }
+                            }
+                            
+                            /* Seguir explorando (si hay espacio en cola) */
+                            if (tail < 256) {
+                                queue[tail].id = dest;
+                                queue[tail].confianza = new_conf;
+                                queue[tail].depth = curr.depth + 1;
+                                memcpy(queue[tail].path, curr.path, (curr.depth + 1) * sizeof(uint32_t));
+                                queue[tail].path[curr.depth + 1] = dest;
+                                tail++;
+                            }
+                        }
+                    }
+                }
+            }
+            c_idx = c->next_origen;
+        }
+    }
+    
+    return n_out;
 }

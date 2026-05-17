@@ -50,6 +50,7 @@ const char *const SISTEMA_LLAMADAS[] = {
     "configurar_h_modo", "configurar_h_mode", "configurar_h_lambda", "configurar_h_kappa",
     "cargar_perfil_g_archivo", "cargar_perfil_g_file",
     "configurar_auditoria_ia", "obtener_auditoria_ia_json",
+    "establecer_contexto", "configurar_reglas_contexto",
     "n_buscar_objeto", "n_buscar_objetos", "n_buscar_objeto_texto",
     "n_buscar_sujeto", "n_buscar_sujetos", "n_buscar_predicados",
     "n_buscar_donde_aparece", "n_lista_triples", "n_tamano_grafo",
@@ -74,7 +75,8 @@ const char *const SISTEMA_LLAMADAS[] = {
     "tcp_conectar", "tcp_escuchar", "tcp_aceptar", "tcp_enviar", "tcp_recibir", "tcp_cerrar",
     "tls_cliente", "tls_servidor", "tls_enviar", "tls_recibir", "tls_cerrar",
     "pausa_milisegundos", "esperar_milisegundos",
-    "nativo_mlp_entrenar", "nativo_mlp_predict", "nativo_mlp_guardar"
+    "nativo_mlp_entrenar", "nativo_mlp_predict", "nativo_mlp_guardar",
+    "jmn_inferir_mil"
 };
 const size_t SISTEMA_LLAMADAS_COUNT = sizeof(SISTEMA_LLAMADAS) / sizeof(SISTEMA_LLAMADAS[0]);
 

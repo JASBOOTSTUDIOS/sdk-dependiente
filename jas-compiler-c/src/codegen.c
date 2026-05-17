@@ -1458,7 +1458,16 @@ static int cjb_push_json_str_content(CodeGen *cg, CodegenJBuf *b, const char *s,
 
 static int json_literal_append_value(CodeGen *cg, CodegenJBuf *b, ASTNode *node);
 
-static int json_literal_append_object(CodeGen *cg, CodegenJBuf *b, MapLiteralNode *mn) {
+static int json_literal_append_array(CodeGen *cg, CodegenJBuf *b, JSONLiteralNode *ln) {
+    if (!cjb_pushc(b, '[')) return 0;
+    for (size_t i = 0; i < ln->n; i++) {
+        if (i && !cjb_pushc(b, ',')) return 0;
+        if (!json_literal_append_value(cg, b, ln->values[i])) return 0;
+    }
+    return cjb_pushc(b, ']');
+}
+
+static int json_literal_append_object(CodeGen *cg, CodegenJBuf *b, JSONLiteralNode *mn) {
     if (!cjb_pushc(b, '{')) return 0;
     for (size_t i = 0; i < mn->n; i++) {
         if (i && !cjb_pushc(b, ',')) return 0;
@@ -1482,8 +1491,13 @@ static int json_literal_append_object(CodeGen *cg, CodegenJBuf *b, MapLiteralNod
 
 static int json_literal_append_value(CodeGen *cg, CodegenJBuf *b, ASTNode *node) {
     if (!node) return 0;
-    if (is_node(node, NODE_JSON_LITERAL))
-        return json_literal_append_object(cg, b, (MapLiteralNode *)node);
+    if (is_node(node, NODE_JSON_LITERAL)) {
+        JSONLiteralNode *jn = (JSONLiteralNode *)node;
+        if (jn->is_object)
+            return json_literal_append_object(cg, b, jn);
+        else
+            return json_literal_append_array(cg, b, jn);
+    }
     if (is_node(node, NODE_LIST_LITERAL)) {
         ListLiteralNode *ln = (ListLiteralNode *)node;
         if (!cjb_pushc(b, '[')) return 0;
@@ -1523,7 +1537,10 @@ static int json_literal_append_value(CodeGen *cg, CodegenJBuf *b, ASTNode *node)
             if (!cjb_push_json_str_content(cg, b, bb, node->line, node->col)) return 0;
             return cjb_pushc(b, '"');
         }
-        snprintf(cg->last_error, CODEGEN_ERROR_MAX, "Literal json: tipo de literal no soportado aqui.");
+        if (L->type_name && strcmp(L->type_name, "logico") == 0) {
+            return cjb_pushs(b, L->value.i ? "true" : "false");
+        }
+        snprintf(cg->last_error, CODEGEN_ERROR_MAX, "Literal json: tipo de literal no soportado aqui (%s).", L->type_name ? L->type_name : "?");
         cg->has_error = 1;
         cg->err_line = node->line > 0 ? node->line : 1;
         cg->err_col = node->col > 0 ? node->col : 1;
@@ -1537,13 +1554,19 @@ static int json_literal_append_value(CodeGen *cg, CodegenJBuf *b, ASTNode *node)
     return 0;
 }
 
-static int emit_json_literal_map(CodeGen *cg, MapLiteralNode *mn, int dest_reg) {
+static int emit_json_literal_map(CodeGen *cg, JSONLiteralNode *mn, int dest_reg) {
     CodegenJBuf jb = {0};
-    if (!json_literal_append_object(cg, &jb, mn)) {
+    int ok = 0;
+    if (mn->is_object)
+        ok = json_literal_append_object(cg, &jb, mn);
+    else
+        ok = json_literal_append_array(cg, &jb, mn);
+
+    if (!ok) {
         free(jb.data);
         return 0;
     }
-    const char *payload = jb.data ? jb.data : "{}";
+    const char *payload = jb.data ? jb.data : (mn->is_object ? "{}" : "[]");
     if (cg->has_error) {
         free(jb.data);
         return 0;
@@ -1775,6 +1798,8 @@ static const char *get_expression_type(CodeGen *cg, ASTNode *node) {
         IndexAccessNode *ian = (IndexAccessNode*)node;
         const char *t = get_expression_type(cg, ian->target);
         if (t) {
+            if (strcmp(t, "mapa") == 0 || strcmp(t, "mapa?") == 0 ||
+                strcmp(t, "json") == 0 || strcmp(t, "json?") == 0) return "elemento";
             const char *el = get_array_element_type(cg, t);
             if (el) return el;
             
@@ -3274,7 +3299,7 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         visit_expression(cg, ARG0, B0);
         visit_expression(cg, ARG1, B0 + 1);
         visit_expression(cg, ARG2, B0 + 2);
-        emit(cg, OP_ANALITICA_MLP_PREDICT, (uint8_t)dest_reg, (uint8_t)B0, 0,
+        emit(cg, OP_CONFIGURAR_REGLAS_CONTEXTO, (uint8_t)dest_reg, (uint8_t)B0, 0,
              IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
         return 1;
     }
@@ -4263,6 +4288,24 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         emit(cg, OP_MEM_OBTENER_AUDITORIA_JSON, (uint8_t)dest_reg, 0, 0, 0);
         return 1;
     }
+    if (strcmp(name, "establecer_contexto") == 0) {
+        if (!ARG0) {
+            sistema_error_sin_argumentos(cg, name, "contexto (json)", cn->base.line, cn->base.col);
+            return 1;
+        }
+        int r_ctx = visit_expression(cg, ARG0, dest_reg + 1);
+        emit(cg, OP_ESTABLECER_CONTEXTO, (uint8_t)r_ctx, 0, 0, IR_INST_FLAG_A_REGISTER);
+        return 1;
+    }
+    if (strcmp(name, "configurar_reglas_contexto") == 0) {
+        if (!ARG0) {
+            sistema_error_sin_argumentos(cg, name, "reglas (json)", cn->base.line, cn->base.col);
+            return 1;
+        }
+        int r_rules = visit_expression(cg, ARG0, dest_reg + 1);
+        emit(cg, OP_CONFIGURAR_REGLAS_CONTEXTO, (uint8_t)r_rules, 0, 0, IR_INST_FLAG_A_REGISTER);
+        return 1;
+    }
     if (strcmp(name, "elegir_por_peso") == 0 || strcmp(name, "elegir_por_peso_segun") == 0) {
         if (cn->n_args < 2) {
             codegen_error_sistema_incorporada_arity(cg, cn, 2,
@@ -4810,6 +4853,21 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         return 1;
     }
 
+    if (strcmp(name, "jmn_inferir_mil") == 0) {
+        if (cn->n_args < 1) {
+            codegen_error_sistema_incorporada_arity(cg, cn, 1,
+                "identificador de origen",
+                "jmn_inferir_mil(\"inicio\")", NULL);
+            return 1;
+        }
+        visit_expression(cg, ARG0, 10); /* origen */
+        if (cn->n_args >= 2 && ARG1) visit_expression(cg, ARG1, 11); /* d_max */
+        else emit(cg, OP_MOVER, 11, 3, 0, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE); /* d_max = 3 (defecto) */
+        
+        emit(cg, OP_MEM_INFERIR_MIL, (uint8_t)dest_reg, 10, 11, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
+        return 1;
+    }
+
     /* 6.4 I/O, 6.5 Tiempo, 7.2 Entrada no bloqueante */
     if (strcmp(name, "leer_entrada") == 0) {
         emit(cg, OP_IO_INPUT_REG, dest_reg, 0, 0, IR_INST_FLAG_A_REGISTER);
@@ -5174,14 +5232,14 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         if (!ARG0 || !ARG1) return 0;
         visit_expression(cg, ARG0, 1);
         visit_expression(cg, ARG1, 2);
-        emit(cg, OP_TCP_ENVIAR, dest_reg, 1, 2, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+        emit(cg, OP_TCP_IO, dest_reg, 1, 2, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
         return 1;
     }
     if (strcmp(name, "tcp_recibir") == 0) {
         if (!ARG0 || !ARG1) return 0;
         visit_expression(cg, ARG0, 1);
         visit_expression(cg, ARG1, 2);
-        emit(cg, OP_TCP_RECIBIR, dest_reg, 1, 2, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+        emit(cg, OP_TCP_IO, dest_reg, 1, 2, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_SAFE);
         return 1;
     }
     if (strcmp(name, "tcp_cerrar") == 0) {
@@ -5209,14 +5267,14 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         if (!ARG0 || !ARG1) return 0;
         visit_expression(cg, ARG0, 1);
         visit_expression(cg, ARG1, 2);
-        emit(cg, OP_TLS_ENVIAR, dest_reg, 1, 2, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+        emit(cg, OP_TLS_IO, dest_reg, 1, 2, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
         return 1;
     }
     if (strcmp(name, "tls_recibir") == 0) {
         if (!ARG0 || !ARG1) return 0;
         visit_expression(cg, ARG0, 1);
         visit_expression(cg, ARG1, 2);
-        emit(cg, OP_TLS_RECIBIR, dest_reg, 1, 2, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+        emit(cg, OP_TLS_IO, dest_reg, 1, 2, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_SAFE);
         return 1;
     }
     if (strcmp(name, "tls_cerrar") == 0) {
@@ -6883,7 +6941,7 @@ static int visit_expression(CodeGen *cg, ASTNode *node, int dest_reg) {
                 else if (rt_is_json) emit(cg, OP_JSON_A_TEXTO, rR_reg, rR_reg, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
                 else emit(cg, OP_STR_DESDE_NUMERO, rR_reg, rR_reg, rt_num_c, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE);
             }
-            emit(cg, OP_STR_CONCATENAR_REG, dest_reg, rL, rR_reg, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+            emit(cg, OP_STR_CONCATENAR_REG, dest_reg, rL, rR_reg, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
             return dest_reg;
         }
         if (is_flt) {
@@ -7288,7 +7346,7 @@ static int visit_expression(CodeGen *cg, ASTNode *node, int dest_reg) {
         return dest_reg;
     }
     if (is_node(node, NODE_JSON_LITERAL)) {
-        if (!emit_json_literal_map(cg, (MapLiteralNode*)node, dest_reg)) {
+        if (!emit_json_literal_map(cg, (JSONLiteralNode*)node, dest_reg)) {
             if (!cg->has_error) {
                 snprintf(cg->last_error, CODEGEN_ERROR_MAX, "No se pudo emitir literal json.");
                 cg->has_error = 1;
@@ -8352,39 +8410,44 @@ static void visit_statement(CodeGen *cg, ASTNode *node) {
         if (coll_type && strcmp(coll_type, "json") == 0) {
             SymResult src_tmp = sym_reserve_temp(&cg->sym, 8);
             SymResult idx_tmp = sym_reserve_temp(&cg->sym, 8);
+            SymResult limit_tmp = sym_reserve_temp(&cg->sym, 8);
+
             visit_expression(cg, fe->collection, 253);
             if (cg->has_error) return;
             emit_escribir_u24(cg, src_tmp.addr, 253, src_tmp.is_relative);
             
-            // Usar registros temporales fuera del rango común de visit_expression
-            const int r_idx = 30;
-            const int r_coll = 31;
-            const int r_limit = 32;
-            const int r_cond = 33;
-            const int r_val = 34;
+            // Inicializar índice (usando reg 253 como temp)
+            emit(cg, OP_MOVER, 253, 0, 0, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
+            emit_escribir_u24(cg, idx_tmp.addr, 253, idx_tmp.is_relative);
 
-            emit(cg, OP_MOVER, r_idx, 0, 0, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
-            emit_escribir_u24(cg, idx_tmp.addr, r_idx, idx_tmp.is_relative);
             mark_label(cg, start_id);
-            emit_leer_u24(cg, r_coll, src_tmp.addr, src_tmp.is_relative);
-            emit(cg, OP_JSON_LISTA_TAMANO, r_limit, r_coll, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
-            emit_leer_u24(cg, r_idx, idx_tmp.addr, idx_tmp.is_relative);
-            emit(cg, OP_CMP_LT, r_cond, r_idx, r_limit, 0);
-            emit(cg, OP_CMP_EQ, r_cond, r_cond, 0, IR_INST_FLAG_C_IMMEDIATE);
-            emit_jump_if_nonzero(cg, r_cond, end_id);
+            // Cargar límite
+            emit_leer_u24(cg, 253, src_tmp.addr, src_tmp.is_relative);
+            emit(cg, OP_JSON_LISTA_TAMANO, 254, 253, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+            emit_escribir_u24(cg, limit_tmp.addr, 254, limit_tmp.is_relative);
+
+            // Comparar índice < límite
+            emit_leer_u24(cg, 253, idx_tmp.addr, idx_tmp.is_relative);
+            emit(cg, OP_CMP_LT, 255, 253, 254, 0);
+            emit(cg, OP_CMP_EQ, 255, 255, 0, IR_INST_FLAG_C_IMMEDIATE);
+            emit_jump_if_nonzero(cg, 255, end_id);
 
             if (idx_var && idx_var[0]) {
-                emit_escribir_u24(cg, key_r.addr, r_idx, key_r.is_relative);
+                emit_escribir_u24(cg, key_r.addr, 253, key_r.is_relative);
             }
 
-            emit_leer_u24(cg, r_coll, src_tmp.addr, src_tmp.is_relative);
-            emit(cg, OP_JSON_LISTA_OBTENER, r_val, r_coll, r_idx, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
-            emit_escribir_u24(cg, iter_r.addr, r_val, iter_r.is_relative);
+            // Obtener valor
+            emit_leer_u24(cg, 253, src_tmp.addr, src_tmp.is_relative);
+            emit_leer_u24(cg, 254, idx_tmp.addr, idx_tmp.is_relative);
+            emit(cg, OP_JSON_LISTA_OBTENER, 255, 253, 254, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
+            emit_escribir_u24(cg, iter_r.addr, 255, iter_r.is_relative);
+
             visit_block(cg, fe->body);
             
-            emit_leer_u24(cg, r_idx, idx_tmp.addr, idx_tmp.is_relative);
-            emit(cg, OP_SUMAR, r_idx, r_idx, 1, IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE);
-            emit_escribir_u24(cg, idx_tmp.addr, r_idx, idx_tmp.is_relative);
+            // Incrementar índice
+            emit_leer_u24(cg, 253, idx_tmp.addr, idx_tmp.is_relative);
+            emit(cg, OP_SUMAR, 253, 253, 1, IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE);
+            emit_escribir_u24(cg, idx_tmp.addr, 253, idx_tmp.is_relative);
             
             emit(cg, OP_IR, 0, 0, 0, 0);
             add_patch(cg, start_id, PATCH_JUMP);
@@ -8398,43 +8461,53 @@ static void visit_statement(CodeGen *cg, ASTNode *node) {
             SymResult src_tmp = sym_reserve_temp(&cg->sym, 8);
             SymResult keys_tmp = sym_reserve_temp(&cg->sym, 8);
             SymResult idx_tmp = sym_reserve_temp(&cg->sym, 8);
+            SymResult limit_tmp = sym_reserve_temp(&cg->sym, 8);
+            SymResult key_val_tmp = sym_reserve_temp(&cg->sym, 8);
             
             visit_expression(cg, fe->collection, 253);
+            if (cg->has_error) return;
             emit_escribir_u24(cg, src_tmp.addr, 253, src_tmp.is_relative);
             
             // Obtener lista de llaves
-            emit(cg, OP_MEM_MAPA_LLAVES, 20, 253, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
-            emit_escribir_u24(cg, keys_tmp.addr, 20, keys_tmp.is_relative);
+            emit(cg, OP_MEM_MAPA_LLAVES, 254, 253, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+            emit_escribir_u24(cg, keys_tmp.addr, 254, keys_tmp.is_relative);
             
             // Inicializar índice
-            emit(cg, OP_MOVER, 15, 0, 0, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
-            emit_escribir_u24(cg, idx_tmp.addr, 15, idx_tmp.is_relative);
+            emit(cg, OP_MOVER, 255, 0, 0, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
+            emit_escribir_u24(cg, idx_tmp.addr, 255, idx_tmp.is_relative);
             
             mark_label(cg, start_id);
-            emit_leer_u24(cg, 20, keys_tmp.addr, keys_tmp.is_relative);
-            emit(cg, OP_MEM_LISTA_TAMANO, 16, 20, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+            // Cargar límite (tamaño de lista de llaves)
+            emit_leer_u24(cg, 253, keys_tmp.addr, keys_tmp.is_relative);
+            emit(cg, OP_MEM_LISTA_TAMANO, 254, 253, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+            emit_escribir_u24(cg, limit_tmp.addr, 254, limit_tmp.is_relative);
             
-            emit_leer_u24(cg, 17, idx_tmp.addr, idx_tmp.is_relative);
-            emit(cg, OP_CMP_LT, 18, 17, 16, 0);
-            emit(cg, OP_CMP_EQ, 18, 18, 0, IR_INST_FLAG_C_IMMEDIATE);
-            emit_jump_if_nonzero(cg, 18, end_id);
+            // Comparar índice < límite
+            emit_leer_u24(cg, 255, idx_tmp.addr, idx_tmp.is_relative);
+            emit(cg, OP_CMP_LT, 254, 255, 254, 0);
+            emit(cg, OP_CMP_EQ, 254, 254, 0, IR_INST_FLAG_C_IMMEDIATE);
+            emit_jump_if_nonzero(cg, 254, end_id);
             
-            // Obtener llave
-            emit(cg, OP_MEM_LISTA_OBTENER, 21, 20, 17, 0);
+            // Obtener llave de la lista
+            emit_leer_u24(cg, 253, keys_tmp.addr, keys_tmp.is_relative);
+            emit_leer_u24(cg, 254, idx_tmp.addr, idx_tmp.is_relative);
+            emit(cg, OP_MEM_LISTA_OBTENER, 255, 253, 254, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
+            
+            // La variable iteradora 'var' en 'para cada var en mapa' es la LLAVE
+            emit_escribir_u24(cg, iter_r.addr, 255, iter_r.is_relative);
+            
+            // Si se pidió un segundo nombre (para el índice), no aplica aquí fácilmente sin cambiar el Parser.
+            // Pero si idx_var existe, lo usamos como el índice entero de la iteración.
             if (idx_var && idx_var[0]) {
-                emit_escribir_u24(cg, key_r.addr, 21, key_r.is_relative);
+                emit_escribir_u24(cg, key_r.addr, 254, key_r.is_relative);
             }
             
-            // Obtener valor del mapa usando la llave
-            emit_leer_u24(cg, 22, src_tmp.addr, src_tmp.is_relative);
-            emit(cg, OP_MEM_MAPA_OBTENER, 19, 22, 21, 0);
-            
-            emit_escribir_u24(cg, iter_r.addr, 19, iter_r.is_relative);
             visit_block(cg, fe->body);
             
-            emit_leer_u24(cg, 17, idx_tmp.addr, idx_tmp.is_relative);
-            emit(cg, OP_SUMAR, 17, 17, 1, IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE);
-            emit_escribir_u24(cg, idx_tmp.addr, 17, idx_tmp.is_relative);
+            // Incrementar índice
+            emit_leer_u24(cg, 253, idx_tmp.addr, idx_tmp.is_relative);
+            emit(cg, OP_SUMAR, 253, 253, 1, IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE);
+            emit_escribir_u24(cg, idx_tmp.addr, 253, idx_tmp.is_relative);
             
             emit(cg, OP_IR, 0, 0, 0, 0);
             add_patch(cg, start_id, PATCH_JUMP);
@@ -8449,28 +8522,34 @@ static void visit_statement(CodeGen *cg, ASTNode *node) {
          SymResult idx_tmp = sym_reserve_temp(&cg->sym, 8);
          visit_expression(cg, fe->collection, 253);
          emit_escribir_u24(cg, src_tmp.addr, 253, src_tmp.is_relative);
-         emit(cg, OP_MOVER, 15, 0, 0, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
-         emit_escribir_u24(cg, idx_tmp.addr, 15, idx_tmp.is_relative);
+         
+         const int r_idx = 30;
+         const int r_coll = 31;
+         const int r_limit = 32;
+         const int r_cond = 33;
+         const int r_val = 34;
+
+         emit(cg, OP_MOVER, r_idx, 0, 0, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
+         emit_escribir_u24(cg, idx_tmp.addr, r_idx, idx_tmp.is_relative);
          mark_label(cg, start_id);
-         emit_leer_u24(cg, 15, src_tmp.addr, src_tmp.is_relative);
-         emit(cg, OP_MEM_LISTA_TAMANO, 16, 15, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
-         emit_leer_u24(cg, 17, idx_tmp.addr, idx_tmp.is_relative);
-         emit(cg, OP_CMP_LT, 18, 17, 16, 0);
-         emit(cg, OP_CMP_EQ, 18, 18, 0, IR_INST_FLAG_C_IMMEDIATE);
-         emit_jump_if_nonzero(cg, 18, end_id);
+         emit_leer_u24(cg, r_coll, src_tmp.addr, src_tmp.is_relative);
+         emit(cg, OP_MEM_LISTA_TAMANO, r_limit, r_coll, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
+         emit_leer_u24(cg, r_idx, idx_tmp.addr, idx_tmp.is_relative);
+         emit(cg, OP_CMP_LT, r_cond, r_idx, r_limit, 0);
+         emit(cg, OP_CMP_EQ, r_cond, r_cond, 0, IR_INST_FLAG_C_IMMEDIATE);
+         emit_jump_if_nonzero(cg, r_cond, end_id);
 
          if (idx_var && idx_var[0]) {
-             emit_escribir_u24(cg, key_r.addr, 17, key_r.is_relative);
+             emit_escribir_u24(cg, key_r.addr, r_idx, key_r.is_relative);
          }
 
-         emit(cg, OP_MEM_LISTA_OBTENER, 19, 15, 17, 0);
-         emit_escribir_u24(cg, iter_r.addr, 19, iter_r.is_relative);
+         emit(cg, OP_MEM_LISTA_OBTENER, r_val, r_coll, r_idx, 0);
+         emit_escribir_u24(cg, iter_r.addr, r_val, iter_r.is_relative);
          visit_block(cg, fe->body);
          
-         // Recargar índice antes de incrementar por si el cuerpo usó el registro 17
-         emit_leer_u24(cg, 17, idx_tmp.addr, idx_tmp.is_relative);
-         emit(cg, OP_SUMAR, 17, 17, 1, IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE);
-         emit_escribir_u24(cg, idx_tmp.addr, 17, idx_tmp.is_relative);
+         emit_leer_u24(cg, r_idx, idx_tmp.addr, idx_tmp.is_relative);
+         emit(cg, OP_SUMAR, r_idx, r_idx, 1, IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE);
+         emit_escribir_u24(cg, idx_tmp.addr, r_idx, idx_tmp.is_relative);
          
          emit(cg, OP_IR, 0, 0, 0, 0);
          add_patch(cg, start_id, PATCH_JUMP);

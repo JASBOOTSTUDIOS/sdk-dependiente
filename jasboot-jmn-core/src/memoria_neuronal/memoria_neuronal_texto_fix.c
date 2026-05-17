@@ -52,9 +52,15 @@ int jmn_obtener_texto(JMNMemoria* mem, uint32_t id, char* buffer, size_t max_len
     buffer[0] = '\0';
     uint32_t slot = find_texto_slot(mem, id);
     if (slot == 0xFFFFFFFF) return -1;
-    strncpy(buffer, mem->textos[slot].texto, max_len - 1);
-    buffer[max_len - 1] = '\0';
-    return (int)strlen(buffer);
+    
+    const char* src = mem->textos[slot].texto;
+    size_t i = 0;
+    while (i < max_len - 1 && src[i]) {
+        buffer[i] = src[i];
+        i++;
+    }
+    buffer[i] = '\0';
+    return (int)i;
 }
 
 int jmn_existe_texto(JMNMemoria* mem, uint32_t id) {

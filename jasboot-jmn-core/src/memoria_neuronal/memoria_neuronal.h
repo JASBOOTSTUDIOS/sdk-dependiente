@@ -46,12 +46,29 @@ typedef struct JMNActivacionResultado {
     float activacion;
 } JMNActivacionResultado;
 
+/** Diversifica una lista de candidatos usando el algoritmo Maximal Marginal Relevance (MMR).
+ *  @param lambda Factor de balance [0, 1]. 1.0 = pura relevancia, 0.0 = pura diversidad.
+ *  @param K Numero de candidatos finales a devolver.
+ *  @return El numero de candidatos finales en out. */
+int jmn_diversificar_candidatos_mmr(JMNMemoria* mem, JMNActivacionResultado* in, int n_in,
+    float lambda, int K, JMNActivacionResultado* out);
+
+/** Calcula la similitud del coseno de adyacencia entre dos nodos basándose en sus vecinos comunes. */
+float jmn_similitud_coseno(JMNMemoria* mem, uint32_t id1, uint32_t id2);
+
 typedef void (*JMNActivacionRastroFn)(void* ud, uint32_t id, float activacion, uint16_t depth);
 
 typedef struct JMNConflictoResultado {
     uint32_t id_ganador;
     float confianza;
 } JMNConflictoResultado;
+
+typedef struct JMNInferenciaResultado {
+    uint32_t id_conclusion;
+    float confianza;
+    uint32_t path[8]; /* Camino de la deducción (máx 8 saltos) */
+    int path_len;
+} JMNInferenciaResultado;
 
 #define JMN_RELACION_ASOCIACION 1
 #define JMN_RELACION_PATRON     2
@@ -92,6 +109,20 @@ typedef struct JMNPropagarExtra {
     int score_mode; /* 0 = mejor aportación por profundidad (legacy), 1 = suma de na en aristas exploradas */
     float g_tau[JMN_RELACION_MAX + 1]; /* multiplicador por tipo de relación τ (índice 0 = defecto si τ fuera de rango) */
     float mask_tau[JMN_RELACION_MAX + 1]; /* Máscara contextual mask(C, τ) en [0,1]. Por defecto 1.0 */
+    float alpha_tau[JMN_RELACION_MAX + 1]; /* Fase 6: Pesos de fusión α_τ. Por defecto 1.0 */
+    uint32_t inhibition_map_id; /* Fase 7/8: ID de un mapa JMN que contiene penalizaciones (nodo_id -> float) */
+    float tau10_reject_threshold;  /* Fase 7: Umbral rojo Π para τ=10. Bloquea si E[v,10] < este valor. Por defecto -1e9 (off). */
+    float tau10_rewrite_threshold; /* Fase 7: Umbral verde Π para τ=10. Marca para reescritura si E[v,10] < este valor. */
+    float mmr_lambda; /* Fase 8: Factor lambda para diversidad MMR [0,1]. 1.0 = deshabilitado. */
+    int mmr_k;        /* Fase 8: Numero maximo de candidatos diversificados a devolver. */
+    
+    /* Fase 9: d_max Dinámico */
+    int dmax_dinamico_activado; /* 1 si la VM debe calcular d_max dinámicamente */
+    int dmax_base;              /* Profundidad mínima (d_base) */
+    float dmax_alpha;           /* Peso para complejidad de entrada (X) */
+    float dmax_beta;            /* Peso para modo de contexto (g(C)) */
+    float dmax_gamma;           /* Peso para ahorro de energía (E) */
+
     int h_mode;    /* 0=lineal, 1=exponencial, 2=sigmoide, 3=paso_unico */
     float h_lambda; /* Factor de decaimiento (0.1 - 1.0) */
     float h_kappa;  /* Factor de saturación/forma */
@@ -243,6 +274,11 @@ int jmn_propagar_activacion_semillas(JMNMemoria* mem, const uint32_t* semillas, 
     const JMNPropagarExtra* extra);
 void jmn_resolver_conflictos(JMNMemoria* mem, uint32_t origen, uint32_t tipo_rel, float umbral,
     uint16_t prof, JMNBusquedaResultado* resultados, uint16_t n, float w1, float w2, JMNConflictoResultado* out);
+
+/** Fase 10: Inferencia Simbólica MIL.
+ *  Busca deducciones lógicas (transitividad) con filtrado de contradicción. */
+int jmn_inferir_relaciones_mil(JMNMemoria* mem, uint32_t origen, uint16_t d_max, 
+    const float* factor_delta, JMNInferenciaResultado* out, int max_out);
 
 /* Cognitivas (stubs en cognitive_stubs.c) */
 int jmn_procesar_texto(JMNMemoria* mem, uint32_t id_origen);

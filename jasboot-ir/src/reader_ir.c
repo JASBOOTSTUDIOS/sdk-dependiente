@@ -244,10 +244,10 @@ IRValidationInfo ir_validate_memory(IRFile* ir) {
             inst.opcode != OP_BYTES_DESDE_TEXTO && inst.opcode != OP_BYTES_A_TEXTO &&
             inst.opcode != OP_DNS_RESOLVER &&
             inst.opcode != OP_TCP_CONECTAR && inst.opcode != OP_TCP_ESCUCHAR &&
-            inst.opcode != OP_TCP_ACEPTAR && inst.opcode != OP_TCP_ENVIAR &&
-            inst.opcode != OP_TCP_RECIBIR && inst.opcode != OP_TCP_CERRAR &&
+            inst.opcode != OP_TCP_ACEPTAR && inst.opcode != OP_TCP_IO &&
+            inst.opcode != OP_TCP_CERRAR &&
             inst.opcode != OP_TLS_CLIENTE && inst.opcode != OP_TLS_SERVIDOR &&
-            inst.opcode != OP_TLS_ENVIAR && inst.opcode != OP_TLS_RECIBIR &&
+            inst.opcode != OP_TLS_IO &&
             inst.opcode != OP_TLS_CERRAR &&
             inst.opcode != OP_IO_PAUSA &&
             inst.opcode != OP_PAUSA_MILISEGUNDOS &&
@@ -345,9 +345,10 @@ IRValidationInfo ir_validate_memory(IRFile* ir) {
             inst.opcode != OP_MEM_CONFIGURAR_MASK_G &&
             inst.opcode != OP_MEM_CONFIGURAR_MASKS_G_LISTA &&
             inst.opcode != OP_MEM_DECAE_CONEXIONES &&
-            inst.opcode != OP_MEM_OBTENER_TODOS &&
             inst.opcode != OP_MEM_CONFIGURAR_AUDITORIA &&
             inst.opcode != OP_MEM_OBTENER_AUDITORIA_JSON &&
+            inst.opcode != OP_CONFIGURAR_REGLAS_CONTEXTO &&
+            inst.opcode != OP_RASTRO_ACTIVACION_PESO &&
             inst.opcode != OP_FS_LISTAR &&
             inst.opcode != OP_FS_BORRAR &&
             inst.opcode != OP_FS_COPIAR &&
@@ -382,6 +383,7 @@ IRValidationInfo ir_validate_memory(IRFile* ir) {
             inst.opcode != OP_MEM_BUSCAR_INTROSPECTIVA_DETALLADA &&
             inst.opcode != OP_MEM_DECAE_CONEXIONES &&
             inst.opcode != OP_MEM_PROPAGAR_ACTIVACION &&
+            inst.opcode != OP_MEM_INFERIR_MIL &&
             inst.opcode != OP_MEM_REGISTRAR_PATRON &&
             inst.opcode != OP_MEM_OBTENER_RELACION &&
             inst.opcode != OP_MEM_MAPA_LLAVES &&

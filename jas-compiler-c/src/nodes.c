@@ -222,8 +222,7 @@ void ast_free(ASTNode *node) {
             free(n->elements);
             break;
         }
-        case NODE_MAP_LITERAL:
-        case NODE_JSON_LITERAL: {
+        case NODE_MAP_LITERAL: {
             MapLiteralNode *n = (MapLiteralNode*)node;
             for (size_t i = 0; i < n->n; i++) {
                 ast_free(n->keys[i]);
@@ -231,6 +230,24 @@ void ast_free(ASTNode *node) {
             }
             free(n->keys);
             free(n->values);
+            break;
+        }
+        case NODE_JSON_LITERAL: {
+            JSONLiteralNode *n = (JSONLiteralNode*)node;
+            if (n->is_object) {
+                if (n->keys) {
+                    for (size_t i = 0; i < n->n; i++) {
+                        ast_free(n->keys[i]);
+                    }
+                    free(n->keys);
+                }
+            }
+            if (n->values) {
+                for (size_t i = 0; i < n->n; i++) {
+                    ast_free(n->values[i]);
+                }
+                free(n->values);
+            }
             break;
         }
         case NODE_INDEX_ACCESS:

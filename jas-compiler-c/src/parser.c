@@ -1882,6 +1882,67 @@ static ASTNode *parse_lambda(Parser *p) {
 }
 
 /* Tras consumir `json`, parsea { clave: valor ... } (claves identificador o texto). */
+static ASTNode *parse_json_object_literal(Parser *p);
+static ASTNode *parse_json_array_literal(Parser *p);
+
+static ASTNode *parse_json_value(Parser *p) {
+    const Token *t = peek(p, 0);
+    if (!t) return NULL;
+    if (t->type == TOK_OPERATOR && t->value.str) {
+        if (strcmp(t->value.str, "{") == 0) return parse_json_object_literal(p);
+        if (strcmp(t->value.str, "[") == 0) return parse_json_array_literal(p);
+    }
+    return parse_expression(p);
+}
+
+static ASTNode *parse_json_array_literal(Parser *p) {
+    const Token *bracket = peek(p, 0);
+    if (!bracket || bracket->type != TOK_OPERATOR || !bracket->value.str || strcmp(bracket->value.str, "[") != 0) {
+        set_error_here(p, bracket ? bracket : peek(p, 0), "Se esperaba `[` para iniciar literal json array.");
+        return NULL;
+    }
+    advance(p); // Consumir [
+    NodeVec items = {0};
+    while (peek(p, 0)) {
+        const Token *cl = peek(p, 0);
+        if (cl->type == TOK_OPERATOR && cl->value.str && strcmp(cl->value.str, "]") == 0) break;
+        ASTNode *vn = parse_json_value(p);
+        if (!vn) {
+            for (size_t i = 0; i < items.n; i++) ast_free(items.arr[i]);
+            free(items.arr);
+            return NULL;
+        }
+        node_vec_push(&items, vn);
+        if (match(p, TOK_OPERATOR, ",")) continue;
+        const Token *nx = peek(p, 0);
+        if (nx && nx->type == TOK_OPERATOR && nx->value.str && strcmp(nx->value.str, "]") == 0) break;
+        else if (nx) {
+            set_error_here(p, nx, "Se esperaba `,` o `]` en literal json array.");
+            for (size_t i = 0; i < items.n; i++) ast_free(items.arr[i]);
+            free(items.arr);
+            return NULL;
+        }
+    }
+    if (!expect(p, TOK_OPERATOR, "]", "Se esperaba `]` al final de literal json array.")) {
+        for (size_t i = 0; i < items.n; i++) ast_free(items.arr[i]);
+        free(items.arr);
+        return NULL;
+    }
+    JSONLiteralNode *n = calloc(1, sizeof(JSONLiteralNode));
+    if (!n) {
+        for (size_t i = 0; i < items.n; i++) ast_free(items.arr[i]);
+        free(items.arr);
+        return NULL;
+    }
+    n->base.type = NODE_JSON_LITERAL;
+    n->is_object = 0;
+    n->n = items.n;
+    n->values = items.arr;
+    n->base.line = bracket ? bracket->line : 0;
+    n->base.col = bracket ? bracket->column : 0;
+    return (ASTNode*)n;
+}
+
 static ASTNode *parse_json_object_literal(Parser *p) {
     const Token *brace = peek(p, 0);
     if (!brace || brace->type != TOK_OPERATOR || !brace->value.str || strcmp(brace->value.str, "{") != 0) {
@@ -1925,7 +1986,7 @@ static ASTNode *parse_json_object_literal(Parser *p) {
             ast_free(kn);
             goto json_lit_fail;
         }
-        ASTNode *vn = parse_expression(p);
+        ASTNode *vn = parse_json_value(p);
         if (!vn) {
             ast_free(kn);
             goto json_lit_fail;
@@ -1937,11 +1998,12 @@ static ASTNode *parse_json_object_literal(Parser *p) {
         (void)match(p, TOK_OPERATOR, ",");
     }
     if (!expect(p, TOK_OPERATOR, "}", "Se esperaba '}' para cerrar `json { ... }`.")) goto json_lit_fail;
-    MapLiteralNode *mn = calloc(1, sizeof(MapLiteralNode));
+    JSONLiteralNode *mn = calloc(1, sizeof(JSONLiteralNode));
     if (!mn) goto json_lit_fail;
     mn->base.type = NODE_JSON_LITERAL;
     mn->base.line = brace ? brace->line : 0;
     mn->base.col = brace ? brace->column : 0;
+    mn->is_object = 1;
     mn->keys = keys.arr;
     mn->values = vals.arr;
     mn->n = keys.n;
@@ -1982,9 +2044,14 @@ static ASTNode *parse_primary(Parser *p) {
     }
     if (t->type == TOK_KEYWORD && t->value.str && strcmp(t->value.str, "json") == 0) {
         const Token *nx = peek(p, 1);
-        if (nx && nx->type == TOK_OPERATOR && nx->value.str && strcmp(nx->value.str, "{") == 0) {
-            advance(p);
-            return parse_json_object_literal(p);
+        if (nx && nx->type == TOK_OPERATOR && nx->value.str) {
+            if (strcmp(nx->value.str, "{") == 0) {
+                advance(p);
+                return parse_json_object_literal(p);
+            } else if (strcmp(nx->value.str, "[") == 0) {
+                advance(p);
+                return parse_json_array_literal(p);
+            }
         }
     }
     if (t->type == TOK_CONCEPT) {

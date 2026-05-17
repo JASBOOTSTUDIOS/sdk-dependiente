@@ -548,8 +548,12 @@ static void vm_propagar_audit_maybe(VM* vm, int is_mai, uint32_t origen_id, uint
     /* Nivel 1: Resumen (JSON simple) */
     uint32_t obj_id = vm_json_create(vm, VM_JSON_OBJECT);
     vm_json_object_put_int(vm, obj_id, "origen", (int64_t)origen_id);
+    vm_json_object_put_int(vm, obj_id, "is_mai", (int64_t)is_mai);
+    vm_json_object_put_int(vm, obj_id, "tipo_mask", (int64_t)tipo_or_mask);
+    vm_json_object_put_int(vm, obj_id, "K", (int64_t)K);
     vm_json_object_put_int(vm, obj_id, "d_max", (int64_t)d_max);
     vm_json_object_put_int(vm, obj_id, "n_resultados", (int64_t)n_out);
+    vm_json_object_put_int(vm, obj_id, "c_pack", (int64_t)c_pack);
     
     if (n_out > 0 && res) {
         vm_json_object_put_int(vm, obj_id, "mejor_id", (int64_t)res[0].id);
@@ -1247,6 +1251,10 @@ static int vm_text_cache_put(VM* vm, uint32_t id, const char* text) {
     if (vm->text_cache_count > 100000) {
         vm_text_cache_free(vm);
         vm->text_cache_buckets = (VMTextCacheEntry**)calloc(vm->text_cache_size, sizeof(VMTextCacheEntry*));
+        if (!vm->text_cache_buckets) {
+            fprintf(stderr, "[ERROR VM] No se pudo reasignar tabla hash de texto durante eviccion.\n");
+            return -1;
+        }
         vm->text_cache_count = 0;
         // Re-poblar con cadena vacía esencial
         char* empty = strdup("");
@@ -1530,6 +1538,9 @@ VM* vm_create(void) {
     vm_init_test_str_table();
     VM* vm = (VM*)calloc(1, sizeof(VM));
     if (!vm) return NULL;
+
+    /* Inicializar extras de propagación (alpha_tau, mask_tau, etc) */
+    jmn_propagar_extra_init(&vm->g_extra);
     
     // Inicializar registros (r0 siempre es cero)
     memset(vm->registers, 0, sizeof(vm->registers));
@@ -1543,8 +1554,13 @@ VM* vm_create(void) {
     }
     
     // Inicializar Tabla Hash de Strings
-    vm->text_cache_size = 1048576; // Optimizado para alto volumen
+    vm->text_cache_size = 65536; // Reducido de 1M para mayor compatibilidad de memoria
     vm->text_cache_buckets = (VMTextCacheEntry**)calloc(vm->text_cache_size, sizeof(VMTextCacheEntry*));
+    if (!vm->text_cache_buckets) {
+        free(vm->memory);
+        free(vm);
+        return NULL;
+    }
     vm->text_cache_count = 0;
     vm->next_runtime_text_id = 0x80000000u;
     vm->list_size_cache_size = 2048;
@@ -2790,17 +2806,359 @@ static int vm_json_reserve(VM* vm, uint32_t needed) {
     return 1;
 }
 
+#include <math.h>
+
+static uint32_t vm_json_object_get_item_by_key_id(VM* vm, uint32_t obj_h, uint32_t key_id);
+
+static float vm_calcular_complejidad_entrada(VM* vm) {
+    if (!vm || vm->percepcion_count == 0) return 0.0f;
+    
+    int useful_tokens = 0;
+    size_t total_len = 0;
+    
+    for (uint32_t i = 0; i < vm->percepcion_count; i++) {
+        uint32_t id = vm_percepcion_id_at(vm, i);
+        if (id == 0) continue;
+        
+        // Un token es útil si existe en la JMN (no es rastro efímero de puntuación pura)
+        if (vm->mem_neuronal && jmn_obtener_nodo(vm->mem_neuronal, id)) {
+            useful_tokens++;
+        }
+        
+        const char* txt = vm_text_cache_get(vm, id);
+        if (txt) total_len += strlen(txt);
+    }
+    
+    if (total_len == 0) return 0.0f;
+    
+    // X = (Tokens Útiles / Longitud Total) + log(Tokens Útiles + 1)
+    float density = (float)useful_tokens / (float)total_len;
+    float complexity = density + logf((float)useful_tokens + 1.0f);
+    
+    return complexity;
+}
+
+static uint16_t vm_calcular_d_max_dinamico(VM* vm, uint16_t prof_solicitada) {
+    if (!vm->g_extra.dmax_dinamico_activado) return prof_solicitada;
+    
+    float X = vm_calcular_complejidad_entrada(vm);
+    
+    // g(C): Modo de contexto
+    float gC = 0.0f;
+    uint32_t id_modo = vm_json_store_text(vm, "modo");
+    uint32_t val_modo_h = vm_json_object_get_item_by_key_id(vm, vm->context_json_id, id_modo);
+    VMJsonValue* v_modo = vm_json_get(vm, val_modo_h);
+    if (v_modo && v_modo->kind == VM_JSON_STRING) {
+        const char* modo = vm_text_cache_get(vm, v_modo->text_id);
+        if (modo) {
+            if (strstr(modo, "tutor") || strstr(modo, "educativo")) gC = 1.0f;
+            else if (strstr(modo, "creativo") || strstr(modo, "ideas")) gC = 2.0f;
+        }
+    }
+    
+    // E (Energía): Por ahora asumimos 1.0 (máxima disponibilidad)
+    float E = 1.0f;
+    
+    // d_max = floor(d_base + alpha*X + beta*gC - gamma*(1 - E))
+    float dm = (float)vm->g_extra.dmax_base + 
+               vm->g_extra.dmax_alpha * X + 
+               vm->g_extra.dmax_beta * gC - 
+               vm->g_extra.dmax_gamma * (1.0f - E);
+    
+    int d_final = (int)floorf(dm);
+    
+    // Restricciones estrictas [1, 32]
+    if (d_final < 1) d_final = 1;
+    if (d_final > 32) d_final = 32;
+    
+    if (vm->g_extra.audit_mode >= 1) {
+        printf("[AUDIT] d_max Dinámico: X=%.2f, gC=%.1f, E=%.1f -> d_final=%d (solicitado=%d)\n", 
+               X, gC, E, d_final, prof_solicitada);
+    }
+    
+    return (uint16_t)d_final;
+}
+
+static uint32_t vm_json_object_get_item_by_key_id(VM* vm, uint32_t obj_h, uint32_t key_id) {
+    VMJsonValue* obj = vm_json_get(vm, obj_h);
+    if (!obj || obj->kind != VM_JSON_OBJECT) return 0;
+    for (uint32_t i = 0; i < obj->count; i++) {
+        if (obj->keys[i] == key_id) return obj->items[i];
+    }
+    return 0;
+}
+
+static int vm_json_compare_values(VM* vm, uint32_t left_h, uint32_t right_h) {
+    if (left_h == right_h) return 0;
+    VMJsonValue* l = vm_json_get(vm, left_h);
+    VMJsonValue* r = vm_json_get(vm, right_h);
+    if (!l && !r) return 0;
+    if (!l || !r) return -2; /* Uno existe y el otro no */
+    if (l->kind != r->kind) {
+        /* Intento de comparación numérica mixta */
+        if ((l->kind == VM_JSON_INT || l->kind == VM_JSON_FLOAT) &&
+            (r->kind == VM_JSON_INT || r->kind == VM_JSON_FLOAT)) {
+            double lv = (l->kind == VM_JSON_INT) ? (double)l->int_value : l->float_value;
+            double rv = (r->kind == VM_JSON_INT) ? (double)r->int_value : r->float_value;
+            return (lv == rv) ? 0 : (lv < rv ? -1 : 1);
+        }
+        return -2; /* No comparables */
+    }
+    switch (l->kind) {
+        case VM_JSON_INT: return (l->int_value == r->int_value) ? 0 : (l->int_value < r->int_value ? -1 : 1);
+        case VM_JSON_FLOAT: return (l->float_value == r->float_value) ? 0 : (l->float_value < r->float_value ? -1 : 1);
+        case VM_JSON_BOOL: return (l->bool_value == r->bool_value) ? 0 : (l->bool_value < r->bool_value ? -1 : 1);
+        case VM_JSON_STRING: return vm_text_ids_equal(vm, l->text_id, r->text_id) ? 0 : -1;
+        case VM_JSON_NULL: return 0;
+        default: return -2;
+    }
+}
+
+static void vm_evaluar_reglas_contexto(VM* vm) {
+    if (!vm) return;
+    if (!vm->context_rules_json_id) return;
+    
+    VMJsonValue* rules_ptr = vm_json_get(vm, vm->context_rules_json_id);
+    if (!rules_ptr) return;
+    if (rules_ptr->kind != VM_JSON_ARRAY) return;
+
+    uint32_t num_rules = rules_ptr->count;
+
+    /* Resetear máscaras y alphas a 1.0 por defecto */
+    for (int i = 0; i <= JMN_RELACION_MAX; i++) {
+        vm->g_extra.mask_tau[i] = 1.0f;
+        vm->g_extra.alpha_tau[i] = 1.0f;
+    }
+    vm->g_extra.inhibition_map_id = 0;
+    vm->g_extra.tau10_reject_threshold = -1e9f;
+    vm->g_extra.tau10_rewrite_threshold = -1e9f;
+    vm->g_extra.dmax_dinamico_activado = 0;
+    vm->g_extra.dmax_base = 2;
+    vm->g_extra.dmax_alpha = 0.5f;
+    vm->g_extra.dmax_beta = 1.0f;
+    vm->g_extra.dmax_gamma = 0.3f;
+
+    uint32_t id_si = vm_json_store_text(vm, "si");
+    uint32_t id_tau = vm_json_store_text(vm, "tau");
+    uint32_t id_valor = vm_json_store_text(vm, "valor");
+    uint32_t id_alpha = vm_json_store_text(vm, "alpha");
+    uint32_t id_inhibicion = vm_json_store_text(vm, "inhibicion");
+    uint32_t id_reject = vm_json_store_text(vm, "rechazo");
+    uint32_t id_rewrite = vm_json_store_text(vm, "reescritura");
+    uint32_t id_mmr_lambda = vm_json_store_text(vm, "mmr_lambda");
+    uint32_t id_mmr_k = vm_json_store_text(vm, "mmr_k");
+    uint32_t id_dmax_activado = vm_json_store_text(vm, "dmax_dinamico");
+    uint32_t id_dmax_base = vm_json_store_text(vm, "dmax_base");
+    uint32_t id_dmax_alpha = vm_json_store_text(vm, "dmax_alpha");
+    uint32_t id_dmax_beta = vm_json_store_text(vm, "dmax_beta");
+    uint32_t id_dmax_gamma = vm_json_store_text(vm, "dmax_gamma");
+
+    uint32_t audit_obj = 0;
+    uint32_t matches_list = 0;
+
+    if (vm->g_extra.audit_mode >= 1) {
+        audit_obj = vm_json_create(vm, VM_JSON_OBJECT);
+        vm_json_object_put_int(vm, audit_obj, "tipo", 5);
+        vm_json_object_put_int(vm, audit_obj, "ctx_id", (int64_t)vm->context_json_id);
+        vm_json_object_put_int(vm, audit_obj, "rules_id", (int64_t)vm->context_rules_json_id);
+        matches_list = vm_json_create(vm, VM_JSON_ARRAY);
+    }
+
+    for (uint32_t i = 0; i < num_rules; i++) {
+        /* Re-obtener handle de la regla en cada iteración (seguro contra realloc) */
+        rules_ptr = vm_json_get(vm, vm->context_rules_json_id);
+        if (!rules_ptr) break;
+        uint32_t rule_h = rules_ptr->items[i];
+        
+        uint32_t cond_h = vm_json_object_get_item_by_key_id(vm, rule_h, id_si);
+        VMJsonValue* cond = vm_json_get(vm, cond_h);
+        if (!cond) continue;
+        if (cond->kind != VM_JSON_OBJECT) continue;
+
+        int match = 1;
+        if (vm->context_json_id == 0) match = 0;
+        else {
+            uint32_t cond_count = cond->count;
+            for (uint32_t j = 0; j < cond_count; j++) {
+                /* Re-obtener cond pointer por si acaso */
+                cond = vm_json_get(vm, cond_h);
+                uint32_t key_id = cond->keys[j];
+                uint32_t expected_val_h = cond->items[j];
+                uint32_t actual_val_h = vm_json_object_get_item_by_key_id(vm, vm->context_json_id, key_id);
+                
+                if (vm_json_compare_values(vm, expected_val_h, actual_val_h) != 0) {
+                    match = 0;
+                    break;
+                }
+            }
+        }
+
+        if (match) {
+            uint32_t tau_h = vm_json_object_get_item_by_key_id(vm, rule_h, id_tau);
+            uint32_t val_h = vm_json_object_get_item_by_key_id(vm, rule_h, id_valor);
+            uint32_t alpha_h = vm_json_object_get_item_by_key_id(vm, rule_h, id_alpha);
+            uint32_t inh_h = vm_json_object_get_item_by_key_id(vm, rule_h, id_inhibicion);
+            uint32_t rej_h = vm_json_object_get_item_by_key_id(vm, rule_h, id_reject);
+            uint32_t rew_h = vm_json_object_get_item_by_key_id(vm, rule_h, id_rewrite);
+            uint32_t mmrl_h = vm_json_object_get_item_by_key_id(vm, rule_h, id_mmr_lambda);
+            uint32_t mmrk_h = vm_json_object_get_item_by_key_id(vm, rule_h, id_mmr_k);
+            uint32_t dmax_act_h = vm_json_object_get_item_by_key_id(vm, rule_h, id_dmax_activado);
+            uint32_t dmax_base_h = vm_json_object_get_item_by_key_id(vm, rule_h, id_dmax_base);
+            uint32_t dmax_alpha_h = vm_json_object_get_item_by_key_id(vm, rule_h, id_dmax_alpha);
+            uint32_t dmax_beta_h = vm_json_object_get_item_by_key_id(vm, rule_h, id_dmax_beta);
+            uint32_t dmax_gamma_h = vm_json_object_get_item_by_key_id(vm, rule_h, id_dmax_gamma);
+            
+            float mask_val = 1.0f;
+            int has_mask = 0;
+            VMJsonValue* val_v = vm_json_get(vm, val_h);
+            if (val_v) {
+                has_mask = 1;
+                if (val_v->kind == VM_JSON_FLOAT) mask_val = (float)val_v->float_value;
+                else if (val_v->kind == VM_JSON_INT) mask_val = (float)val_v->int_value;
+                else if (val_v->kind == VM_JSON_BOOL) mask_val = val_v->int_value ? 1.0f : 0.0f;
+            }
+
+            float alpha_val = 1.0f;
+            int has_alpha = 0;
+            VMJsonValue* alpha_v = vm_json_get(vm, alpha_h);
+            if (alpha_v) {
+                has_alpha = 1;
+                if (alpha_v->kind == VM_JSON_FLOAT) alpha_val = (float)alpha_v->float_value;
+                else if (alpha_v->kind == VM_JSON_INT) alpha_val = (float)alpha_v->int_value;
+            }
+
+            VMJsonValue* rej_v = vm_json_get(vm, rej_h);
+            if (rej_v) {
+                if (rej_v->kind == VM_JSON_FLOAT) vm->g_extra.tau10_reject_threshold = (float)rej_v->float_value;
+                else if (rej_v->kind == VM_JSON_INT) vm->g_extra.tau10_reject_threshold = (float)rej_v->int_value;
+            }
+            VMJsonValue* rew_v = vm_json_get(vm, rew_h);
+            if (rew_v) {
+                if (rew_v->kind == VM_JSON_FLOAT) vm->g_extra.tau10_rewrite_threshold = (float)rew_v->float_value;
+                else if (rew_v->kind == VM_JSON_INT) vm->g_extra.tau10_rewrite_threshold = (float)rew_v->int_value;
+            }
+
+            VMJsonValue* mmrl_v = vm_json_get(vm, mmrl_h);
+            if (mmrl_v) {
+                if (mmrl_v->kind == VM_JSON_FLOAT) vm->g_extra.mmr_lambda = (float)mmrl_v->float_value;
+                else if (mmrl_v->kind == VM_JSON_INT) vm->g_extra.mmr_lambda = (float)mmrl_v->int_value;
+            }
+            VMJsonValue* mmrk_v = vm_json_get(vm, mmrk_h);
+            if (mmrk_v) {
+                if (mmrk_v->kind == VM_JSON_INT) vm->g_extra.mmr_k = (int)mmrk_v->int_value;
+            }
+
+            VMJsonValue* dmax_act_v = vm_json_get(vm, dmax_act_h);
+            if (dmax_act_v) {
+                if (dmax_act_v->kind == VM_JSON_BOOL) vm->g_extra.dmax_dinamico_activado = (int)dmax_act_v->bool_value;
+                else if (dmax_act_v->kind == VM_JSON_INT) vm->g_extra.dmax_dinamico_activado = (int)dmax_act_v->int_value;
+            }
+            VMJsonValue* dmax_base_v = vm_json_get(vm, dmax_base_h);
+            if (dmax_base_v) {
+                if (dmax_base_v->kind == VM_JSON_INT) vm->g_extra.dmax_base = (int)dmax_base_v->int_value;
+            }
+            VMJsonValue* dmax_alpha_v = vm_json_get(vm, dmax_alpha_h);
+            if (dmax_alpha_v) {
+                if (dmax_alpha_v->kind == VM_JSON_FLOAT) vm->g_extra.dmax_alpha = (float)dmax_alpha_v->float_value;
+                else if (dmax_alpha_v->kind == VM_JSON_INT) vm->g_extra.dmax_alpha = (float)dmax_alpha_v->int_value;
+            }
+            VMJsonValue* dmax_beta_v = vm_json_get(vm, dmax_beta_h);
+            if (dmax_beta_v) {
+                if (dmax_beta_v->kind == VM_JSON_FLOAT) vm->g_extra.dmax_beta = (float)dmax_beta_v->float_value;
+                else if (dmax_beta_v->kind == VM_JSON_INT) vm->g_extra.dmax_beta = (float)dmax_beta_v->int_value;
+            }
+            VMJsonValue* dmax_gamma_v = vm_json_get(vm, dmax_gamma_h);
+            if (dmax_gamma_v) {
+                if (dmax_gamma_v->kind == VM_JSON_FLOAT) vm->g_extra.dmax_gamma = (float)dmax_gamma_v->float_value;
+                else if (dmax_gamma_v->kind == VM_JSON_INT) vm->g_extra.dmax_gamma = (float)dmax_gamma_v->int_value;
+            }
+
+            uint32_t audit_h = vm_json_object_get_item_by_key_id(vm, rule_h, vm_json_store_text(vm, "audit_mode"));
+            VMJsonValue* audit_v = vm_json_get(vm, audit_h);
+            if (audit_v) {
+                if (audit_v->kind == VM_JSON_INT) vm->g_extra.audit_mode = (int)audit_v->int_value;
+            }
+
+            VMJsonValue* inh_v = vm_json_get(vm, inh_h);
+            if (inh_v && (inh_v->kind == VM_JSON_INT || inh_v->kind == VM_JSON_NULL)) {
+                /* Si es null, desactivamos inhibición (0) */
+                vm->g_extra.inhibition_map_id = (inh_v->kind == VM_JSON_INT) ? (uint32_t)inh_v->int_value : 0;
+            }
+
+            VMJsonValue* tau_v = vm_json_get(vm, tau_h);
+            if (tau_v) {
+                if (tau_v->kind == VM_JSON_INT) {
+                    int t = (int)tau_v->int_value;
+                    if (t >= 0 && t <= JMN_RELACION_MAX) {
+                        if (has_mask) vm->g_extra.mask_tau[t] = mask_val;
+                        if (has_alpha) vm->g_extra.alpha_tau[t] = alpha_val;
+                        if (vm->g_extra.audit_mode > 0) printf("[CONTEXT] Regla %d MATCH: tau[%d] mask=%.2f alpha=%.2f\n", i, t, mask_val, alpha_val);
+                        if (matches_list) {
+                            uint32_t m_obj = vm_json_create(vm, VM_JSON_OBJECT);
+                            vm_json_object_put_int(vm, m_obj, "rule_idx", (int64_t)i);
+                            vm_json_object_put_int(vm, m_obj, "tau", (int64_t)t);
+                            vm_json_object_put_float(vm, m_obj, "mask", (double)mask_val);
+                            vm_json_object_put_float(vm, m_obj, "alpha", (double)alpha_val);
+                            vm_json_array_add(vm, matches_list, m_obj);
+                        }
+                    }
+                } else if (tau_v->kind == VM_JSON_ARRAY) {
+                    uint32_t tau_count = tau_v->count;
+                    for (uint32_t k = 0; k < tau_count; k++) {
+                        /* Re-obtener tau_v pointer por si vm_json_create reallocó */
+                        tau_v = vm_json_get(vm, tau_h);
+                        VMJsonValue* t_item = vm_json_get(vm, tau_v->items[k]);
+                        if (t_item && t_item->kind == VM_JSON_INT) {
+                            int t = (int)t_item->int_value;
+                            if (t >= 0 && t <= JMN_RELACION_MAX) {
+                                if (has_mask) vm->g_extra.mask_tau[t] = mask_val;
+                                if (has_alpha) vm->g_extra.alpha_tau[t] = alpha_val;
+                                if (vm->g_extra.audit_mode > 0) printf("[CONTEXT] Regla %d MATCH: tau[%d] mask=%.2f alpha=%.2f\n", i, t, mask_val, alpha_val);
+                                if (matches_list) {
+                                    uint32_t m_obj = vm_json_create(vm, VM_JSON_OBJECT);
+                                    vm_json_object_put_int(vm, m_obj, "rule_idx", (int64_t)i);
+                                    vm_json_object_put_int(vm, m_obj, "tau", (int64_t)t);
+                                    vm_json_object_put_float(vm, m_obj, "mask", (double)mask_val);
+                                    vm_json_object_put_float(vm, m_obj, "alpha", (double)alpha_val);
+                                    vm_json_array_add(vm, matches_list, m_obj);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (audit_obj) {
+        vm_json_object_put_json(vm, audit_obj, "matches", matches_list);
+        if (!vm->audit_json_list) {
+            vm->audit_json_cap = 32;
+            vm->audit_json_list = (uint32_t*)malloc(sizeof(uint32_t) * vm->audit_json_cap);
+            vm->audit_json_count = 0;
+        }
+        if (vm->audit_json_count < vm->audit_json_cap) {
+            vm->audit_json_list[vm->audit_json_count++] = audit_obj;
+        } else {
+            memmove(vm->audit_json_list, vm->audit_json_list + 1, sizeof(uint32_t) * (vm->audit_json_cap - 1));
+            vm->audit_json_list[vm->audit_json_cap - 1] = audit_obj;
+        }
+    }
+}
+
 static uint32_t vm_json_new(VM* vm, VMJsonKind kind) {
     if (!vm_json_reserve(vm, vm->json_count + 1)) return 0;
     vm->json_values[vm->json_count] = (VMJsonValue){0};
     vm->json_values[vm->json_count].kind = (uint8_t)kind;
     vm->json_count++;
-    return vm->json_count;
+    return 0xF0000000u | vm->json_count;
 }
 
 static VMJsonValue* vm_json_get(VM* vm, uint32_t handle) {
-    if (!vm || handle == 0 || handle > vm->json_count) return NULL;
-    return &vm->json_values[handle - 1];
+    if (!vm || handle == 0 || (handle & 0xF0000000u) != 0xF0000000u) return NULL;
+    uint32_t idx = (handle & 0x0FFFFFFFu) - 1;
+    if (idx >= vm->json_count) return NULL;
+    return &vm->json_values[idx];
 }
 
 static int vm_json_push_item(uint32_t** arr, uint32_t* count, uint32_t* cap, uint32_t value) {
@@ -2821,17 +3179,25 @@ static int vm_json_object_put(VMJsonValue* v, uint32_t key_id, uint32_t value_h)
     uint32_t *next_keys;
     uint32_t *next_items;
     if (!v) return 0;
+    
+    // Si la clave ya existe, actualizarla (evitar duplicados en el mismo objeto)
+    for (uint32_t i = 0; i < v->count; i++) {
+        if (v->keys[i] == key_id) {
+            v->items[i] = value_h;
+            return 1;
+        }
+    }
+
     if (v->count >= v->cap) {
         cap = v->cap ? (v->cap * 2u) : 8u;
         next_keys = (uint32_t*)realloc(v->keys, cap * sizeof(uint32_t));
-        next_items = (uint32_t*)realloc(v->items, cap * sizeof(uint32_t));
-        if (!next_keys || !next_items) {
-            free(next_keys);
-            free(next_items);
-            return 0;
-        }
+        if (!next_keys) return 0;
         v->keys = next_keys;
+
+        next_items = (uint32_t*)realloc(v->items, cap * sizeof(uint32_t));
+        if (!next_items) return 0; // v->keys ya se actualizó, aceptable
         v->items = next_items;
+        
         v->cap = cap;
     }
     v->keys[v->count] = key_id;
@@ -2944,13 +3310,14 @@ static uint32_t vm_json_parse_array(VMJsonParser* jp) {
         vm_json_skip_ws(jp);
         item = vm_json_parse_value(jp);
         if (!item) return 0;
-        {
-            VMJsonValue* v = vm_json_get(jp->vm, h);
-            if (!v) return 0;
+        
+        // Refrescar puntero v ya que parse_value pudo reasignar vm->json_values
+        VMJsonValue* v = vm_json_get(jp->vm, h);
+        if (!v) return 0;
+        
         if (!vm_json_push_item(&v->items, &v->count, &v->cap, item)) {
             vm_json_set_error(jp, "Sin memoria para array JSON");
             return 0;
-        }
         }
         vm_json_skip_ws(jp);
         if (*jp->p == ']') {
@@ -3000,13 +3367,14 @@ static uint32_t vm_json_parse_object(VMJsonParser* jp) {
         vm_json_skip_ws(jp);
         value_h = vm_json_parse_value(jp);
         if (!value_h) return 0;
-        {
-            VMJsonValue* v = vm_json_get(jp->vm, h);
-            if (!v) return 0;
+        
+        // Refrescar puntero v ya que parse_value pudo reasignar vm->json_values
+        VMJsonValue* v = vm_json_get(jp->vm, h);
+        if (!v) return 0;
+        
         if (!vm_json_object_put(v, key_id, value_h)) {
             vm_json_set_error(jp, "Sin memoria para objeto JSON");
             return 0;
-        }
         }
         vm_json_skip_ws(jp);
         if (*jp->p == '}') {
@@ -3601,7 +3969,13 @@ int vm_step(VM* vm) {
     uint64_t c_val = (inst.flags & IR_INST_FLAG_C_IMMEDIATE) ? inst.operand_c : vm->registers[inst.operand_c];
     
     // Ejecutar instrucción
-    switch (inst.opcode) {
+    /*
+    if (vm->debug_mode) {
+            printf("[VM PC=%04u] Opcode=0x%02X\n", (uint32_t)vm->pc, inst.opcode);
+        }
+    */
+
+        switch (inst.opcode) {
         case OP_HALT:
             vm->running = 0;
             return 0; // Terminar exitosamente
@@ -4102,8 +4476,9 @@ int vm_step(VM* vm) {
 
         case OP_MEM_MAPA_CREAR: {
             static uint32_t s_map_counter = 0;
-            s_map_counter++;
-            uint32_t map_id = ((uint32_t)time(NULL) ^ 0x01234567u) + (s_map_counter * 0x9E3779B9u);
+            if (s_map_counter < 0x0FFFFFFFu)
+                s_map_counter++;
+            uint32_t map_id = 0xE0000000u + s_map_counter;
 #ifdef JASBOOT_LANG_INTEGRATION
             /* Prioridad: memoria neuronal persistente si está abierta; si no, RAM efímera. */
             JMNMemoria* m_target = vm->mem_neuronal ? vm->mem_neuronal : vm->mem_colecciones;
@@ -4123,6 +4498,7 @@ int vm_step(VM* vm) {
         case OP_MEM_MAPA_PONER: {
 #ifdef JASBOOT_LANG_INTEGRATION
             uint32_t map_id = (uint32_t)a_val;
+            if (getenv("JASBOOT_DEBUG")) printf("[VM DEBUG] OP_MEM_MAPA_PONER map_id=%u (0x%08X), key=%u\n", map_id, map_id, (uint32_t)b_val);
             JMNMemoria* m_target = (vm->mem_neuronal && jmn_mapa_existe(vm->mem_neuronal, map_id)) 
                                    ? vm->mem_neuronal : vm->mem_colecciones;
             if (!m_target) { ensure_jmn_col(vm); m_target = vm->mem_colecciones; }
@@ -4139,6 +4515,7 @@ int vm_step(VM* vm) {
 #ifdef JASBOOT_LANG_INTEGRATION
             uint32_t map_id = (uint32_t)b_val;
             uint32_t map_key = (uint32_t)c_val;
+            if (getenv("JASBOOT_DEBUG")) printf("[VM DEBUG] OP_MEM_MAPA_OBTENER map_id=%u (0x%08X), key=%u\n", map_id, map_id, map_key);
             JMNValor val = {0};
             int encontrado = 0;
             if (vm->mem_neuronal) {
@@ -4185,7 +4562,9 @@ int vm_step(VM* vm) {
             if (!m_target) { ensure_jmn_col(vm); m_target = vm->mem_colecciones; }
             if (m_target) {
                 ensure_jmn_col(vm);
-                list_id = vm_alloc_runtime_text_id(vm) | 0x80000000;
+                static uint32_t s_list_tmp_counter = 0;
+                s_list_tmp_counter++;
+                list_id = 0xD0000000u + (s_list_tmp_counter % 0x0FFFFFFFu);
                 jmn_crear_lista(vm->mem_colecciones, list_id);
                 
                 uint32_t tam = jmn_mapa_tamano(m_target, map_id);
@@ -5995,10 +6374,17 @@ int vm_step(VM* vm) {
         }
 
         case OP_ESTABLECER_CONTEXTO: {
-            uint32_t id = (uint32_t)vm_get_register(vm, inst.operand_a);
-            if (vm->mem_neuronal) {
-                jmn_establecer_contexto(vm->mem_neuronal, id);
-            }
+            uint32_t context_h = (uint32_t)vm_get_register(vm, inst.operand_a);
+            vm->context_json_id = context_h;
+            vm_evaluar_reglas_contexto(vm);
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
+        case OP_CONFIGURAR_REGLAS_CONTEXTO: {
+            uint32_t rules_h = (uint32_t)vm_get_register(vm, inst.operand_a);
+            vm->context_rules_json_id = rules_h;
+            vm_evaluar_reglas_contexto(vm);
             vm->pc += IR_INSTRUCTION_SIZE;
             break;
         }
@@ -6028,6 +6414,42 @@ int vm_step(VM* vm) {
                     jmn_lista_agregar(vm->mem_colecciones, VM_RASTRO_LISTA_ID, v);
                 }
                 vm_set_register(vm, inst.operand_a, (uint64_t)VM_RASTRO_LISTA_ID);
+            } else {
+                vm_set_register(vm, inst.operand_a, 0);
+            }
+#else
+            vm_set_register(vm, inst.operand_a, 0);
+#endif
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
+        case OP_MAI_CONTEXTO_LISTA: {
+            uint32_t mag;
+            if (inst.flags & IR_INST_FLAG_B_IMMEDIATE)
+                mag = inst.operand_b;
+            else
+                mag = (uint32_t)vm_get_register(vm, inst.operand_b);
+            
+            if (mag == 0) mag = 10;
+            if (mag > 100) mag = 100;
+
+#ifdef JASBOOT_LANG_INTEGRATION
+            ensure_jmn_col(vm);
+            if (vm->mem_colecciones) {
+                jmn_vector_limpiar(vm->mem_colecciones, VM_MAI_CONTEXTO_LISTA_ID);
+                jmn_crear_lista(vm->mem_colecciones, VM_MAI_CONTEXTO_LISTA_ID);
+                
+                /* Agregar los últimos 'mag' IDs de percepción como contexto */
+                uint32_t count = vm->percepcion_count;
+                if (count > mag) count = mag;
+                
+                for (uint32_t i = 0; i < count; i++) {
+                    JMNValor v;
+                    v.u = vm_percepcion_id_at(vm, i);
+                    jmn_lista_agregar(vm->mem_colecciones, VM_MAI_CONTEXTO_LISTA_ID, v);
+                }
+                vm_set_register(vm, inst.operand_a, (uint64_t)VM_MAI_CONTEXTO_LISTA_ID);
             } else {
                 vm_set_register(vm, inst.operand_a, 0);
             }
@@ -6264,8 +6686,8 @@ int vm_step(VM* vm) {
                         }
                         char* combined = (char*)malloc(total_len + 1);
                         if (combined) {
-                            memcpy(combined, s1, l1);
-                            memcpy(combined + l1, s2, l2);
+                            if (s1 && l1 > 0) memcpy(combined, s1, l1);
+                            if (s2 && l2 > 0) memcpy(combined + l1, s2, l2);
                             combined[total_len] = '\0';
                             id_res = vm_alloc_runtime_text_id(vm);
                             vm_text_cache_put_owned(vm, id_res, combined, total_len);
@@ -6294,6 +6716,21 @@ int vm_step(VM* vm) {
                 len = s ? strlen(s) : 0;
             }
             vm_set_register(vm, inst.operand_a, (uint64_t)len);
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
+        case OP_LEER_U32_IND: { // 0xEB: A <- [ [B] + C ]
+            uint64_t base_addr = vm_get_register(vm, inst.operand_b);
+            uint64_t offset = 0;
+            if (inst.flags & IR_INST_FLAG_C_IMMEDIATE)
+                offset = inst.operand_c;
+            else
+                offset = vm_get_register(vm, inst.operand_c);
+            
+            uint32_t val = 0;
+            (void)vm_mem_read_u32_checked(vm, (uint32_t)(base_addr + offset), &val);
+            vm_set_register(vm, inst.operand_a, (uint64_t)val);
             vm->pc += IR_INSTRUCTION_SIZE;
             break;
         }
@@ -6751,20 +7188,6 @@ int vm_step(VM* vm) {
 
 
 
-        case OP_LEER_U32_IND: {
-            uint64_t addr = vm->registers[inst.operand_b];
-            {
-                uint32_t val = 0;
-                if (vm_mem_read_u32_checked(vm, addr, &val)) {
-                vm->registers[inst.operand_a] = (uint64_t)val;
-                } else {
-                vm->registers[inst.operand_a] = 0;
-                }
-            }
-            vm->pc += IR_INSTRUCTION_SIZE;
-            break;
-        }
-
         case OP_FS_LEER_TEXTO: {
             uint32_t id_ruta = (uint32_t)vm_get_register(vm, inst.operand_b);
             const char* ruta = vm_resolve_path(vm, id_ruta);
@@ -6801,14 +7224,25 @@ int vm_step(VM* vm) {
 
         case OP_JSON_PARSE: {
             uint32_t text_id = (uint32_t)vm_get_register(vm, inst.operand_b);
-            char buffer[65536];
+            /* Evitar stack overflow con buffer grande en el stack. 
+             * Usamos 64KB para soportar JSONs medianos. */
+            const size_t buf_sz = 65536;
+            char* buffer = (char*)malloc(buf_sz);
+            if (!buffer) {
+                if (vm_try_catch_or_abort(vm, "json_parse: fallo al asignar buffer (out of memory)")) return 0;
+                vm->running = 0;
+                vm->exit_code = 1;
+                return 0;
+            }
             char err[160];
+            err[0] = '\0';
             uint32_t json_h = 0;
-            if (vm_text_cache_get_copy(vm, text_id, buffer, sizeof(buffer))) {
+            if (vm_text_cache_get_copy(vm, text_id, buffer, buf_sz)) {
                 json_h = vm_json_parse_text(vm, buffer, err, sizeof(err));
             } else {
                 snprintf(err, sizeof(err), "json_parse: no se pudo leer el texto (id %u)", (unsigned)text_id);
             }
+            free(buffer);
             if (!json_h) {
                 if (vm_try_catch_or_abort(vm, err[0] ? err : "json_parse: JSON invalido")) return 0;
                 fprintf(stderr, "Error de ejecucion (VM): %s\n", err[0] ? err : "json_parse: JSON invalido");
@@ -6950,48 +7384,57 @@ int vm_step(VM* vm) {
         }
 
         case OP_JSON_A_TEXTO: {
-            uint32_t json_h = (uint32_t)b_val;
-            VMJsonValue* v = vm_json_get(vm, json_h);
-            char tmp[128];
+            uint32_t val = (uint32_t)vm_get_register(vm, inst.operand_b);
             uint32_t text_id = 0;
-            
-            if (!v) {
-                fprintf(stderr, "[DEBUG] A_TEXTO: handle %u not found\n", json_h);
-                if (json_h > 1000) text_id = json_h;
-                else text_id = 0;
-            } else {
-                switch (v->kind) {
-                    case VM_JSON_STRING:
-                        text_id = v->text_id;
-                        break;
-                    case VM_JSON_INT:
-                        snprintf(tmp, sizeof(tmp), "%" PRId64, v->int_value);
-                        text_id = vm_json_store_text(vm, tmp);
-                        break;
-                    case VM_JSON_FLOAT:
-                        snprintf(tmp, sizeof(tmp), "%.15g", v->float_value);
-                        text_id = vm_json_store_text(vm, tmp);
-                        break;
-                    case VM_JSON_BOOL:
-                        text_id = vm_json_store_text(vm, v->bool_value ? "true" : "false");
-                        break;
-                    case VM_JSON_NULL:
-                        text_id = vm_json_store_text(vm, "null");
-                        break;
-                    default: {
-                        VMJsonBuf out = {0};
-                        if (!vm_json_stringify_value(vm, json_h, &out)) {
-                            text_id = 0;
-                        } else {
-                            text_id = vm_json_store_text(vm, out.data ? out.data : "");
+            char tmp[128];
+
+            if ((val & 0xF0000000u) == 0xF0000000u) {
+                // Es un handle JSON
+                VMJsonValue* v = vm_json_get(vm, val);
+                if (!v) {
+                    fprintf(stderr, "[DEBUG] A_TEXTO: handle JSON %u no encontrado\n", val);
+                    text_id = 0;
+                } else {
+                    switch (v->kind) {
+                        case VM_JSON_STRING:
+                            text_id = v->text_id;
+                            break;
+                        case VM_JSON_INT:
+                            snprintf(tmp, sizeof(tmp), "%" PRId64, v->int_value);
+                            text_id = vm_json_store_text(vm, tmp);
+                            break;
+                        case VM_JSON_FLOAT:
+                            snprintf(tmp, sizeof(tmp), "%.15g", v->float_value);
+                            text_id = vm_json_store_text(vm, tmp);
+                            break;
+                        case VM_JSON_BOOL:
+                            text_id = vm_json_store_text(vm, v->bool_value ? "true" : "false");
+                            break;
+                        case VM_JSON_NULL:
+                            text_id = vm_json_store_text(vm, "null");
+                            break;
+                        default: {
+                            VMJsonBuf out = {0};
+                            if (!vm_json_stringify_value(vm, val, &out)) {
+                                text_id = 0;
+                            } else {
+                                text_id = vm_json_store_text(vm, out.data ? out.data : "");
+                            }
+                            if (out.data) free(out.data);
+                            break;
                         }
-                        if (out.data) free(out.data);
-                        break;
                     }
                 }
+            } else if ((val & 0x80000000u) == 0x80000000u) {
+                // Ya es un ID de texto (o lista/mapa, que tratamos como ID por ahora)
+                text_id = val;
+            } else {
+                // Es un número bruto
+                snprintf(tmp, sizeof(tmp), "%u", val);
+                text_id = vm_json_store_text(vm, tmp);
             }
-            fprintf(stderr, "[DEBUG] A_TEXTO: handle %u -> text_id %u\n", json_h, text_id);
-            vm->registers[inst.operand_a] = (uint64_t)text_id;
+            
+            vm_set_register(vm, inst.operand_a, (uint64_t)text_id);
             vm->pc += IR_INSTRUCTION_SIZE;
             break;
         }
@@ -7257,68 +7700,45 @@ int vm_step(VM* vm) {
             break;
         }
 
-        case OP_TCP_ENVIAR: {
+        case OP_TCP_IO: {
             VMSocketEntry* sock = vm_socket_get(vm, (uint32_t)vm_get_register(vm, inst.operand_b));
-            uint32_t payload_h = (uint32_t)vm_get_register(vm, inst.operand_c);
-            VMBytesEntry* payload_b = vm_bytes_get(vm, payload_h);
-            size_t payload_t_len = 0;
-            char* payload_t = payload_b ? NULL : vm_text_materialize_owned(vm, payload_h, &payload_t_len);
-            int sent = 0;
-            if (sock) {
-                if (payload_b) sent = vm_socket_send_all((vm_socket_native_t)sock->native_handle, payload_b->data, payload_b->len);
-                else if (payload_t) sent = vm_socket_send_all((vm_socket_native_t)sock->native_handle, (const uint8_t*)payload_t, (uint32_t)payload_t_len);
-            }
-            vm_net_debugf("send socket=%u payload_h=%u sent=%d bytes_len=%u text=%s wsa=%d errno=%d",
-                          (unsigned)vm_get_register(vm, inst.operand_b),
-                          (unsigned)payload_h,
-                          sent,
-                          payload_b ? (unsigned)payload_b->len : 0u,
-                          payload_t ? "si" : "no",
-#if defined(_WIN32) || defined(_WIN64)
-                          (int)WSAGetLastError(),
-#else
-                          0,
-#endif
-                          errno);
-            free(payload_t);
-            vm->registers[inst.operand_a] = (uint64_t)(sent > 0 ? sent : 0);
-            vm->pc += IR_INSTRUCTION_SIZE;
-            break;
-        }
-
-        case OP_TCP_RECIBIR: {
-            VMSocketEntry* sock = vm_socket_get(vm, (uint32_t)vm_get_register(vm, inst.operand_b));
-            uint32_t max_len = (uint32_t)vm_get_register(vm, inst.operand_c);
-            uint32_t out_h = 0;
-            if (sock && max_len > 0) {
-                out_h = vm_bytes_new_uninitialized(vm, max_len);
-                if (out_h) {
-                    VMBytesEntry* entry = vm_bytes_get(vm, out_h);
-                    int n = entry ? (int)recv((vm_socket_native_t)sock->native_handle, (char*)entry->data, (int)max_len, 0) : -1;
-                    vm_net_debugf("recv socket=%u requested=%u got=%d wsa=%d errno=%d",
-                                  (unsigned)vm_get_register(vm, inst.operand_b),
-                                  (unsigned)max_len,
-                                  n,
-#if defined(_WIN32) || defined(_WIN64)
-                                  (int)WSAGetLastError(),
-#else
-                                  0,
-#endif
-                                  errno);
-                    if (n > 0 && entry) {
-                        entry->len = (uint32_t)n;
-                    } else {
-                        if (entry) {
-                            free(entry->data);
-                            entry->data = NULL;
-                            entry->len = 0;
-                            entry->cap = 0;
+            if (inst.flags & IR_INST_FLAG_SAFE) {
+                /* RECV */
+                uint32_t max_len = (uint32_t)vm_get_register(vm, inst.operand_c);
+                uint32_t out_h = 0;
+                if (sock && max_len > 0) {
+                    out_h = vm_bytes_new_uninitialized(vm, max_len);
+                    if (out_h) {
+                        VMBytesEntry* entry = vm_bytes_get(vm, out_h);
+                        int n = entry ? (int)recv((vm_socket_native_t)sock->native_handle, (char*)entry->data, (int)max_len, 0) : -1;
+                        if (n > 0 && entry) {
+                            entry->len = (uint32_t)n;
+                        } else {
+                            if (entry) {
+                                free(entry->data);
+                                entry->data = NULL;
+                                entry->len = 0;
+                                entry->cap = 0;
+                            }
+                            out_h = 0;
                         }
-                        out_h = 0;
                     }
                 }
+                vm->registers[inst.operand_a] = (uint64_t)out_h;
+            } else {
+                /* SEND */
+                uint32_t payload_h = (uint32_t)vm_get_register(vm, inst.operand_c);
+                VMBytesEntry* payload_b = vm_bytes_get(vm, payload_h);
+                size_t payload_t_len = 0;
+                char* payload_t = payload_b ? NULL : vm_text_materialize_owned(vm, payload_h, &payload_t_len);
+                int sent = 0;
+                if (sock) {
+                    if (payload_b) sent = vm_socket_send_all((vm_socket_native_t)sock->native_handle, payload_b->data, payload_b->len);
+                    else if (payload_t) sent = vm_socket_send_all((vm_socket_native_t)sock->native_handle, (const uint8_t*)payload_t, (uint32_t)payload_t_len);
+                }
+                free(payload_t);
+                vm->registers[inst.operand_a] = (uint64_t)(sent > 0 ? sent : 0);
             }
-            vm->registers[inst.operand_a] = (uint64_t)out_h;
             vm->pc += IR_INSTRUCTION_SIZE;
             break;
         }
@@ -7329,7 +7749,49 @@ int vm_step(VM* vm) {
             break;
         }
 
-        case OP_TLS_CLIENTE:
+        case OP_TLS_CLIENTE: {
+            /* Implementación pendiente o placeholder */
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
+        case OP_MEM_INFERIR_MIL: {
+            /* A: reg_destino (lista_id), B: reg_origen (nodo_id), C: reg_dmax (entero) */
+#ifdef JASBOOT_LANG_INTEGRATION
+            if (vm->mem_neuronal) {
+                uint32_t origen = (uint32_t)vm_get_register(vm, inst.operand_b);
+                uint16_t d_max = (uint16_t)vm_get_register(vm, inst.operand_c);
+                if (d_max == 0) d_max = 3;
+                
+                JMNInferenciaResultado res[16];
+                /* Factores delta por defecto para MIL nativo */
+                float factor_delta[32];
+                for(int i=0; i<32; i++) factor_delta[i] = 0.3f;
+                factor_delta[1] = 0.8f;  /* Asociación fuerte */
+                factor_delta[10] = 0.9f; /* Valorativa */
+                factor_delta[23] = 0.85f; /* Propiedad */
+                factor_delta[30] = 0.95f; /* Referencia Lógica */
+                
+                int n = jmn_inferir_relaciones_mil(vm->mem_neuronal, origen, d_max, factor_delta, res, 16);
+                
+                uint32_t lista_id = vm_alloc_runtime_text_id(vm);
+                if (lista_id != 0) {
+                    jmn_crear_lista(vm->mem_neuronal, lista_id);
+                    for (int i = 0; i < n; i++) {
+                        JMNValor v;
+                        v.u = res[i].id_conclusion;
+                        jmn_lista_agregar(vm->mem_neuronal, lista_id, v);
+                    }
+                }
+                vm_set_register(vm, inst.operand_a, (uint64_t)lista_id);
+            } else {
+                vm_set_register(vm, inst.operand_a, 0);
+            }
+#endif
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
         case OP_TLS_SERVIDOR: {
             uint32_t socket_id = (uint32_t)vm_get_register(vm, inst.operand_b);
             uint32_t tls_handle = 0;
@@ -7346,46 +7808,45 @@ int vm_step(VM* vm) {
             break;
         }
 
-        case OP_TLS_ENVIAR: {
+        case OP_TLS_IO: {
             VMTlsEntry* tls = vm_tls_get(vm, (uint32_t)vm_get_register(vm, inst.operand_b));
-            uint32_t payload_h = (uint32_t)vm_get_register(vm, inst.operand_c);
-            VMBytesEntry* payload_b = vm_bytes_get(vm, payload_h);
-            size_t payload_t_len = 0;
-            char* payload_t = payload_b ? NULL : vm_text_materialize_owned(vm, payload_h, &payload_t_len);
-            int sent = 0;
-            if (tls) {
-                if (payload_b) sent = vm_tls_write_all(tls, payload_b->data, payload_b->len);
-                else if (payload_t) sent = vm_tls_write_all(tls, (const uint8_t*)payload_t, (uint32_t)payload_t_len);
-            }
-            free(payload_t);
-            vm->registers[inst.operand_a] = (uint64_t)(sent > 0 ? sent : 0);
-            vm->pc += IR_INSTRUCTION_SIZE;
-            break;
-        }
-
-        case OP_TLS_RECIBIR: {
-            VMTlsEntry* tls = vm_tls_get(vm, (uint32_t)vm_get_register(vm, inst.operand_b));
-            uint32_t max_len = (uint32_t)vm_get_register(vm, inst.operand_c);
-            uint32_t out_h = 0;
-            if (tls && max_len > 0) {
-                out_h = vm_bytes_new_uninitialized(vm, max_len);
-                if (out_h) {
-                    VMBytesEntry* entry = vm_bytes_get(vm, out_h);
-                    int n = entry ? vm_tls_read_entry(tls, entry->data, max_len) : -1;
-                    if (n > 0 && entry) {
-                        entry->len = (uint32_t)n;
-                    } else {
-                        if (entry) {
-                            free(entry->data);
-                            entry->data = NULL;
-                            entry->len = 0;
-                            entry->cap = 0;
+            if (inst.flags & IR_INST_FLAG_SAFE) {
+                /* RECV */
+                uint32_t max_len = (uint32_t)vm_get_register(vm, inst.operand_c);
+                uint32_t out_h = 0;
+                if (tls && max_len > 0) {
+                    out_h = vm_bytes_new_uninitialized(vm, max_len);
+                    if (out_h) {
+                        VMBytesEntry* entry = vm_bytes_get(vm, out_h);
+                        int n = entry ? vm_tls_read_entry(tls, entry->data, max_len) : -1;
+                        if (n > 0 && entry) {
+                            entry->len = (uint32_t)n;
+                        } else {
+                            if (entry) {
+                                free(entry->data);
+                                entry->data = NULL;
+                                entry->len = 0;
+                                entry->cap = 0;
+                            }
+                            out_h = 0;
                         }
-                        out_h = 0;
                     }
                 }
+                vm->registers[inst.operand_a] = (uint64_t)out_h;
+            } else {
+                /* SEND */
+                uint32_t payload_h = (uint32_t)vm_get_register(vm, inst.operand_c);
+                VMBytesEntry* payload_b = vm_bytes_get(vm, payload_h);
+                size_t payload_t_len = 0;
+                char* payload_t = payload_b ? NULL : vm_text_materialize_owned(vm, payload_h, &payload_t_len);
+                int sent = 0;
+                if (tls) {
+                    if (payload_b) sent = vm_tls_write_all(tls, payload_b->data, payload_b->len);
+                    else if (payload_t) sent = vm_tls_write_all(tls, (const uint8_t*)payload_t, (uint32_t)payload_t_len);
+                }
+                free(payload_t);
+                vm->registers[inst.operand_a] = (uint64_t)(sent > 0 ? sent : 0);
             }
-            vm->registers[inst.operand_a] = (uint64_t)out_h;
             vm->pc += IR_INSTRUCTION_SIZE;
             break;
         }
@@ -7511,7 +7972,16 @@ int vm_step(VM* vm) {
             break;
         }
 
-            
+        case OP_MEM_ES_VARIABLE_SISTEMA: { // 0xF1
+            uint32_t id = (uint32_t)vm_get_register(vm, inst.operand_b);
+            int res = 0;
+            const char* s = vm_text_cache_get(vm, id);
+            if (s && s[0] == '$') res = 1;
+            vm_set_register(vm, inst.operand_a, (uint64_t)res);
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
         case OP_ACTIVAR_MODULO: {
             // Hot-Reload: Recargar el archivo IR actual desde el disco preservando estado
             if (vm->ir_path) {
@@ -7553,7 +8023,7 @@ int vm_step(VM* vm) {
                  * lista_poner falla silenciosamente -> .jbr cargaba pesos en ceros. */
                 if (s_list_counter < 0x0FFFFFFFu)
                     s_list_counter++;
-                id = 0xF0000000u + s_list_counter;
+                id = 0xD0000000u + s_list_counter;
             }
 
 #ifdef JASBOOT_LANG_INTEGRATION
@@ -8438,6 +8908,10 @@ int vm_step(VM* vm) {
                     uint32_t prof = (uint32_t)((c_val >> 24) & 0xFFu);
                     if (K == 0 || K > 32) K = 8;
                     if (prof > 32) prof = 32;
+
+                    // Fase 9: Cálculo de d_max dinámico si está activado
+                    uint16_t prof_din = vm_calcular_d_max_dinamico(vm, (uint16_t)prof);
+
                     if (mask == 0u)
                         mask = (1u << JMN_RELACION_ASOCIACION) | (1u << JMN_RELACION_SECUENCIA)
                              | (1u << JMN_RELACION_PERTENENCIA) | (1u << JMN_RELACION_CAUSALIDAD)
@@ -8451,7 +8925,7 @@ int vm_step(VM* vm) {
                         if (((mask >> t) & 1u) == 0u) continue;
                         JMNActivacionResultado tmp[32];
                         int nt = jmn_propagar_activacion_semillas(vm->mem_neuronal, seedb, nseed, 1.0f, 0.8f, 0.1f,
-                            (uint16_t)prof, t, tmp, (uint16_t)K, vm_jmn_rastro_cb, vm, &pex_mai);
+                            prof_din, t, tmp, (uint16_t)K, vm_jmn_rastro_cb, vm, &pex_mai);
                         if (nt > 0 && tmp[0].activacion > best_act) {
                             best_act = tmp[0].activacion;
                             best_id = tmp[0].id;
@@ -8471,13 +8945,17 @@ int vm_step(VM* vm) {
                     if (K == 0 || K > 32) K = 8;
                     if (prof > 32) prof = 32;
                     if (tipo_relacion > JMN_RELACION_MAX) tipo_relacion = 0;
+
+                    // Fase 9: Cálculo de d_max dinámico si está activado
+                    uint16_t prof_din = vm_calcular_d_max_dinamico(vm, (uint16_t)prof);
+
                     JMNPropagarExtra pex;
                     vm_propagar_pack_extra(vm, (uint32_t)((c_val >> 24) & 0xFFu), &pex);
                     if (nseed < 1) {
                         n = 0;
                     } else {
                         n = jmn_propagar_activacion_semillas(vm->mem_neuronal, seedb, nseed, 1.0f, 0.8f, 0.1f,
-                            (uint16_t)prof, tipo_relacion, resultados, (uint16_t)K, vm_jmn_rastro_cb, vm, &pex);
+                            prof_din, tipo_relacion, resultados, (uint16_t)K, vm_jmn_rastro_cb, vm, &pex);
                     }
                     vm_propagar_audit_maybe(vm, 0, origen_id, tipo_relacion, K, prof, c_val, n,
                         n > 0 ? resultados : NULL);
@@ -9057,11 +9535,6 @@ int vm_step(VM* vm) {
         } else {
             vm_set_register(vm, inst.operand_a, 0);
         }
-        vm->pc += IR_INSTRUCTION_SIZE;
-        break;
-    }
-
-    case OP_MEM_OBTENER_TODOS: {
         vm->pc += IR_INSTRUCTION_SIZE;
         break;
     }
