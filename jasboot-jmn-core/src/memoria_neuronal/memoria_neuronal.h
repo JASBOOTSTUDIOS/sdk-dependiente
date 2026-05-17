@@ -292,6 +292,8 @@ int jmn_observar(JMNMemoria* mem, uint32_t id);
 uint32_t jmn_registrar_patron(JMNMemoria* mem, uint32_t id_lista);
 int jmn_corregir_secuencia(JMNMemoria* mem, uint32_t id_lista);
 int jmn_asociar_relacion(JMNMemoria* mem, uint32_t id_a, uint32_t id_b, uint32_t tipo);
+void jmn_asociar_relacion_efimera(JMNMemoria* mem, uint32_t id_a, uint32_t id_b, uint32_t tipo, float fuerza);
+float jmn_evaluar_metacognicion(JMNMemoria* mem, const uint32_t* nodos, int num_nodos, const float* pesos_objetivo);
 float jmn_comparar_patrones(JMNMemoria* mem, uint32_t id_a, uint32_t id_b);
 uint32_t jmn_obtener_relacionados(JMNMemoria* mem, uint32_t id);
 int jmn_extraer_caracter(JMNMemoria* mem, uint32_t id_frase, int32_t indice, uint32_t id_destino);

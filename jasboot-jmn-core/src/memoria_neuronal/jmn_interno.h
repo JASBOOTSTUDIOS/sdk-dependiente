@@ -79,6 +79,11 @@ struct JMNMemoria {
     uint32_t* hash_mapas;
     uint32_t num_mapas;
 
+    /* Memoria de trabajo efímera (Fase 11) */
+    JMNEntradaConexion* conexiones_efimeras;
+    uint32_t cap_conexiones_efimeras;
+    uint32_t num_conexiones_efimeras;
+
     /* Handles para mapeo en Windows/Linux */
 #if defined(_WIN32) || defined(_WIN64)
     void* h_file;

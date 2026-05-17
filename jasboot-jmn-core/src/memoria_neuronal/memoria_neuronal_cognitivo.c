@@ -789,3 +789,106 @@ int jmn_inferir_relaciones_mil(JMNMemoria* mem, uint32_t origen, uint16_t d_max,
     
     return n_out;
 }
+
+void jmn_asociar_relacion_efimera(JMNMemoria* mem, uint32_t id_a, uint32_t id_b, uint32_t tipo, float fuerza) {
+    if (!mem || !mem->conexiones_efimeras) return;
+    if (mem->num_conexiones_efimeras >= mem->cap_conexiones_efimeras) return;
+
+    uint32_t idx = mem->num_conexiones_efimeras++;
+    JMNEntradaConexion* c = &mem->conexiones_efimeras[idx];
+    c->origen_id = id_a;
+    c->destino_id = id_b;
+    c->key_id = tipo;
+    c->fuerza.f = fuerza;
+    c->used = 1;
+}
+
+float jmn_evaluar_metacognicion(JMNMemoria* mem, const uint32_t* nodos, int num_nodos, const float* pesos_objetivo) {
+    if (!mem || !nodos || num_nodos <= 0) return 0.0f;
+
+    /* Pesos por defecto si no se proveen (Coherencia, Seguridad, Concisión) */
+    float w_coh = pesos_objetivo ? pesos_objetivo[0] : 0.4f;
+    float w_safe = pesos_objetivo ? pesos_objetivo[1] : 0.4f;
+    float w_len = pesos_objetivo ? pesos_objetivo[2] : 0.2f;
+
+    float e_coh = 0.0f;
+    float e_safe = 1.0f;
+    float e_len = 1.0f;
+
+    /* 1. Coherencia Interna: ¿Están los nodos relacionados entre sí? (Incluye efímeras) */
+    float sum_rel = 0.0f;
+    int count_rel = 0;
+    for (int i = 0; i < num_nodos; i++) {
+        for (int j = 0; j < num_nodos; j++) {
+            if (i == j) continue;
+            
+            /* A. Buscar en conexiones persistentes */
+            uint32_t b = nodos[i] % (mem->cap_nodos + 1);
+            if (mem->cabeza_origen) {
+                uint32_t c_idx = mem->cabeza_origen[b];
+                while (c_idx != 0xFFFFFFFF && c_idx < mem->cap_conexiones) {
+                    JMNEntradaConexion* c = &mem->conexiones[c_idx];
+                    if (c->used && c->origen_id == nodos[i] && c->destino_id == nodos[j]) {
+                        sum_rel += c->fuerza.f;
+                        count_rel++;
+                    }
+                    c_idx = c->next_origen;
+                }
+            }
+            
+            /* B. Buscar en conexiones efímeras (Working Memory) */
+            if (mem->conexiones_efimeras) {
+                for (uint32_t k = 0; k < mem->num_conexiones_efimeras; k++) {
+                    JMNEntradaConexion* ce = &mem->conexiones_efimeras[k];
+                    if (ce->used && ce->origen_id == nodos[i] && ce->destino_id == nodos[j]) {
+                        sum_rel += ce->fuerza.f;
+                        count_rel++;
+                    }
+                }
+            }
+        }
+    }
+    if (num_nodos > 1) {
+        /* Normalización: Relaciones encontradas vs relaciones posibles (N*N-1) */
+        float max_posible = (float)(num_nodos * (num_nodos - 1));
+        e_coh = (sum_rel / (max_posible + 1.0f)) * 2.0f; /* Factor 2.0 para compensar raleidad */
+        if (e_coh > 1.0f) e_coh = 1.0f;
+    } else {
+        e_coh = 1.0f;
+    }
+
+    /* 2. Seguridad: Detectar sentimientos negativos o juicios de valor extremos (tau=10) */
+    float max_unsafe = 0.0f;
+    for (int i = 0; i < num_nodos; i++) {
+        /* Buscar en persistentes */
+        uint32_t b = nodos[i] % (mem->cap_nodos + 1);
+        if (mem->cabeza_origen) {
+            uint32_t c_idx = mem->cabeza_origen[b];
+            while (c_idx != 0xFFFFFFFF && c_idx < mem->cap_conexiones) {
+                JMNEntradaConexion* c = &mem->conexiones[c_idx];
+                if (c->used && c->origen_id == nodos[i] && c->key_id == 10) {
+                    if (c->fuerza.f > max_unsafe) max_unsafe = c->fuerza.f;
+                }
+                c_idx = c->next_origen;
+            }
+        }
+        /* Buscar en efímeras */
+        if (mem->conexiones_efimeras) {
+            for (uint32_t k = 0; k < mem->num_conexiones_efimeras; k++) {
+                JMNEntradaConexion* ce = &mem->conexiones_efimeras[k];
+                if (ce->used && ce->origen_id == nodos[i] && ce->key_id == 10) {
+                    if (ce->fuerza.f > max_unsafe) max_unsafe = ce->fuerza.f;
+                }
+            }
+        }
+    }
+    e_safe = 1.0f - max_unsafe;
+
+    /* 3. Concisión: Penalizar exceso de tokens */
+    if (num_nodos > 20) e_len = 0.5f;
+    else if (num_nodos > 12) e_len = 0.8f;
+    else if (num_nodos < 2) e_len = 0.6f;
+
+    float score = (w_coh * e_coh) + (w_safe * e_safe) + (w_len * e_len);
+    return score;
+}

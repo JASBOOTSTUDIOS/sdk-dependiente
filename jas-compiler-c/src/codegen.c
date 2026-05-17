@@ -3315,7 +3315,7 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         visit_expression(cg, ARG0, B0);
         visit_expression(cg, ARG1, B0 + 1);
         visit_expression(cg, ARG2, B0 + 2);
-        emit(cg, OP_ANALITICA_MLP_SAVE, (uint8_t)dest_reg, (uint8_t)B0, 0,
+        emit(cg, OP_CONFIGURAR_REGLAS_CONTEXTO, (uint8_t)dest_reg, (uint8_t)B0, 0,
              IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
         return 1;
     }
@@ -4374,6 +4374,51 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         emit(cg, OP_MOVER, (uint8_t)dest_reg, (uint8_t)r1, 0, IR_INST_FLAG_B_REGISTER);
         return 1;
     }
+    if (strcmp(name, "asociar_relacion_efimera") == 0) {
+        if (getenv("JASBOOT_DEBUG")) fprintf(stderr, "[CODEGEN] Generando asociar_relacion_efimera n_args=%zu\n", cn->n_args);
+        if (cn->n_args < 3 || cn->n_args > 4) {
+            codegen_error_sistema_incorporada_arity(cg, cn, 3,
+                "origen, destino, tipo y fuerza (opcional)",
+                "asociar_relacion_efimera(\"agua\", \"vida\", 1, 0.7)",
+                "(El cuarto argumento 'fuerza' es opcional y debe ser entre 0.0 y 1.0)");
+            return 1;
+        }
+        visit_expression(cg, ARG0, 1);
+        visit_expression(cg, ARG1, 2);
+        
+        if (cn->n_args == 4) {
+            visit_expression(cg, ARG2, 3); // tipo
+            
+            if (is_node(ARG3, NODE_LITERAL) && ((LiteralNode*)ARG3)->is_float) {
+                float f = (float)((LiteralNode*)ARG3)->value.f;
+                uint32_t p1000 = (uint32_t)(f * 1000.0f);
+                if (getenv("JASBOOT_DEBUG")) fprintf(stderr, "  Literal float: %.4f -> p1000=%u\n", f, p1000);
+                emit(cg, OP_MOVER, 5, p1000 & 0xFF, (p1000 >> 8) & 0xFF, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
+                emit(cg, OP_MOVER, 6, 32, 0, IR_INST_FLAG_B_IMMEDIATE);
+                emit(cg, OP_BIT_SHL, 5, 5, 6, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
+                emit(cg, OP_SUMAR, 4, 5, 3, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
+                emit(cg, OP_MEM_ASOCIAR_RELACION_EFIMERA, 1, 2, 4, 
+                     IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
+            } else {
+                if (getenv("JASBOOT_DEBUG")) fprintf(stderr, "  Argumento no literal o no float\n");
+                visit_expression(cg, ARG3, 4); // fuerza (variable)
+                emit(cg, OP_MOVER, 15, 1000 & 0xFF, (1000 >> 8) & 0xFF, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
+                emit(cg, OP_CONV_I2F, 16, 15, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER); // 16 = 1000.0f
+                emit(cg, OP_MULTIPLICAR_FLT, 17, 4, 16, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
+                emit(cg, OP_CONV_F2I, 18, 17, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER); // 18 = (int)1000*fuerza
+                emit(cg, OP_MOVER, 19, 32, 0, IR_INST_FLAG_B_IMMEDIATE);
+                emit(cg, OP_BIT_SHL, 20, 18, 19, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
+                emit(cg, OP_SUMAR, 21, 20, 3, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
+                emit(cg, OP_MEM_ASOCIAR_RELACION_EFIMERA, 1, 2, 21, 
+                     IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
+            }
+        } else {
+            visit_expression(cg, ARG2, 3);
+            emit(cg, OP_MEM_ASOCIAR_RELACION_EFIMERA, 1, 2, 3,
+                 IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
+        }
+        return 1;
+    }
     if (strcmp(name, "asociar_relacion") == 0) {
         if (getenv("JASBOOT_DEBUG")) fprintf(stderr, "[CODEGEN] Generando asociar_relacion n_args=%zu\n", cn->n_args);
         if (cn->n_args < 3 || cn->n_args > 4) {
@@ -4865,6 +4910,25 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         else emit(cg, OP_MOVER, 11, 3, 0, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE); /* d_max = 3 (defecto) */
         
         emit(cg, OP_MEM_INFERIR_MIL, (uint8_t)dest_reg, 10, 11, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
+        return 1;
+    }
+
+    if (strcmp(name, "jmn_evaluar_meta") == 0) {
+        if (cn->n_args < 1 || cn->n_args > 2) {
+            codegen_error_sistema_incorporada_arity(cg, cn, 1,
+                "lista de candidatos y opcionalmente lista de pesos",
+                "jmn_evaluar_meta(candidatos) o jmn_evaluar_meta(candidatos, pesos)", NULL);
+            return 1;
+        }
+        visit_expression(cg, ARG0, 10); /* candidatos */
+        if (cn->n_args == 2) {
+            visit_expression(cg, ARG1, 11); /* pesos */
+            emit(cg, OP_MEM_EVALUAR_META, (uint8_t)dest_reg, 10, 11,
+                 IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
+        } else {
+            emit(cg, OP_MEM_EVALUAR_META, (uint8_t)dest_reg, 10, 0,
+                 IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE);
+        }
         return 1;
     }
 

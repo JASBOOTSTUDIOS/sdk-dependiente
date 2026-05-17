@@ -139,9 +139,15 @@ static JMNMemoria* jmn_alloc(uint32_t cap_nodos, uint32_t cap_conex, const char*
     m->hash_mapas = (uint32_t*)calloc(JMN_HASH_SIZE, sizeof(uint32_t));
     for (uint32_t i = 0; i < JMN_HASH_SIZE; i++) m->hash_mapas[i] = 0xFFFFFFFF;
 
+    /* Inicializar conexiones efímeras para la memoria de trabajo (Fase 11) */
+    m->cap_conexiones_efimeras = 10000;
+    m->num_conexiones_efimeras = 0;
+    m->conexiones_efimeras = (JMNEntradaConexion*)calloc(m->cap_conexiones_efimeras, sizeof(JMNEntradaConexion));
+
     if (!m->nodos || !m->hash_nodos || !m->conexiones || !m->hash_conexiones ||
         !m->cabeza_origen || !m->textos || !m->hash_textos ||
-        !m->listas || !m->hash_listas || !m->mapas || !m->hash_mapas) {
+        !m->listas || !m->hash_listas || !m->mapas || !m->hash_mapas ||
+        !m->conexiones_efimeras) {
         jmn_cerrar(m);
         return NULL;
     }
@@ -173,6 +179,9 @@ static void jmn_free_data(JMNMemoria* m) {
         free(m->mapas);
     }
     free(m->hash_mapas);
+    if (m->conexiones_efimeras) {
+        free(m->conexiones_efimeras);
+    }
 }
 
 JMNMemoria* jmn_crear(const char* ruta) {

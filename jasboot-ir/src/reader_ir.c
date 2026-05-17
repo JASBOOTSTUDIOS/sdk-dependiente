@@ -370,6 +370,8 @@ IRValidationInfo ir_validate_memory(IRFile* ir) {
             inst.opcode != OP_MEM_PENSAR_ANTERIOR &&
             inst.opcode != OP_MEM_CORREGIR_SECUENCIA &&
             inst.opcode != OP_MEM_ASOCIAR_RELACION &&
+            inst.opcode != OP_MEM_ASOCIAR_RELACION_EFIMERA &&
+            inst.opcode != OP_MEM_EVALUAR_META &&
             inst.opcode != OP_STR_ASOCIAR_SECUENCIA &&
             inst.opcode != OP_MEM_COMPARAR_PATRONES &&
             inst.opcode != OP_MEM_BUSCAR_ASOCIADOS &&

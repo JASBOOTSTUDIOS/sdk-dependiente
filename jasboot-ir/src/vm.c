@@ -9700,6 +9700,100 @@ int vm_step(VM* vm) {
         break;
     }
 
+        case OP_MEM_ASOCIAR_RELACION_EFIMERA: {
+#ifdef JASBOOT_LANG_INTEGRATION
+            if (vm->mem_neuronal) {
+                uint64_t a_val = vm_get_register(vm, inst.operand_a);
+                uint64_t b_val = vm_get_register(vm, inst.operand_b);
+                uint64_t c_val = vm_get_register(vm, inst.operand_c);
+                uint32_t id1 = (uint32_t)a_val;
+                uint32_t id2 = (uint32_t)b_val;
+                uint32_t tipo = (uint32_t)c_val;
+                uint32_t peso_x1000 = (uint32_t)((c_val >> 32) & 0xFFFFu);
+                
+                float peso = (peso_x1000 != 0) ? ((float)peso_x1000 / 1000.0f) : 1.0f;
+                if (peso > 1.0f) peso = 1.0f;
+
+                if (tipo == 0) tipo = 1;
+                tipo = vm_jmn_tipo_desde_texto(vm, tipo);
+
+                if (tipo > 0 && tipo <= JMN_RELACION_MAX) {
+                    if (getenv("JASBOOT_DEBUG")) {
+                        fprintf(stderr, "[VM] ASOCIAR EFIMERA id1=%u id2=%u tipo=%u peso=%.4f\n", 
+                                id1, id2, tipo, peso);
+                    }
+                    jmn_asociar_relacion_efimera(vm->mem_neuronal, id1, id2, tipo, peso);
+                }
+            }
+#endif
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
+        case OP_MEM_EVALUAR_META: {
+#ifdef JASBOOT_LANG_INTEGRATION
+            if (vm->mem_neuronal) {
+                uint64_t cand_list_id = vm_get_register(vm, inst.operand_b);
+                uint32_t num_cands = jmn_lista_tamano(vm->mem_neuronal, (uint32_t)cand_list_id);
+                
+                if (num_cands == 0) {
+                    union { uint64_t u64; float f32; } fres = {0};
+                    fres.f32 = 0.0f;
+                    vm_set_register(vm, inst.operand_a, fres.u64);
+                } else {
+                    // Extraer candidatos de forma segura
+                    uint32_t* cands = (uint32_t*)malloc(num_cands * sizeof(uint32_t));
+                    if (cands) {
+                        for (uint32_t i = 0; i < num_cands; i++) {
+                            JMNValor val = jmn_lista_obtener(vm->mem_neuronal, (uint32_t)cand_list_id, i);
+                            cands[i] = val.u;
+                        }
+                        
+                        // Extraer pesos de forma condicional
+                        float* weights = NULL;
+                        if (inst.flags & IR_INST_FLAG_C_REGISTER) {
+                            uint64_t w_list_id = vm_get_register(vm, inst.operand_c);
+                            uint32_t num_weights = jmn_lista_tamano(vm->mem_neuronal, (uint32_t)w_list_id);
+                            if (num_weights >= 3) {
+                                weights = (float*)malloc(num_weights * sizeof(float));
+                                if (weights) {
+                                    for (uint32_t i = 0; i < num_weights; i++) {
+                                        JMNValor val = jmn_lista_obtener(vm->mem_neuronal, (uint32_t)w_list_id, i);
+                                        weights[i] = val.f;
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Evaluar metacognición
+                        float score = jmn_evaluar_metacognicion(vm->mem_neuronal, cands, (int)num_cands, weights);
+                        
+                        union { uint64_t u64; float f32; } fres = {0};
+                        fres.f32 = score;
+                        vm_set_register(vm, inst.operand_a, fres.u64);
+                        
+                        free(cands);
+                        if (weights) free(weights);
+                    } else {
+                        union { uint64_t u64; float f32; } fres = {0};
+                        fres.f32 = 0.0f;
+                        vm_set_register(vm, inst.operand_a, fres.u64);
+                    }
+                }
+            } else {
+                union { uint64_t u64; float f32; } fres = {0};
+                fres.f32 = 0.0f;
+                vm_set_register(vm, inst.operand_a, fres.u64);
+            }
+#else
+            union { uint64_t u64; float f32; } fres = {0};
+            fres.f32 = 0.0f;
+            vm_set_register(vm, inst.operand_a, fres.u64);
+#endif
+            vm->pc += IR_INSTRUCTION_SIZE;
+            break;
+        }
+
         case OP_MEM_ASOCIAR_RELACION: { // OP_MEM_ASOCIAR_RELACION (y *_mai vía IR_INST_FLAG_RELATIVE)
             // A = id1, B = id2, C = tipo (low 16 bits) + peso*1000 (bits 16-31); si bits 16-31 == 0 → peso 1.0
 #ifdef JASBOOT_LANG_INTEGRATION
