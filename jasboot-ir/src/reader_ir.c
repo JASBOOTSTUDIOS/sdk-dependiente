@@ -307,6 +307,8 @@ IRValidationInfo ir_validate_memory(IRFile* ir) {
             inst.opcode != OP_FS_FIN_ARCHIVO &&
             inst.opcode != OP_FS_CERRAR &&
             inst.opcode != OP_FS_EXISTE &&
+            inst.opcode != OP_SYS_ARGC &&
+            inst.opcode != OP_SYS_ARGV &&
             inst.opcode != OP_SYS_TIMESTAMP &&
             inst.opcode != OP_FS_LEER_LINEA &&
             inst.opcode != OP_STR_ASOCIAR_PESOS &&
@@ -344,6 +346,7 @@ IRValidationInfo ir_validate_memory(IRFile* ir) {
             inst.opcode != OP_MEM_CARGAR_PERFIL_G &&
             inst.opcode != OP_MEM_CONFIGURAR_MASK_G &&
             inst.opcode != OP_MEM_CONFIGURAR_MASKS_G_LISTA &&
+            inst.opcode != OP_MAI_CONTEXTO_LISTA &&
             inst.opcode != OP_MEM_DECAE_CONEXIONES &&
             inst.opcode != OP_MEM_CONFIGURAR_AUDITORIA &&
             inst.opcode != OP_MEM_OBTENER_AUDITORIA_JSON &&

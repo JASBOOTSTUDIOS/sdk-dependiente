@@ -4419,6 +4419,19 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         }
         return 1;
     }
+    if (strcmp(name, "limpiar_memoria_trabajo") == 0) {
+        if (cn->n_args != 0) {
+            codegen_error_sistema_incorporada_arity(cg, cn, 0, "sin argumentos", "limpiar_memoria_trabajo()", NULL);
+            return 1;
+        }
+        emit(cg, OP_MOVER, 1, 0, 0, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
+        emit(cg, OP_MOVER, 2, 0, 0, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
+        emit(cg, OP_MOVER, 3, 0, 0, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
+        emit(cg, OP_MEM_ASOCIAR_RELACION_EFIMERA, 1, 2, 3,
+             IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
+        emit(cg, OP_MOVER, (uint8_t)dest_reg, 0, 0, IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE);
+        return 1;
+    }
     if (strcmp(name, "asociar_relacion") == 0) {
         if (getenv("JASBOOT_DEBUG")) fprintf(stderr, "[CODEGEN] Generando asociar_relacion n_args=%zu\n", cn->n_args);
         if (cn->n_args < 3 || cn->n_args > 4) {
@@ -5890,6 +5903,62 @@ static int visit_call_sistema(CodeGen *cg, CallNode *cn, int dest_reg) {
         emit(cg, OP_MEM_OBTENER_RELACION, dest_reg, 1, 2, IR_INST_FLAG_B_REGISTER);
         return 1;
     }
+    if (strcmp(name, "jmn_dump_conexiones") == 0) {
+        if (cn->n_args > 2) {
+            codegen_error_sistema_incorporada_arity(cg, cn, 2,
+                "offset (opcional) y limit (opcional)", "jmn_dump_conexiones(0, 100)", NULL);
+            return 1;
+        }
+        if (cn->n_args == 0) {
+            emit(cg, OP_MEM_OBTENER_RELACION, dest_reg, 0, 0,
+                 IR_INST_FLAG_B_IMMEDIATE | IR_INST_FLAG_C_IMMEDIATE | IR_INST_FLAG_RELATIVE);
+            return 1;
+        }
+        if (cn->n_args == 1) {
+            visit_expression(cg, ARG0, 1);
+            emit(cg, OP_MEM_OBTENER_RELACION, dest_reg, 1, 0,
+                 IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE | IR_INST_FLAG_RELATIVE);
+            return 1;
+        }
+        visit_expression(cg, ARG0, 1);
+        visit_expression(cg, ARG1, 2);
+        emit(cg, OP_MEM_OBTENER_RELACION, dest_reg, 1, 2,
+             IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER | IR_INST_FLAG_RELATIVE);
+        return 1;
+    }
+    if (strcmp(name, "jmn_dump_conexiones_tipo") == 0) {
+        if (cn->n_args < 1 || cn->n_args > 3) {
+            codegen_error_sistema_incorporada_arity(cg, cn, 3,
+                "tipo, offset (opcional) y limit (opcional)",
+                "jmn_dump_conexiones_tipo(9, 0, 100)", NULL);
+            return 1;
+        }
+        /* B = tipo
+           C = packed(u64): (offset<<32) | (limit & 0xFFFFFFFF)
+           El VM reconoce IR_INST_FLAG_RELATIVE + IR_INST_FLAG_SAFE como "dump filtrado". */
+        visit_expression(cg, ARG0, 1);
+        if (cn->n_args == 1) {
+            emit(cg, OP_MEM_OBTENER_RELACION, dest_reg, 1, 0,
+                 IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE | IR_INST_FLAG_RELATIVE | IR_INST_FLAG_SAFE);
+            return 1;
+        }
+        if (cn->n_args == 2) {
+            visit_expression(cg, ARG1, 2);
+            emit(cg, OP_BIT_SHL, 2, 2, 32,
+                 IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE);
+            emit(cg, OP_MEM_OBTENER_RELACION, dest_reg, 1, 2,
+                 IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER | IR_INST_FLAG_RELATIVE | IR_INST_FLAG_SAFE);
+            return 1;
+        }
+        visit_expression(cg, ARG1, 2);
+        visit_expression(cg, ARG2, 3);
+        emit(cg, OP_BIT_SHL, 2, 2, 32,
+             IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_IMMEDIATE);
+        emit(cg, OP_O, 4, 2, 3, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER);
+        emit(cg, OP_MEM_OBTENER_RELACION, dest_reg, 1, 4,
+             IR_INST_FLAG_B_REGISTER | IR_INST_FLAG_C_REGISTER | IR_INST_FLAG_RELATIVE | IR_INST_FLAG_SAFE);
+        return 1;
+    }
 
     /* 6.10 Sistema, 6.11 Conversiones */
     if (strcmp(name, "sistema_ejecutar") == 0) {
@@ -6993,7 +7062,9 @@ static int visit_expression(CodeGen *cg, ASTNode *node, int dest_reg) {
             uint8_t lt_num_c = (uint8_t)(lt_is_bool ? 2 : ((lt_is_int || lt_is_u32) ? 1 : 0));
             uint8_t rt_num_c = (uint8_t)(rt_is_bool ? 2 : ((rt_is_int || rt_is_u32) ? 1 : 0));
 
-            fprintf(stderr, "[DEBUG] Concat: lt=%s (json=%d), rt=%s (json=%d)\n", lt?lt:"NULL", lt_is_json, rt?rt:"NULL", rt_is_json);
+            if (getenv("JBC_DEBUG_CONCAT")) {
+                fprintf(stderr, "[DEBUG] Concat: lt=%s (json=%d), rt=%s (json=%d)\n", lt?lt:"NULL", lt_is_json, rt?rt:"NULL", rt_is_json);
+            }
 
             if (lt && (lt_is_int || lt_is_flt || lt_is_car || lt_is_u32 || lt_is_bool || lt_is_json) && !expr_already_yields_text_string_id(cg, bn->left)) {
                 if (lt_is_car) emit(cg, OP_STR_DESDE_CODIGO, rL, rL, 0, IR_INST_FLAG_A_REGISTER | IR_INST_FLAG_B_REGISTER);
@@ -7530,6 +7601,7 @@ static int reject_non_numeric_to_scalar(CodeGen *cg, const char *dest_type, cons
     cg->has_error = 1;
     cg->err_line = line;
     cg->err_col = col;
+    codegen_note_error_diag_path(cg);
     return 1;
 }
 
@@ -7547,6 +7619,7 @@ static int reject_return_incompatible_value(CodeGen *cg, const char *declared_re
     cg->has_error = 1;
     cg->err_line = line;
     cg->err_col = col;
+    codegen_note_error_diag_path(cg);
     return 1;
 }
 
@@ -9572,25 +9645,25 @@ uint8_t *codegen_generate(CodeGen *cg, ASTNode *ast, size_t *out_len) {
     for (size_t i = 0; i < p->n_funcs; i++) {
         if (cg->func_labels) mark_label(cg, cg->func_labels[f_idx++]);
         FunctionNode *fn = (FunctionNode*)p->functions[i];
-        if (fn) fprintf(stderr, "Compilando funcion global: %s\n", fn->name ? fn->name : "?");
+        if (fn && getenv("JASBOOT_DEBUG") && getenv("JASBOOT_DEBUG")[0]) fprintf(stderr, "Compilando funcion global: %s\n", fn->name ? fn->name : "?");
         visit_function(cg, p->functions[i], NULL);
     }
     for (size_t i = 0; i < p->n_globals; i++) {
         if (p->globals[i]->type == NODE_STRUCT_DEF) {
             StructDefNode *sd = (StructDefNode*)p->globals[i];
-            fprintf(stderr, "Compilando metodos de clase: %s\n", sd->name ? sd->name : "?");
+            if (getenv("JASBOOT_DEBUG") && getenv("JASBOOT_DEBUG")[0]) fprintf(stderr, "Compilando metodos de clase: %s\n", sd->name ? sd->name : "?");
             StructInfo *si = sym_get_struct_info(&cg->sym, sd->name);
             if (si) {
                 for (size_t j = 0; j < si->n_methods; j++) {
                     if (cg->func_labels) mark_label(cg, cg->func_labels[f_idx++]);
-                    fprintf(stderr, "  Metodo: %s\n", si->methods[j].name ? si->methods[j].name : "?");
+                    if (getenv("JASBOOT_DEBUG") && getenv("JASBOOT_DEBUG")[0]) fprintf(stderr, "  Metodo: %s\n", si->methods[j].name ? si->methods[j].name : "?");
                     visit_function(cg, si->methods[j].method_ast, sd->name);
                 }
             } else {
                 for (size_t j = 0; j < sd->n_methods; j++) {
                     if (cg->func_labels) mark_label(cg, cg->func_labels[f_idx++]);
                     FunctionNode *fn = (FunctionNode*)sd->methods[j];
-                    if (fn) fprintf(stderr, "  Metodo (fallback): %s\n", fn->name ? fn->name : "?");
+                    if (fn && getenv("JASBOOT_DEBUG") && getenv("JASBOOT_DEBUG")[0]) fprintf(stderr, "  Metodo (fallback): %s\n", fn->name ? fn->name : "?");
                     visit_function(cg, sd->methods[j], sd->name);
                 }
             }
@@ -9598,7 +9671,7 @@ uint8_t *codegen_generate(CodeGen *cg, ASTNode *ast, size_t *out_len) {
     }
 
     mark_label(cg, main_id);
-    fprintf(stderr, "Compilando bloque principal (principal)\n");
+    if (getenv("JASBOOT_DEBUG") && getenv("JASBOOT_DEBUG")[0]) fprintf(stderr, "Compilando bloque principal (principal)\n");
     sym_enter_scope(&cg->sym, 1);
     size_t reserve_pos = cg->code_size;
     emit(cg, OP_RESERVAR_PILA, 0, 0, 0, IR_INST_FLAG_A_IMMEDIATE);

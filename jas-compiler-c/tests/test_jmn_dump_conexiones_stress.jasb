@@ -1,0 +1,49 @@
+principal
+    entero fallos = 0
+
+    fs_borrar("build/test_jmn_dump_conexiones_stress.jmn")
+    crear_memoria("build/test_jmn_dump_conexiones_stress.jmn")
+
+    entero n = 1000
+    entero i = 0
+    entero bidir = 0
+    mientras i < n hacer
+        texto na = concatenar("n", str_desde_numero(i))
+        texto nb = concatenar("m", str_desde_numero(i))
+        asociar_relacion(na, nb, 9, 1.0)
+        si (i % 2) == 0 entonces
+            asociar_relacion(nb, na, 9, 0.9)
+            bidir = bidir + 1
+        fin_si
+        i = i + 1
+    fin_mientras
+
+    entero esperado = n + bidir
+
+    json page0 = jmn_dump_conexiones(0, 100)
+    entero total = str_a_entero(json_a_texto(json_objeto_obtener(page0, "total")))
+    entero count0 = str_a_entero(json_a_texto(json_objeto_obtener(page0, "count")))
+    json items0 = json_objeto_obtener(page0, "items")
+    entero items0_n = json_lista_tamano(items0)
+
+    si total != esperado entonces fallos = fallos + 1 fin_si
+    si count0 != 100 entonces fallos = fallos + 1 fin_si
+    si items0_n != 100 entonces fallos = fallos + 1 fin_si
+
+    json last = jmn_dump_conexiones(esperado - 10, 50)
+    entero count_last = str_a_entero(json_a_texto(json_objeto_obtener(last, "count")))
+    json items_last = json_objeto_obtener(last, "items")
+    entero items_last_n = json_lista_tamano(items_last)
+    si count_last != 10 entonces fallos = fallos + 1 fin_si
+    si items_last_n != 10 entonces fallos = fallos + 1 fin_si
+
+    cerrar_memoria()
+
+    imprimir("TOTAL=")
+    imprimir(total)
+    imprimir(" ESPERADO=")
+    imprimir(esperado)
+    imprimir(" FALLIOS=")
+    imprimir(fallos)
+    imprimir("\n")
+fin_principal

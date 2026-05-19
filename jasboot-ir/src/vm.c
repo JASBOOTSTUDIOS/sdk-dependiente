@@ -7,6 +7,7 @@
 #include "vm_analitica_mlp.h"
 #include "reader_ir.h"
 #include "memoria_neuronal/memoria_neuronal.h"
+#include "memoria_neuronal/jmn_interno.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -1115,6 +1116,22 @@ static char* vm_text_materialize_owned(VM* vm, uint32_t id, size_t* out_len) {
     flat[wrote] = '\0';
     if (out_len) *out_len = wrote;
     return flat;
+}
+
+static int vm_jmn_has_conexion(JMNMemoria* mem, uint32_t ori, uint32_t dest, uint32_t tipo) {
+    if (!mem || !mem->cabeza_origen || !mem->conexiones) return 0;
+    if (ori == 0 || dest == 0) return 0;
+    uint32_t bucket = ori % (mem->cap_nodos + 1);
+    if (bucket > mem->cap_nodos) bucket = mem->cap_nodos;
+    uint32_t slot = mem->cabeza_origen[bucket];
+    while (slot != 0xFFFFFFFFu) {
+        JMNEntradaConexion* c = &mem->conexiones[slot];
+        if (c->used && c->origen_id == ori && c->destino_id == dest) {
+            if (tipo == 0 || c->key_id == tipo) return 1;
+        }
+        slot = c->next_origen;
+    }
+    return 0;
 }
 
 static int vm_text_cache_put_owned(VM* vm, uint32_t id, char* text, size_t text_len) {
@@ -9714,6 +9731,12 @@ int vm_step(VM* vm) {
                 float peso = (peso_x1000 != 0) ? ((float)peso_x1000 / 1000.0f) : 1.0f;
                 if (peso > 1.0f) peso = 1.0f;
 
+                if (id1 == 0 && id2 == 0) {
+                    jmn_limpiar_conexiones_efimeras(vm->mem_neuronal);
+                    vm->pc += IR_INSTRUCTION_SIZE;
+                    break;
+                }
+
                 if (tipo == 0) tipo = 1;
                 tipo = vm_jmn_tipo_desde_texto(vm, tipo);
 
@@ -9922,6 +9945,84 @@ int vm_step(VM* vm) {
         }
 
         case OP_MEM_OBTENER_RELACION: {
+            if (inst.flags & IR_INST_FLAG_RELATIVE) {
+#ifdef JASBOOT_LANG_INTEGRATION
+                JMNMemoria* mem = vm->mem_neuronal;
+                uint32_t tipo_filter = 0;
+                uint32_t offset = 0;
+                uint32_t limit = 0;
+                if (inst.flags & IR_INST_FLAG_SAFE) {
+                    tipo_filter = (uint32_t)b_val;
+                    uint64_t packed = c_val;
+                    offset = (uint32_t)(packed >> 32);
+                    limit = (uint32_t)(packed & 0xFFFFFFFFu);
+                } else {
+                    offset = (uint32_t)b_val;
+                    limit = (uint32_t)c_val;
+                }
+
+                uint32_t out_obj = vm_json_create(vm, VM_JSON_OBJECT);
+                uint32_t out_items = vm_json_create(vm, VM_JSON_ARRAY);
+                vm_json_object_put_int(vm, out_obj, "tipo", (int64_t)tipo_filter);
+                vm_json_object_put_int(vm, out_obj, "offset", (int64_t)offset);
+                vm_json_object_put_int(vm, out_obj, "limit", (int64_t)limit);
+
+                uint32_t page_count = 0;
+                uint32_t total = 0;
+                if (mem && mem->conexiones && mem->cap_conexiones > 0) {
+                    for (uint32_t i = 0; i < mem->cap_conexiones; i++) {
+                        JMNEntradaConexion* e = &mem->conexiones[i];
+                        if (!e->used) continue;
+                        if (tipo_filter != 0 && e->key_id != tipo_filter) continue;
+                        uint32_t idx = total;
+                        total++;
+                        if (idx < offset) continue;
+                        if (limit != 0 && page_count >= limit) continue;
+
+                        int bidir = vm_jmn_has_conexion(mem, e->destino_id, e->origen_id, e->key_id);
+
+                        const char* o_txt = vm_text_cache_get(vm, e->origen_id);
+                        const char* d_txt = vm_text_cache_get(vm, e->destino_id);
+                        char o_buf[64];
+                        char d_buf[64];
+                        if (!o_txt || !o_txt[0]) {
+                            snprintf(o_buf, sizeof o_buf, "%u", e->origen_id);
+                            o_txt = o_buf;
+                        }
+                        if (!d_txt || !d_txt[0]) {
+                            snprintf(d_buf, sizeof d_buf, "%u", e->destino_id);
+                            d_txt = d_buf;
+                        }
+
+                        printf("%u|%s|%s|%.6g|%s\n",
+                            (unsigned)e->key_id, o_txt, d_txt, (double)e->fuerza.f, bidir ? "<->" : "->");
+
+                        uint32_t entry = vm_json_create(vm, VM_JSON_OBJECT);
+                        vm_json_object_put_int(vm, entry, "tipo", (int64_t)e->key_id);
+                        vm_json_object_put_int(vm, entry, "origen_id", (int64_t)e->origen_id);
+                        vm_json_object_put_int(vm, entry, "destino_id", (int64_t)e->destino_id);
+                        vm_json_object_put_string(vm, entry, "origen", o_txt);
+                        vm_json_object_put_string(vm, entry, "destino", d_txt);
+                        vm_json_object_put_float(vm, entry, "peso", (double)e->fuerza.f);
+                        vm_json_object_put_int(vm, entry, "bidireccional", (int64_t)(bidir ? 1 : 0));
+                        vm_json_object_put_string(vm, entry, "direccion", bidir ? "bi" : "uni");
+                        vm_json_array_add(vm, out_items, entry);
+
+                        page_count++;
+                    }
+                }
+
+                vm_json_object_put_int(vm, out_obj, "total", (int64_t)total);
+                vm_json_object_put_int(vm, out_obj, "count", (int64_t)page_count);
+                vm_json_object_put_json(vm, out_obj, "items", out_items);
+                vm_set_register(vm, inst.operand_a, (uint64_t)out_obj);
+#else
+                vm_set_register(vm, inst.operand_a, 0);
+#endif
+                vm->pc += IR_INSTRUCTION_SIZE;
+                break;
+            }
+
             uint32_t id_origen = (uint32_t)b_val;
             uint32_t id_destino = (uint32_t)c_val;
             uint32_t tipo = 0;

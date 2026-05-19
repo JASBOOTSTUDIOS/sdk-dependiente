@@ -56,7 +56,7 @@ const char *const SISTEMA_LLAMADAS[] = {
     "n_buscar_donde_aparece", "n_lista_triples", "n_tamano_grafo",
     "n_olvidar_triple", "n_configurar_cache_lru", "n_configurar_bloom",
     "n_heredar", "n_heredar_texto",
-    "fs_borrar", "fs_copiar", "fs_mover", "fs_tamano", "mem_obtener_relacion",
+    "fs_borrar", "fs_copiar", "fs_mover", "fs_tamano", "mem_obtener_relacion", "jmn_dump_conexiones", "jmn_dump_conexiones_tipo",
     "vec2_sumar", "vec2_restar", "vec3_sumar", "vec3_restar", "vec4_sumar", "vec4_restar",
     "vec2_longitud", "vec3_longitud", "vec4_longitud",
     "vec2_normalizar", "vec3_normalizar", "vec4_normalizar",
@@ -76,7 +76,7 @@ const char *const SISTEMA_LLAMADAS[] = {
     "tls_cliente", "tls_servidor", "tls_enviar", "tls_recibir", "tls_cerrar",
     "pausa_milisegundos", "esperar_milisegundos",
     "nativo_mlp_entrenar", "nativo_mlp_predict", "nativo_mlp_guardar",
-    "jmn_inferir_mil", "asociar_relacion_efimera", "jmn_evaluar_meta"
+    "jmn_inferir_mil", "asociar_relacion_efimera", "jmn_evaluar_meta", "limpiar_memoria_trabajo"
 };
 const size_t SISTEMA_LLAMADAS_COUNT = sizeof(SISTEMA_LLAMADAS) / sizeof(SISTEMA_LLAMADAS[0]);
 

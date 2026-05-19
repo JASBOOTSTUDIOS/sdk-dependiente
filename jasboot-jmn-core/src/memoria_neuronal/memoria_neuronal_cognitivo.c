@@ -803,6 +803,14 @@ void jmn_asociar_relacion_efimera(JMNMemoria* mem, uint32_t id_a, uint32_t id_b,
     c->used = 1;
 }
 
+void jmn_limpiar_conexiones_efimeras(JMNMemoria* mem) {
+    if (!mem || !mem->conexiones_efimeras) return;
+    for (uint32_t k = 0; k < mem->num_conexiones_efimeras; k++) {
+        mem->conexiones_efimeras[k].used = 0;
+    }
+    mem->num_conexiones_efimeras = 0;
+}
+
 float jmn_evaluar_metacognicion(JMNMemoria* mem, const uint32_t* nodos, int num_nodos, const float* pesos_objetivo) {
     if (!mem || !nodos || num_nodos <= 0) return 0.0f;
 

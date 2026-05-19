@@ -1,0 +1,51 @@
+principal
+    entero fallos = 0
+
+    fs_borrar("build/test_jmn_dump_conexiones.jmn")
+    crear_memoria("build/test_jmn_dump_conexiones.jmn")
+
+    asociar_relacion("a", "b", 9, 1.0)
+    asociar_relacion("b", "a", 9, 0.5)
+    asociar_relacion("a", "c", 1, 0.2)
+
+    json out = jmn_dump_conexiones()
+    entero total = str_a_entero(json_a_texto(json_objeto_obtener(out, "total")))
+    entero count = str_a_entero(json_a_texto(json_objeto_obtener(out, "count")))
+    json items = json_objeto_obtener(out, "items")
+    entero items_n = json_lista_tamano(items)
+
+    si total != 3 entonces fallos = fallos + 1 fin_si
+    si count != 3 entonces fallos = fallos + 1 fin_si
+    si items_n != 3 entonces fallos = fallos + 1 fin_si
+
+    json item0 = json_lista_obtener(items, 0)
+    imprimir item0["tipo"]
+    entero tipo0 = str_a_entero(json_a_texto(json_objeto_obtener(item0, "tipo")))
+    texto o0 = json_a_texto(json_objeto_obtener(item0, "origen"))
+    texto d0 = json_a_texto(json_objeto_obtener(item0, "destino"))
+    si tipo0 == 0 entonces fallos = fallos + 1 fin_si
+    si o0 == "" entonces fallos = fallos + 1 fin_si
+    si d0 == "" entonces fallos = fallos + 1 fin_si
+
+    json out2 = jmn_dump_conexiones(1, 1)
+    entero count2 = str_a_entero(json_a_texto(json_objeto_obtener(out2, "count")))
+    json items2 = json_objeto_obtener(out2, "items")
+    entero items2_n = json_lista_tamano(items2)
+    si count2 != 1 entonces fallos = fallos + 1 fin_si
+    si items2_n != 1 entonces fallos = fallos + 1 fin_si
+
+    json out_tipo9 = jmn_dump_conexiones_tipo(9)
+    entero total9 = str_a_entero(json_a_texto(json_objeto_obtener(out_tipo9, "total")))
+    entero count9 = str_a_entero(json_a_texto(json_objeto_obtener(out_tipo9, "count")))
+    json items9 = json_objeto_obtener(out_tipo9, "items")
+    entero items9_n = json_lista_tamano(items9)
+    si total9 != 2 entonces fallos = fallos + 1 fin_si
+    si count9 != 2 entonces fallos = fallos + 1 fin_si
+    si items9_n != 2 entonces fallos = fallos + 1 fin_si
+
+    cerrar_memoria()
+
+    imprimir("FALLIOS=")
+    imprimir(fallos)
+    imprimir("\n")
+fin_principal

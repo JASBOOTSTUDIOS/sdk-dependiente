@@ -48,7 +48,12 @@ El flujo es **dos pasos** en la práctica (tres si separas compilación y ejecuc
 | [`scripts/`](scripts/) | Scripts de construcción en Windows. | Orquestan compilación de VM + compilador y copian binarios a `bin/`. |
 | [`bin/`](bin/) | Accesos directos (`jbc.cmd`, `jasboot-ir-vm.cmd`). | Apuntan a `jas-compiler-c\bin\jbc.exe` y `jasboot-ir\bin\jasboot-ir-vm.exe` (o copias en `bin/` tras `build-all`). |
 
-Documentación técnica del IR dentro del SDK: [`jasboot-ir/docs/FORMATO_IR.md`](jasboot-ir/docs/FORMATO_IR.md), [`jasboot-ir/docs/OPCODES.md`](jasboot-ir/docs/OPCODES.md). Comportamiento verificado de JMN en runtime: [`docs/JMN_Y_MEMORIA_EN_JASBOOT.md`](docs/JMN_Y_MEMORIA_EN_JASBOOT.md).
+Documentación dentro del SDK:
+
+- IR/VM: [`jasboot-ir/docs/FORMATO_IR.md`](jasboot-ir/docs/FORMATO_IR.md), [`jasboot-ir/docs/OPCODES.md`](jasboot-ir/docs/OPCODES.md).
+- Lenguaje (referencia): [`docs/LENGUAJE/REFERENCIA_LENGUAJE_JASBOOT.md`](docs/LENGUAJE/REFERENCIA_LENGUAJE_JASBOOT.md), [`docs/LENGUAJE/CAPAS_JMN_MAI_VM_Y_USO.md`](docs/LENGUAJE/CAPAS_JMN_MAI_VM_Y_USO.md), [`docs/LENGUAJE/TIPOS_RELACION_JMN.md`](docs/LENGUAJE/TIPOS_RELACION_JMN.md).
+- JMN en runtime: [`docs/JMN_Y_MEMORIA_EN_JASBOOT.md`](docs/JMN_Y_MEMORIA_EN_JASBOOT.md).
+- Flujo Model IA (qué está nativo): [`docs/FLUJO_MODELO_IA_IMPLEMENTADO.md`](docs/FLUJO_MODELO_IA_IMPLEMENTADO.md).
 
 ---
 
