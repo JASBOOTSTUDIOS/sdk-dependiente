@@ -2139,18 +2139,47 @@ static uint32_t vm_hash_texto(const char* texto) {
 /** Claves/argumentos por id literal: si existe nodo en `raw` solo ese; si no, todos los nodos con el mismo texto (p. ej. `recordar` vs `asociar_relacion` con distinto id runtime). */
 static int vm_jmn_ids_para_literal(VM* vm, uint32_t raw, uint32_t* out, int maxo) {
     if (!vm || !vm->mem_neuronal || !out || maxo <= 0) return 0;
-    if (jmn_obtener_nodo(vm->mem_neuronal, raw)) {
-        out[0] = raw;
-        return 1;
-    }
     char buf[256];
     const char* lit = vm_text_cache_get(vm, raw);
     if (!lit || !lit[0]) {
         if (jmn_obtener_texto(vm->mem_neuronal, raw, buf, sizeof(buf)) >= 0 && buf[0])
             lit = buf;
     }
-    if (lit && lit[0])
-        return jmn_listar_nodos_por_texto_exacto(vm->mem_neuronal, lit, out, maxo);
+    int raw_exists = jmn_obtener_nodo(vm->mem_neuronal, raw) ? 1 : 0;
+    if (lit && lit[0]) {
+        int n = jmn_listar_nodos_por_texto_exacto(vm->mem_neuronal, lit, out, maxo);
+        if (n < 0) n = 0;
+        if (raw_exists && n < maxo) {
+            int ya = 0;
+            for (int i = 0; i < n; i++) {
+                if (out[i] == raw) {
+                    ya = 1;
+                    break;
+                }
+            }
+            if (!ya) {
+                out[n++] = raw;
+            }
+        }
+        uint32_t hid = vm_hash_texto(lit);
+        if (hid != 0 && n < maxo && jmn_obtener_nodo(vm->mem_neuronal, hid)) {
+            int ya = 0;
+            for (int i = 0; i < n; i++) {
+                if (out[i] == hid) {
+                    ya = 1;
+                    break;
+                }
+            }
+            if (!ya) {
+                out[n++] = hid;
+            }
+        }
+        return n;
+    }
+    if (raw_exists) {
+        out[0] = raw;
+        return 1;
+    }
     return 0;
 }
 #endif
@@ -7208,6 +7237,9 @@ int vm_step(VM* vm) {
         case OP_FS_LEER_TEXTO: {
             uint32_t id_ruta = (uint32_t)vm_get_register(vm, inst.operand_b);
             const char* ruta = vm_resolve_path(vm, id_ruta);
+            if (!ruta) ruta = vm_text_cache_get(vm, id_ruta);
+            if (!ruta && vm->ir && vm->ir->data && id_ruta < vm->ir->header.data_size)
+                ruta = (const char*)(vm->ir->data + id_ruta);
             if (ruta) {
                 FILE* f = fopen(ruta, "rb");
                 if (f) {
@@ -9838,6 +9870,18 @@ int vm_step(VM* vm) {
             tipo = vm_jmn_tipo_desde_texto(vm, tipo);
 
             if (tipo > 0 && tipo <= JMN_RELACION_MAX) {
+                const char* t1 = vm_text_cache_get(vm, id1);
+                if (t1 && t1[0]) jmn_guardar_texto(vm->mem_neuronal, id1, t1);
+                const char* t2 = vm_text_cache_get(vm, id2);
+                if (t2 && t2[0]) jmn_guardar_texto(vm->mem_neuronal, id2, t2);
+                if (!jmn_obtener_nodo(vm->mem_neuronal, id1)) {
+                    JMNValor v_uno = { .f = 1.0f };
+                    jmn_agregar_nodo(vm->mem_neuronal, id1, v_uno);
+                }
+                if (!jmn_obtener_nodo(vm->mem_neuronal, id2)) {
+                    JMNValor v_uno = { .f = 1.0f };
+                    jmn_agregar_nodo(vm->mem_neuronal, id2, v_uno);
+                }
                 JMNValor v_peso = { .f = peso };
                 if (getenv("JASBOOT_DEBUG")) {
                     fprintf(stderr, "[VM] AGREGANDO CONEXION id1=%u id2=%u tipo=%u peso=%.4f mai=%d\n", 
